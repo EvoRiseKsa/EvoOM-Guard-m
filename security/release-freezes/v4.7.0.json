@@ -1,0 +1,41 @@
+{
+  "format": "EVOGUARD_MINOR_RELEASE_FREEZE_V1",
+  "state": "POST_MERGE_DECLARATION_REQUIRED",
+  "version": "4.7.0",
+  "source_version": "4.7.0.dev0",
+  "declaration": {
+    "frozen_parent_commit_sha": "POST_MERGE_REQUIRED",
+    "frozen_parent_tree_sha": "POST_MERGE_REQUIRED",
+    "started_at": "POST_MERGE_REQUIRED",
+    "not_before": "POST_MERGE_REQUIRED",
+    "stabilization_seconds": 1209600
+  },
+  "scope": {
+    "candidate_promotion_policy": "exact-stable-promotion-scope-only",
+    "candidate_promotion_paths": [
+      "CHANGELOG.md",
+      "PROJECT_STATUS.json",
+      "README.md",
+      "ROADMAP.md",
+      "SECURITY.md",
+      "docs/GITHUB_ARTIFACT_ATTESTATIONS.md",
+      "docs/PROJECT_STATUS.md",
+      "docs/RELEASE_STATUS.md",
+      "docs/SBOM.md",
+      "docs/architecture/REFACTOR_PROGRAM.md",
+      "evoom_guard/__init__.py"
+    ],
+    "stabilization_window_allowed_changes": [
+      "release-record-corrections-only"
+    ],
+    "scope_sha256": "85682b273bc72ddaed4070d25d45ac7da9c3ef4dd21e8b60e2be1fb91ee98e75"
+  },
+  "compatibility": {
+    "classification": "compatible-minor",
+    "required_documents": [
+      "CHANGELOG.md",
+      "README.md",
+      "docs/RELEASE_STATUS.md"
+    ]
+  }
+}

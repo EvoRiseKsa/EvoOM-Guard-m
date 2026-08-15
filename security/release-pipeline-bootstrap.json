@@ -1,6 +1,7 @@
 {
   "format": "EVOGUARD_RELEASE_PIPELINE_BOOTSTRAP_V1",
   "activation": {
+    "EVOGUARD_RELEASE_SOURCE_PROMOTION_ENABLED": false,
     "EVOGUARD_RELEASE_SOURCE_V2_ENABLED": false,
     "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_ENABLED": false,
     "EVOGUARD_RELEASE_PUBLICATION_ENABLED": false
@@ -14,21 +15,103 @@
   "activation_prerequisites": {
     "repository": {
       "branch": "main",
-      "branch_protection_required": true,
+      "main_governance_model": "RULESET_ONLY_NO_CLASSIC_BRANCH_PROTECTION",
+      "classic_main_branch_protection_required_http_status": 404,
+      "main_branch_ruleset_required": true,
+      "release_git_objects_github_verified_signatures_required": true,
       "strict_status_checks_required": true,
-      "enforce_admins_required": true,
+      "main_admin_or_role_bypass": "FORBIDDEN",
       "immutable_releases_required": true,
       "release_tag_ruleset": "v* CREATE_UPDATE_DELETE_AND_NON_FAST_FORWARD_RESTRICTED_TO_DEPLOY_KEY",
       "release_tag_authority": {
         "bypass_actor": "DeployKey",
         "only_one_write_deploy_key_required": true,
-        "private_key_environment": "evoguard-release-publication"
+        "must_differ_from_maintainer_signing_key": true,
+        "must_differ_from_source_promotion_key": true,
+        "private_key_environment": "evoguard-release-publication",
+        "ruleset_contract": {
+          "name": "EvoOM Guard release tag authority",
+          "target": "tag",
+          "source_type": "Repository",
+          "source": "EvoRiseKsa/EvoOM-Guard-m",
+          "enforcement": "active",
+          "conditions": {
+            "include": ["refs/tags/v*"],
+            "exclude": []
+          },
+          "required_rule_types": [
+            "creation",
+            "deletion",
+            "non_fast_forward",
+            "update"
+          ]
+        }
+      },
+      "source_promotion_authority": {
+        "bypass_actor": "DeployKey",
+        "bypass_actor_id": null,
+        "bypass_mode": "always",
+        "only_one_write_deploy_key_required": true,
+        "must_differ_from_maintainer_signing_key": true,
+        "private_key_environment": "evoguard-release-source-promotion",
+        "control_plane_observer": "EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN",
+        "control_plane_observer_permission": "repository Administration:read only",
+        "fast_forward_only": true,
+        "ruleset_contract": {
+          "name": "EvoOM Guard main signed-source authority",
+          "target": "branch",
+          "source_type": "Repository",
+          "source": "EvoRiseKsa/EvoOM-Guard-m",
+          "enforcement": "active",
+          "conditions": {
+            "include": ["refs/heads/main"],
+            "exclude": []
+          },
+          "allowed_merge_methods": ["rebase"],
+          "required_rule_types": [
+            "creation",
+            "deletion",
+            "non_fast_forward",
+            "pull_request",
+            "required_linear_history",
+            "required_status_checks"
+          ],
+          "release_signature_control": "P_AND_A_EXACT_OBJECT_VERIFICATION_NOT_A_GLOBAL_REQUIRED_SIGNATURES_RULE"
+        },
+        "retirement_order": [
+          "delete-source-deploy-key",
+          "remove-DeployKey-bypass-from-main-ruleset",
+          "approve-source-retirement-environment-only-after-live-absence",
+          "require-terminal-P-retirement-receipt",
+          "retain-read-only-observer-and-public-ID-pins-through-A-and-H",
+          "delete-promotion-private-key-secret-and-clear-one-shot-enable-flag",
+          "only-then-install-tag-deploy-key",
+          "delete-observer-token-and-public-ID-pins-after-H-and-ledger-capture"
+        ]
       },
       "concurrent_contents_writers_frozen_during_publication": true,
       "manual_release_and_tag_operations_frozen_during_publication": true,
       "admin_bypass": "DISABLED_AND_MANUALLY_VERIFIED"
     },
     "environments": {
+      "evoguard-release-source-promotion": {
+        "required_reviewer": "MANA-awam",
+        "prevent_self_review": true,
+        "deployment_branches": ["main"],
+        "admin_bypass": "DISABLED_AND_MANUALLY_VERIFIED"
+      },
+      "evoguard-release-source-retirement": {
+        "required_reviewer": "MANA-awam",
+        "prevent_self_review": true,
+        "deployment_branches": ["main"],
+        "admin_bypass": "DISABLED_AND_MANUALLY_VERIFIED"
+      },
+      "evoguard-release-source-reverify": {
+        "required_reviewer": "MANA-awam",
+        "prevent_self_review": true,
+        "deployment_branches": ["main"],
+        "admin_bypass": "DISABLED_AND_MANUALLY_VERIFIED"
+      },
       "evoguard-release-source-v2": {
         "required_reviewer": "MANA-awam",
         "prevent_self_review": true,
@@ -57,6 +140,7 @@
   },
   "post_merge_required": {
     "workflow_ids": {
+      "EVOGUARD_RELEASE_SOURCE_PROMOTION_WORKFLOW_ID": "POST_MERGE_REQUIRED",
       "EVOGUARD_RELEASE_SOURCE_REVERIFY_WORKFLOW_ID": "POST_MERGE_REQUIRED",
       "EVOGUARD_RELEASE_SOURCE_RECEIPT_WORKFLOW_ID": "POST_MERGE_REQUIRED",
       "EVOGUARD_RELEASE_SOURCE_ADMIT_WORKFLOW_ID": "POST_MERGE_REQUIRED",
@@ -66,6 +150,7 @@
       "EVOGUARD_RELEASE_ARTIFACT_PUBLISH_WORKFLOW_ID": "POST_MERGE_REQUIRED"
     },
     "workflow_blob_shas": {
+      "EVOGUARD_RELEASE_SOURCE_PROMOTION_WORKFLOW_BLOB_SHA": "POST_MERGE_REQUIRED",
       "EVOGUARD_RELEASE_SOURCE_REVERIFY_WORKFLOW_BLOB_SHA": "POST_MERGE_REQUIRED",
       "EVOGUARD_RELEASE_SOURCE_RECEIPT_WORKFLOW_BLOB_SHA": "POST_MERGE_REQUIRED",
       "EVOGUARD_RELEASE_SOURCE_ADMIT_WORKFLOW_BLOB_SHA": "POST_MERGE_REQUIRED",
@@ -94,7 +179,50 @@
     "tag_authority": {
       "EVOGUARD_RELEASE_TAG_RULESET_ID": "POST_MERGE_REQUIRED",
       "EVOGUARD_RELEASE_TAG_DEPLOY_KEY_ID": "POST_MERGE_REQUIRED",
-      "EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT": "POST_MERGE_REQUIRED"
+      "EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT": "POST_MERGE_REQUIRED",
+      "EVOGUARD_V470_SIGNED_TAG_OBJECT_B64": "POST_MERGE_REQUIRED",
+      "EVOGUARD_V470_SIGNED_TAG_OBJECT_SHA": "POST_MERGE_REQUIRED"
+    },
+    "source_promotion_authority": {
+      "EVOGUARD_RELEASE_MAIN_RULESET_ID": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY_ID": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY_FINGERPRINT": "POST_MERGE_REQUIRED"
+    },
+    "git_signing": {
+      "maintainer_signing_root": "security/release-maintainer-roots/v4.7.0.json",
+      "maintainer_public_key": "security/release-maintainer-roots/v4.7.0.pub",
+      "maintainer_public_key_fingerprint": "SHA256:iCn7wa6HgKdu7luf/16rrKZzSk5FygJoA8EKNl3LJ24",
+      "source_commit_object_type": "commit",
+      "release_tag_object_type": "tag",
+      "github_verification_required": true,
+      "private_key_in_actions": false
+    },
+    "minor_release_freeze": {
+      "declaration_path": "security/release-freezes/v4.7.0.json",
+      "schema_path": "tests/baseline/schema/minor-release-freeze-v1.schema.json",
+      "validator_path": "tools/ci/validate_minor_release_freeze.py",
+      "github_server_time_anchor_capture": "tools/ci/capture_minor_release_freeze_anchor.js",
+      "github_server_time_anchor_validator": "tools/ci/validate_release_freeze_github_anchor.py",
+      "git_commit_timestamp_role": "SANITY_CHECK_ONLY_NOT_TRUSTED_TIME",
+      "github_anchor_query": {
+        "branch": "main",
+        "event": "push",
+        "head_sha": "EVOGUARD_V470_FREEZE_DECLARATION_SHA",
+        "exclude_pull_requests": true,
+        "all_exact_head_runs": "ATTEMPT_1_TERMINAL_SUCCESS",
+        "server_time_relation": "max(created_at)<=started_at<=min(created_at)+3600s"
+      },
+      "EVOGUARD_V470_FREEZE_DECLARATION_SHA": "POST_MERGE_REQUIRED",
+      "EVOGUARD_V470_FREEZE_DECLARATION_TREE_SHA": "POST_MERGE_REQUIRED",
+      "EVOGUARD_V470_FREEZE_WINDOWS_WORKFLOW_ID": "POST_MERGE_REQUIRED",
+      "EVOGUARD_V470_FREEZE_CODEQL_WORKFLOW_ID": "POST_MERGE_REQUIRED",
+      "EVOGUARD_V470_FREEZE_CI_WORKFLOW_ID": "POST_MERGE_REQUIRED",
+      "EVOGUARD_V470_FREEZE_CFLITE_WORKFLOW_ID": "POST_MERGE_REQUIRED",
+      "stabilization_seconds": 1209600,
+      "candidate_promotion_policy": "exact-stable-promotion-scope-only",
+      "stabilization_window_allowed_changes": [
+        "release-record-corrections-only"
+      ]
     },
     "public_roots": {
       "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PUBLIC_KEY_B64": "POST_MERGE_REQUIRED",
@@ -106,6 +234,24 @@
     }
   },
   "protected_environments": {
+    "evoguard-release-source-promotion": {
+      "secret": "EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY",
+      "observer_secret": "EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN",
+      "observer_permission": "fine-grained token for this repository with Administration:read only; every API call in P is GET",
+      "purpose": "preflight freezes the source key and main-ruleset identities once; a closed active-authority snapshot and receipt are uploaded before the temporary private key is exposed for one exact-SHA fast-forward of a locally signed and GitHub-verified one-parent v4.7.0 source commit; the fingerprint differs from both the maintainer signing root and H's tag transport key; remove the private transport key and one-shot enable flag immediately after main reaches the candidate"
+    },
+    "evoguard-release-source-retirement": {
+      "secret": null,
+      "observer_secret": "EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN",
+      "observer_permission": "fine-grained token for this repository with Administration:read only",
+      "purpose": "once the closed active-authority artifact exists this job runs on ordinary failure even when promotion does not complete; it accepts terminal main only at the frozen base or exact candidate and emits a five-file binding of promotion_completed plus the observed terminal SHA under the same frozen ruleset/key identity; P fails overall for the base state and cannot reach terminal success until a fresh live snapshot proves the source deploy key absent, zero enabled write deploy keys, no main DeployKey bypass, and the candidate state, while A and H strictly require promotion_completed=true; before the active artifact exists, or after force-cancel or runner loss, manual retirement is required and no admissible success is claimed"
+    },
+    "evoguard-release-source-reverify": {
+      "secret": null,
+      "observer_secret": "EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN",
+      "observer_permission": "fine-grained token for this repository with Administration:read only",
+      "purpose": "A downloads and validates the exact five-file terminal P artifact, derives the source key/ruleset identity from its binding rather than mutable variables, and rechecks live source-retired authority before any candidate execution"
+    },
     "evoguard-release-source-v2": {
       "secret": "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64",
       "purpose": "C source admission only"
@@ -116,7 +262,9 @@
     },
     "evoguard-release-publication": {
       "secret": "EVOGUARD_RELEASE_TAG_DEPLOY_KEY",
-      "purpose": "temporary H-only v* tag creation and exact pre-PATCH cleanup; not a signing key; delete the key and secret after the frozen release ledger records the public fingerprint"
+      "observer_secret": "EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN",
+      "observer_permission": "fine-grained token for this repository with Administration:read only",
+      "purpose": "temporary H-only publication of the exact pre-signed annotated v4.7.0 tag object after a fresh live proof of no main bypass, one exact tag ruleset, and one exact tag write key whose fingerprint differs from the maintainer root and P transport; not a signing key; delete the key and both secrets after the frozen release ledger records the public fingerprint"
     },
     "evoguard-release-draft": {
       "secret": null,
@@ -135,7 +283,10 @@
       "workflow IDs and raw-Git blob SHAs",
       "trusted parent SHA/tree and literal builder/generator blob SHAs",
       "runtime, Git, gh, policy, pack, and dependency pins",
-      "tag ruleset ID, sole write deploy-key ID, and public fingerprint",
+      "maintainer signing root plus locally and GitHub-verified release commit and annotated-tag receipts",
+      "pre-secret active and post-push source-promotion snapshots/receipts proving no classic main protection, one exact active ruleset, exact effective rules, and one exact write deploy key",
+      "five-file terminal source-authority artifact binding the active and retired snapshots under the same ruleset/key/run identity, proving the source key and generic main bypass absent, and freezing the retired transport ID and fingerprint",
+      "pre/post tag-publication authority snapshots proving the exact tag ruleset, no main bypass, and the sole tag write-key ID and public fingerprint",
       "release asset checksums"
     ],
     "prohibition": "Do not add trust envelopes to release assets and do not create, move, or rewrite a tag from the ledger step."

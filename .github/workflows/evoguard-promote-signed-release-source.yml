@@ -1,0 +1,1369 @@
+name: EvoGuard Promote Signed Release Source
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact locally signed one-parent v4.7.0 candidate commit
+        required: true
+        type: string
+      pull_request_number:
+        description: Open reviewed pull request whose exact head is candidate_sha
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: evoguard-release-source-promotion
+  cancel-in-progress: false
+
+env:
+  EVOGUARD_RELEASE_VERSION: "4.7.0"
+  EVOGUARD_MAINTAINER_ROOT: security/release-maintainer-roots/v4.7.0.json
+
+jobs:
+  preflight:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      vars.EVOGUARD_RELEASE_SOURCE_PROMOTION_ENABLED == inputs.candidate_sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+    outputs:
+      base_sha: ${{ steps.control.outputs.base_sha }}
+      base_tree_sha: ${{ steps.control.outputs.base_tree_sha }}
+      candidate_sha: ${{ steps.control.outputs.candidate_sha }}
+      candidate_tree_sha: ${{ steps.control.outputs.candidate_tree_sha }}
+      pull_request_number: ${{ steps.control.outputs.pull_request_number }}
+      main_ruleset_id: ${{ steps.control.outputs.main_ruleset_id }}
+      source_deploy_key_id: ${{ steps.control.outputs.source_deploy_key_id }}
+      source_deploy_key_fingerprint: ${{ steps.control.outputs.source_deploy_key_fingerprint }}
+      freeze_windows_workflow_id: ${{ steps.control.outputs.freeze_windows_workflow_id }}
+      freeze_codeql_workflow_id: ${{ steps.control.outputs.freeze_codeql_workflow_id }}
+      freeze_ci_workflow_id: ${{ steps.control.outputs.freeze_ci_workflow_id }}
+      freeze_cflite_workflow_id: ${{ steps.control.outputs.freeze_cflite_workflow_id }}
+    steps:
+      - id: control
+        name: Bind exact protected base, signed candidate, review, and checks
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          PR_NUMBER: ${{ inputs.pull_request_number }}
+          FREEZE_DECLARATION_SHA: ${{ vars.EVOGUARD_V470_FREEZE_DECLARATION_SHA }}
+          FREEZE_DECLARATION_TREE_SHA: ${{ vars.EVOGUARD_V470_FREEZE_DECLARATION_TREE_SHA }}
+          MAIN_RULESET_ID: ${{ vars.EVOGUARD_RELEASE_MAIN_RULESET_ID }}
+          SOURCE_DEPLOY_KEY_ID: ${{ vars.EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY_ID }}
+          SOURCE_DEPLOY_KEY_FINGERPRINT: ${{ vars.EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY_FINGERPRINT }}
+          FREEZE_WINDOWS_WORKFLOW_ID: ${{ vars.EVOGUARD_V470_FREEZE_WINDOWS_WORKFLOW_ID }}
+          FREEZE_CODEQL_WORKFLOW_ID: ${{ vars.EVOGUARD_V470_FREEZE_CODEQL_WORKFLOW_ID }}
+          FREEZE_CI_WORKFLOW_ID: ${{ vars.EVOGUARD_V470_FREEZE_CI_WORKFLOW_ID }}
+          FREEZE_CFLITE_WORKFLOW_ID: ${{ vars.EVOGUARD_V470_FREEZE_CFLITE_WORKFLOW_ID }}
+          CONTROL_PATH: ${{ runner.temp }}/signed-source-control.json
+        with:
+          script: |
+            const fs = require('fs');
+            const shaPattern = /^[0-9a-f]{40}$/;
+            const numberPattern = /^[1-9][0-9]*$/;
+            const candidateSha = process.env.CANDIDATE_SHA;
+            if (!shaPattern.test(candidateSha || '')) {
+              throw new Error('candidate_sha must be one lowercase 40-hex commit ID');
+            }
+            if (!numberPattern.test(process.env.PR_NUMBER || '')) {
+              throw new Error('pull_request_number must be one positive integer');
+            }
+            const frozenIds = new Map([
+              ['main ruleset ID', process.env.MAIN_RULESET_ID],
+              ['source deploy-key ID', process.env.SOURCE_DEPLOY_KEY_ID],
+              ['freeze Windows workflow ID', process.env.FREEZE_WINDOWS_WORKFLOW_ID],
+              ['freeze CodeQL workflow ID', process.env.FREEZE_CODEQL_WORKFLOW_ID],
+              ['freeze CI workflow ID', process.env.FREEZE_CI_WORKFLOW_ID],
+              ['freeze ClusterFuzzLite workflow ID', process.env.FREEZE_CFLITE_WORKFLOW_ID],
+            ]);
+            for (const [label, value] of frozenIds) {
+              if (!numberPattern.test(value || '') || !Number.isSafeInteger(Number(value))) {
+                throw new Error(`${label} must be one canonical safe positive integer`);
+              }
+            }
+            const sourceFingerprint = process.env.SOURCE_DEPLOY_KEY_FINGERPRINT;
+            if (!/^SHA256:[A-Za-z0-9+/]{43}$/.test(sourceFingerprint || '') ||
+                sourceFingerprint === 'SHA256:iCn7wa6HgKdu7luf/16rrKZzSk5FygJoA8EKNl3LJ24') {
+              throw new Error('source deploy-key fingerprint is noncanonical or reuses the maintainer root');
+            }
+            if (context.ref !== 'refs/heads/main' ||
+                context.payload.repository.default_branch !== 'main' ||
+                process.env.GITHUB_SHA !== process.env.GITHUB_WORKFLOW_SHA) {
+              throw new Error('promotion workflow must execute from the exact protected-main workflow revision');
+            }
+            const pull_number = Number(process.env.PR_NUMBER);
+            const { owner, repo } = context.repo;
+            const branch = (await github.rest.repos.getBranch({owner, repo, branch: 'main'})).data;
+            if (branch.protected !== true || !shaPattern.test(branch.commit?.sha || '')) {
+              throw new Error('main is not one exact protected commit');
+            }
+            const baseSha = branch.commit.sha;
+            if (baseSha !== process.env.GITHUB_SHA || baseSha === candidateSha) {
+              throw new Error('workflow revision is not the unchanged promotion base');
+            }
+            const base = (await github.rest.git.getCommit({
+              owner, repo, commit_sha: baseSha,
+            })).data;
+            if (baseSha !== process.env.FREEZE_DECLARATION_SHA ||
+                base.tree?.sha !== process.env.FREEZE_DECLARATION_TREE_SHA) {
+              throw new Error('current main is not the owner-pinned freeze declaration commit/tree');
+            }
+            const candidate = (await github.rest.repos.getCommit({
+              owner, repo, ref: candidateSha,
+            })).data;
+            if (!Array.isArray(candidate.parents) || candidate.parents.length !== 1 ||
+                candidate.parents[0].sha !== baseSha ||
+                !shaPattern.test(candidate.commit?.tree?.sha || '')) {
+              throw new Error('candidate is not an exact one-parent child of current main');
+            }
+            const verification = candidate.commit?.verification;
+            if (!verification || verification.verified !== true ||
+                verification.reason !== 'valid' ||
+                typeof verification.signature !== 'string' || !verification.signature ||
+                typeof verification.payload !== 'string' || !verification.payload) {
+              throw new Error('GitHub does not report a valid signature for the candidate');
+            }
+            for (const actor of [candidate.author, candidate.committer]) {
+              if (!actor || actor.login !== 'EvoRiseKsa' || actor.id !== 231647061) {
+                throw new Error('candidate GitHub author/committer is not the frozen maintainer account');
+              }
+            }
+            const pr = (await github.rest.pulls.get({owner, repo, pull_number})).data;
+            if (pr.state !== 'open' || pr.draft === true || pr.base?.ref !== 'main' ||
+                pr.base?.sha !== baseSha || pr.head?.sha !== candidateSha ||
+                pr.head?.repo?.full_name !== `${owner}/${repo}`) {
+              throw new Error('pull request is not the exact open same-repository candidate review');
+            }
+            const reviews = await github.paginate(
+              github.rest.pulls.listReviews, {owner, repo, pull_number, per_page: 100}
+            );
+            const maintainerReviews = reviews
+              .filter(item => item.user?.login === 'MANA-awam' && item.user?.id === 304223352)
+              .sort((left, right) => Number(left.id) - Number(right.id));
+            const finalReview = maintainerReviews.at(-1);
+            if (!finalReview || finalReview.state !== 'APPROVED' ||
+                finalReview.commit_id !== candidateSha) {
+              throw new Error('the exact candidate head lacks the frozen reviewer approval');
+            }
+            let cursor = null;
+            let threadCount = 0;
+            do {
+              const result = await github.graphql(`
+                query($owner:String!, $repo:String!, $number:Int!, $cursor:String) {
+                  repository(owner:$owner, name:$repo) {
+                    pullRequest(number:$number) {
+                      reviewDecision
+                      mergeStateStatus
+                      headRefOid
+                      baseRefOid
+                      reviewThreads(first:100, after:$cursor) {
+                        nodes { isResolved }
+                        pageInfo { hasNextPage endCursor }
+                      }
+                    }
+                  }
+                }`, {owner, repo, number: pull_number, cursor});
+              const threads = result.repository?.pullRequest?.reviewThreads;
+              const decision = result.repository?.pullRequest;
+              if (decision?.reviewDecision !== 'APPROVED' ||
+                  decision?.mergeStateStatus !== 'CLEAN' ||
+                  decision?.headRefOid !== candidateSha ||
+                  decision?.baseRefOid !== baseSha) {
+                throw new Error('GitHub does not report the exact PR as globally approved and clean');
+              }
+              if (!threads || !Array.isArray(threads.nodes)) {
+                throw new Error('pull-request review-thread state is unavailable');
+              }
+              threadCount += threads.nodes.length;
+              if (threadCount > 1000 || threads.nodes.some(item => item.isResolved !== true)) {
+                throw new Error('pull request has unresolved or unbounded review threads');
+              }
+              cursor = threads.pageInfo.hasNextPage ? threads.pageInfo.endCursor : null;
+              if (threads.pageInfo.hasNextPage && !cursor) {
+                throw new Error('review-thread pagination is incomplete');
+              }
+            } while (cursor);
+            const requiredChecks = new Map([
+              ['test (3.10)', 15368],
+              ['test (3.11)', 15368],
+              ['test (3.12)', 15368],
+              ['e2e-runners', 15368],
+              ['blackbox-docker-e2e', 15368],
+              ['smoke', 15368],
+              ['analyze', 15368],
+              ['CodeQL', 57789],
+              ['project-status', 15368],
+              ['fuzz (address)', 15368],
+              ['fuzz (undefined)', 15368],
+            ]);
+            const checkRuns = await github.paginate(
+              github.rest.checks.listForRef,
+              {owner, repo, ref: candidateSha, per_page: 100, filter: 'latest'}
+            );
+            for (const [name, appId] of requiredChecks) {
+              const matches = checkRuns.filter(
+                item => item.name === name && item.app?.id === appId
+              );
+              if (matches.length !== 1 || matches[0].status !== 'completed' ||
+                  matches[0].conclusion !== 'success' ||
+                  matches[0].head_sha !== candidateSha) {
+                throw new Error(`required exact-head check is not uniquely successful: ${name}`);
+              }
+            }
+            const control = {
+              format: 'EVOGUARD_SIGNED_SOURCE_PROMOTION_CONTROL_V1',
+              repository: `${owner}/${repo}`,
+              repository_id: String(context.payload.repository.id),
+              workflow_run_id: String(context.runId),
+              workflow_run_attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+              base_sha: baseSha,
+              base_tree_sha: base.tree.sha,
+              candidate_sha: candidateSha,
+              candidate_tree_sha: candidate.commit.tree.sha,
+              parent_count: candidate.parents.length,
+              pull_request_number: pull_number,
+              approving_reviewer: {login: 'MANA-awam', id: 304223352},
+              github_signer: {login: 'EvoRiseKsa', id: 231647061},
+              github_verification: {verified: true, reason: 'valid'},
+              source_authority: {
+                main_ruleset_id: Number(process.env.MAIN_RULESET_ID),
+                source_deploy_key_id: Number(process.env.SOURCE_DEPLOY_KEY_ID),
+                source_deploy_key_fingerprint: sourceFingerprint,
+              },
+              freeze_workflow_ids: {
+                windows: Number(process.env.FREEZE_WINDOWS_WORKFLOW_ID),
+                codeql: Number(process.env.FREEZE_CODEQL_WORKFLOW_ID),
+                ci: Number(process.env.FREEZE_CI_WORKFLOW_ID),
+                cflite: Number(process.env.FREEZE_CFLITE_WORKFLOW_ID),
+              },
+              required_checks: [...requiredChecks].map(([name, app_id]) => ({name, app_id})),
+            };
+            fs.writeFileSync(process.env.CONTROL_PATH, JSON.stringify(control) + '\n', {
+              encoding: 'utf8', mode: 0o600, flag: 'wx',
+            });
+            core.setOutput('base_sha', baseSha);
+            core.setOutput('base_tree_sha', base.tree.sha);
+            core.setOutput('candidate_sha', candidateSha);
+            core.setOutput('candidate_tree_sha', candidate.commit.tree.sha);
+            core.setOutput('pull_request_number', String(pull_number));
+            core.setOutput('main_ruleset_id', process.env.MAIN_RULESET_ID);
+            core.setOutput('source_deploy_key_id', process.env.SOURCE_DEPLOY_KEY_ID);
+            core.setOutput('source_deploy_key_fingerprint', sourceFingerprint);
+            core.setOutput('freeze_windows_workflow_id', process.env.FREEZE_WINDOWS_WORKFLOW_ID);
+            core.setOutput('freeze_codeql_workflow_id', process.env.FREEZE_CODEQL_WORKFLOW_ID);
+            core.setOutput('freeze_ci_workflow_id', process.env.FREEZE_CI_WORKFLOW_ID);
+            core.setOutput('freeze_cflite_workflow_id', process.env.FREEZE_CFLITE_WORKFLOW_ID);
+
+      - name: Checkout exact protected parent as trusted release control
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.control.outputs.base_sha }}
+          path: base
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Checkout exact immutable signed candidate without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.control.outputs.candidate_sha }}
+          path: candidate
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Capture GitHub server-time anchor for the exact freeze declaration
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DECLARATION_SHA: ${{ steps.control.outputs.base_sha }}
+          DECLARATION_TREE_SHA: ${{ steps.control.outputs.base_tree_sha }}
+          OUTPUT_PATH: ${{ runner.temp }}/release-freeze-github-anchor.json
+        with:
+          script: |
+            const capture = require(
+              `${process.env.GITHUB_WORKSPACE}/base/tools/ci/capture_minor_release_freeze_anchor.js`
+            );
+            await capture({
+              github,
+              context,
+              declarationSha: process.env.DECLARATION_SHA,
+              declarationTreeSha: process.env.DECLARATION_TREE_SHA,
+              outputPath: process.env.OUTPUT_PATH,
+            });
+
+      - name: Enforce exact parent-owned v4.7.0 candidate scope before promotion
+        run: |
+          set -euo pipefail
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_release_candidate_scope.py" \
+            --base "$GITHUB_WORKSPACE/base" \
+            --candidate "$GITHUB_WORKSPACE/candidate"
+
+      - name: Verify the exact raw candidate commit with the pinned maintainer root
+        env:
+          BASE_SHA: ${{ steps.control.outputs.base_sha }}
+          BASE_TREE_SHA: ${{ steps.control.outputs.base_tree_sha }}
+          CANDIDATE_SHA: ${{ steps.control.outputs.candidate_sha }}
+          FREEZE_WINDOWS_WORKFLOW_ID: ${{ steps.control.outputs.freeze_windows_workflow_id }}
+          FREEZE_CODEQL_WORKFLOW_ID: ${{ steps.control.outputs.freeze_codeql_workflow_id }}
+          FREEZE_CI_WORKFLOW_ID: ${{ steps.control.outputs.freeze_ci_workflow_id }}
+          FREEZE_CFLITE_WORKFLOW_ID: ${{ steps.control.outputs.freeze_cflite_workflow_id }}
+        run: |
+          set -euo pipefail
+          objects="$RUNNER_TEMP/signed-source-objects.git"
+          git init --bare "$objects"
+          git -C "$objects" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          GIT_TERMINAL_PROMPT=0 git -C "$objects" fetch --quiet --no-tags origin \
+            "$BASE_SHA" "$CANDIDATE_SHA"
+          test "$(git -C "$objects" rev-parse "$CANDIDATE_SHA^")" = "$BASE_SHA"
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_minor_release_freeze.py" \
+            --root "$GITHUB_WORKSPACE/base" \
+            --repository "$objects" \
+            --declaration-commit "$BASE_SHA" \
+            --expected-tree "$BASE_TREE_SHA" \
+            --receipt "$RUNNER_TEMP/release-freeze-verification.json"
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_release_freeze_github_anchor.py" \
+            --root "$GITHUB_WORKSPACE/base" \
+            --snapshot "$RUNNER_TEMP/release-freeze-github-anchor.json" \
+            --expected-declaration-commit "$BASE_SHA" \
+            --expected-declaration-tree "$BASE_TREE_SHA" \
+            --expected-repository-id "$GITHUB_REPOSITORY_ID" \
+            --expected-windows-workflow-id "$FREEZE_WINDOWS_WORKFLOW_ID" \
+            --expected-codeql-workflow-id "$FREEZE_CODEQL_WORKFLOW_ID" \
+            --expected-ci-workflow-id "$FREEZE_CI_WORKFLOW_ID" \
+            --expected-cflite-workflow-id "$FREEZE_CFLITE_WORKFLOW_ID" \
+            --receipt "$RUNNER_TEMP/release-freeze-github-anchor-receipt.json"
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/verify_release_git_object.py" commit \
+            --repository "$objects" \
+            --object "$CANDIDATE_SHA" \
+            --root "$GITHUB_WORKSPACE/base/$EVOGUARD_MAINTAINER_ROOT" \
+            --expected-parent "$BASE_SHA" \
+            --receipt "$RUNNER_TEMP/local-commit-signature.json"
+
+      - name: Close and upload preflight evidence
+        env:
+          CONTROL: ${{ runner.temp }}/signed-source-control.json
+          RECEIPT: ${{ runner.temp }}/local-commit-signature.json
+          FREEZE_RECEIPT: ${{ runner.temp }}/release-freeze-verification.json
+          FREEZE_ANCHOR: ${{ runner.temp }}/release-freeze-github-anchor.json
+          FREEZE_ANCHOR_RECEIPT: ${{ runner.temp }}/release-freeze-github-anchor-receipt.json
+        run: |
+          set -euo pipefail
+          python -I - "$CONTROL" "$RECEIPT" "$RUNNER_TEMP/signed-source-preflight" <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import stat
+          import sys
+
+          control_path, receipt_path, output = map(pathlib.Path, sys.argv[1:])
+          output.mkdir(mode=0o700)
+          for source, name, limit in (
+              (control_path, 'control.json', 64 * 1024),
+              (receipt_path, 'local-commit-signature.json', 64 * 1024),
+              (pathlib.Path(os.environ['FREEZE_RECEIPT']),
+               'release-freeze-verification.json', 64 * 1024),
+              (pathlib.Path(os.environ['FREEZE_ANCHOR']),
+               'release-freeze-github-anchor.json', 2 * 1024 * 1024),
+              (pathlib.Path(os.environ['FREEZE_ANCHOR_RECEIPT']),
+               'release-freeze-github-anchor-receipt.json', 64 * 1024),
+          ):
+              metadata = source.lstat()
+              if not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+                  raise SystemExit(f'unsafe preflight evidence: {source}')
+              data = source.read_bytes()
+              if not data or len(data) > limit:
+                  raise SystemExit(f'unbounded preflight evidence: {source}')
+              json.loads(data)
+              (output / name).write_bytes(data)
+          receipt = (output / 'local-commit-signature.json').read_bytes()
+          control = json.loads((output / 'control.json').read_text(encoding='utf-8'))
+          control['local_signature_receipt'] = {
+              'path': 'local-commit-signature.json',
+              'sha256': hashlib.sha256(receipt).hexdigest(),
+              'size': len(receipt),
+          }
+          freeze = (output / 'release-freeze-verification.json').read_bytes()
+          control['release_freeze_receipt'] = {
+              'path': 'release-freeze-verification.json',
+              'sha256': hashlib.sha256(freeze).hexdigest(),
+              'size': len(freeze),
+          }
+          anchor = (output / 'release-freeze-github-anchor.json').read_bytes()
+          anchor_receipt = (
+              output / 'release-freeze-github-anchor-receipt.json'
+          ).read_bytes()
+          control['release_freeze_github_anchor'] = {
+              'snapshot_path': 'release-freeze-github-anchor.json',
+              'snapshot_sha256': hashlib.sha256(anchor).hexdigest(),
+              'snapshot_size': len(anchor),
+              'receipt_path': 'release-freeze-github-anchor-receipt.json',
+              'receipt_sha256': hashlib.sha256(anchor_receipt).hexdigest(),
+              'receipt_size': len(anchor_receipt),
+          }
+          (output / 'control.json').write_text(
+              json.dumps(control, sort_keys=True, separators=(',', ':')) + '\n',
+              encoding='utf-8', newline='\n',
+          )
+          PY
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-signed-source-promotion-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/signed-source-preflight
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 7
+
+  promote:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: evoguard-release-source-promotion
+    outputs:
+      post_capture_outcome: ${{ steps.post_capture.outcome }}
+      post_validate_outcome: ${{ steps.post_validate.outcome }}
+      post_upload_outcome: ${{ steps.post_upload.outcome }}
+      active_snapshot_sha256: ${{ steps.active_evidence.outputs.snapshot_sha256 }}
+      active_snapshot_size: ${{ steps.active_evidence.outputs.snapshot_size }}
+      active_receipt_sha256: ${{ steps.active_evidence.outputs.receipt_sha256 }}
+      active_receipt_size: ${{ steps.active_evidence.outputs.receipt_size }}
+      active_upload_outcome: ${{ steps.active_upload.outcome }}
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Download only this attempt's preflight evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-signed-source-promotion-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/promotion
+
+      - name: Rebind main, exact PR head approval, checks, and GitHub signature
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          BASE_SHA: ${{ needs.preflight.outputs.base_sha }}
+          CANDIDATE_SHA: ${{ needs.preflight.outputs.candidate_sha }}
+          PR_NUMBER: ${{ needs.preflight.outputs.pull_request_number }}
+          FREEZE_DECLARATION_SHA: ${{ needs.preflight.outputs.base_sha }}
+          FREEZE_DECLARATION_TREE_SHA: ${{ needs.preflight.outputs.base_tree_sha }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const branch = (await github.rest.repos.getBranch({owner, repo, branch: 'main'})).data;
+            if (branch.protected !== true || branch.commit.sha !== process.env.BASE_SHA ||
+                process.env.GITHUB_SHA !== process.env.BASE_SHA ||
+                process.env.GITHUB_WORKFLOW_SHA !== process.env.BASE_SHA ||
+                process.env.FREEZE_DECLARATION_SHA !== process.env.BASE_SHA) {
+              throw new Error('protected main or trusted workflow moved during approval');
+            }
+            const base = (await github.rest.git.getCommit({
+              owner, repo, commit_sha: process.env.BASE_SHA,
+            })).data;
+            if (base.tree?.sha !== process.env.FREEZE_DECLARATION_TREE_SHA) {
+              throw new Error('freeze declaration tree changed during approval');
+            }
+            const candidate = (await github.rest.repos.getCommit({
+              owner, repo, ref: process.env.CANDIDATE_SHA,
+            })).data;
+            if (!Array.isArray(candidate.parents) || candidate.parents.length !== 1 ||
+                candidate.parents[0].sha !== process.env.BASE_SHA ||
+                candidate.commit?.verification?.verified !== true ||
+                candidate.commit.verification.reason !== 'valid' ||
+                !candidate.commit.verification.signature ||
+                !candidate.commit.verification.payload ||
+                candidate.author?.login !== 'EvoRiseKsa' || candidate.author?.id !== 231647061 ||
+                candidate.committer?.login !== 'EvoRiseKsa' || candidate.committer?.id !== 231647061) {
+              throw new Error('candidate identity or GitHub signature changed during approval');
+            }
+            const pull_number = Number(process.env.PR_NUMBER);
+            const pr = (await github.rest.pulls.get({owner, repo, pull_number})).data;
+            if (pr.state !== 'open' || pr.draft === true || pr.base?.ref !== 'main' ||
+                pr.base?.sha !== process.env.BASE_SHA ||
+                pr.head?.sha !== process.env.CANDIDATE_SHA ||
+                pr.head?.repo?.full_name !== `${owner}/${repo}`) {
+              throw new Error('exact candidate PR changed during approval');
+            }
+            const reviews = await github.paginate(
+              github.rest.pulls.listReviews, {owner, repo, pull_number, per_page: 100}
+            );
+            const exact = reviews
+              .filter(item => item.user?.login === 'MANA-awam' && item.user?.id === 304223352)
+              .sort((left, right) => Number(left.id) - Number(right.id)).at(-1);
+            if (!exact || exact.state !== 'APPROVED' ||
+                exact.commit_id !== process.env.CANDIDATE_SHA) {
+              throw new Error('exact-head approval changed during environment approval');
+            }
+            let cursor = null;
+            let threadCount = 0;
+            do {
+              const result = await github.graphql(`
+                query($owner:String!, $repo:String!, $number:Int!, $cursor:String) {
+                  repository(owner:$owner, name:$repo) {
+                    pullRequest(number:$number) {
+                      reviewDecision
+                      mergeStateStatus
+                      headRefOid
+                      baseRefOid
+                      reviewThreads(first:100, after:$cursor) {
+                        nodes { isResolved }
+                        pageInfo { hasNextPage endCursor }
+                      }
+                    }
+                  }
+                }`, {owner, repo, number: pull_number, cursor});
+              const threads = result.repository?.pullRequest?.reviewThreads;
+              const decision = result.repository?.pullRequest;
+              if (decision?.reviewDecision !== 'APPROVED' ||
+                  decision?.mergeStateStatus !== 'CLEAN' ||
+                  decision?.headRefOid !== process.env.CANDIDATE_SHA ||
+                  decision?.baseRefOid !== process.env.BASE_SHA) {
+                throw new Error('exact PR is no longer globally approved and clean');
+              }
+              if (!threads || !Array.isArray(threads.nodes)) {
+                throw new Error('review-thread state changed during approval');
+              }
+              threadCount += threads.nodes.length;
+              if (threadCount > 1000 || threads.nodes.some(item => item.isResolved !== true)) {
+                throw new Error('unresolved or unbounded review threads appeared during approval');
+              }
+              cursor = threads.pageInfo.hasNextPage ? threads.pageInfo.endCursor : null;
+              if (threads.pageInfo.hasNextPage && !cursor) {
+                throw new Error('review-thread pagination became incomplete');
+              }
+            } while (cursor);
+            const required = new Map([
+              ['test (3.10)', 15368], ['test (3.11)', 15368],
+              ['test (3.12)', 15368], ['e2e-runners', 15368],
+              ['blackbox-docker-e2e', 15368], ['smoke', 15368],
+              ['analyze', 15368], ['CodeQL', 57789], ['project-status', 15368],
+              ['fuzz (address)', 15368], ['fuzz (undefined)', 15368],
+            ]);
+            const checks = await github.paginate(
+              github.rest.checks.listForRef,
+              {owner, repo, ref: process.env.CANDIDATE_SHA, per_page: 100, filter: 'latest'}
+            );
+            for (const [name, appId] of required) {
+              const matches = checks.filter(item => item.name === name && item.app?.id === appId);
+              if (matches.length !== 1 || matches[0].status !== 'completed' ||
+                  matches[0].conclusion !== 'success' ||
+                  matches[0].head_sha !== process.env.CANDIDATE_SHA) {
+                throw new Error(`required check changed during approval: ${name}`);
+              }
+            }
+
+      - name: Checkout the still-current trusted parent without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.preflight.outputs.base_sha }}
+          path: base
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Reverify the raw commit and frozen preflight evidence before key access
+        env:
+          BASE_SHA: ${{ needs.preflight.outputs.base_sha }}
+          BASE_TREE_SHA: ${{ needs.preflight.outputs.base_tree_sha }}
+          FREEZE_WINDOWS_WORKFLOW_ID: ${{ needs.preflight.outputs.freeze_windows_workflow_id }}
+          FREEZE_CODEQL_WORKFLOW_ID: ${{ needs.preflight.outputs.freeze_codeql_workflow_id }}
+          FREEZE_CI_WORKFLOW_ID: ${{ needs.preflight.outputs.freeze_ci_workflow_id }}
+          FREEZE_CFLITE_WORKFLOW_ID: ${{ needs.preflight.outputs.freeze_cflite_workflow_id }}
+          CANDIDATE_SHA: ${{ needs.preflight.outputs.candidate_sha }}
+          EXPECTED_MAIN_RULESET_ID: ${{ needs.preflight.outputs.main_ruleset_id }}
+          EXPECTED_SOURCE_DEPLOY_KEY_ID: ${{ needs.preflight.outputs.source_deploy_key_id }}
+          EXPECTED_SOURCE_DEPLOY_KEY_FINGERPRINT: ${{ needs.preflight.outputs.source_deploy_key_fingerprint }}
+        run: |
+          set -euo pipefail
+          python -I - "$RUNNER_TEMP/promotion" "$BASE_SHA" "$CANDIDATE_SHA" <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import stat
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          if {item.name for item in root.iterdir()} != {
+              'control.json', 'local-commit-signature.json',
+              'release-freeze-verification.json',
+              'release-freeze-github-anchor.json',
+              'release-freeze-github-anchor-receipt.json',
+          }:
+              raise SystemExit('promotion evidence set is not closed')
+          for item in root.iterdir():
+              metadata = item.lstat()
+              if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+                  raise SystemExit(f'unsafe promotion evidence: {item.name}')
+          control = json.loads((root / 'control.json').read_text(encoding='utf-8'))
+          receipt = (root / 'local-commit-signature.json').read_bytes()
+          expected = control.get('local_signature_receipt')
+          freeze = (root / 'release-freeze-verification.json').read_bytes()
+          expected_freeze = control.get('release_freeze_receipt')
+          anchor = (root / 'release-freeze-github-anchor.json').read_bytes()
+          anchor_receipt = (
+              root / 'release-freeze-github-anchor-receipt.json'
+          ).read_bytes()
+          expected_anchor = control.get('release_freeze_github_anchor')
+          expected_source_authority = {
+              'main_ruleset_id': int(os.environ['EXPECTED_MAIN_RULESET_ID']),
+              'source_deploy_key_id': int(os.environ['EXPECTED_SOURCE_DEPLOY_KEY_ID']),
+              'source_deploy_key_fingerprint': (
+                  os.environ['EXPECTED_SOURCE_DEPLOY_KEY_FINGERPRINT']
+              ),
+          }
+          expected_freeze_workflow_ids = {
+              'windows': int(os.environ['FREEZE_WINDOWS_WORKFLOW_ID']),
+              'codeql': int(os.environ['FREEZE_CODEQL_WORKFLOW_ID']),
+              'ci': int(os.environ['FREEZE_CI_WORKFLOW_ID']),
+              'cflite': int(os.environ['FREEZE_CFLITE_WORKFLOW_ID']),
+          }
+          if (
+              control.get('format') != 'EVOGUARD_SIGNED_SOURCE_PROMOTION_CONTROL_V1'
+              or control.get('base_sha') != sys.argv[2]
+              or control.get('candidate_sha') != sys.argv[3]
+              or control.get('parent_count') != 1
+              or control.get('source_authority') != expected_source_authority
+              or control.get('freeze_workflow_ids') != expected_freeze_workflow_ids
+              or not isinstance(expected, dict)
+              or expected.get('path') != 'local-commit-signature.json'
+              or expected.get('sha256') != hashlib.sha256(receipt).hexdigest()
+              or expected.get('size') != len(receipt)
+              or not isinstance(expected_freeze, dict)
+              or expected_freeze.get('path') != 'release-freeze-verification.json'
+              or expected_freeze.get('sha256') != hashlib.sha256(freeze).hexdigest()
+              or expected_freeze.get('size') != len(freeze)
+              or not isinstance(expected_anchor, dict)
+              or expected_anchor.get('snapshot_path')
+                 != 'release-freeze-github-anchor.json'
+              or expected_anchor.get('snapshot_sha256')
+                 != hashlib.sha256(anchor).hexdigest()
+              or expected_anchor.get('snapshot_size') != len(anchor)
+              or expected_anchor.get('receipt_path')
+                 != 'release-freeze-github-anchor-receipt.json'
+              or expected_anchor.get('receipt_sha256')
+                 != hashlib.sha256(anchor_receipt).hexdigest()
+              or expected_anchor.get('receipt_size') != len(anchor_receipt)
+          ):
+              raise SystemExit('promotion evidence identity mismatch')
+          PY
+          objects="$RUNNER_TEMP/promotion-objects.git"
+          git init --bare "$objects"
+          git -C "$objects" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          GIT_TERMINAL_PROMPT=0 git -C "$objects" fetch --quiet --no-tags origin \
+            "$BASE_SHA" "$CANDIDATE_SHA"
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_minor_release_freeze.py" \
+            --root "$GITHUB_WORKSPACE/base" \
+            --repository "$objects" \
+            --declaration-commit "$BASE_SHA" \
+            --expected-tree "$BASE_TREE_SHA" \
+            --receipt "$RUNNER_TEMP/final-release-freeze-verification.json"
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/verify_release_git_object.py" commit \
+            --repository "$objects" \
+            --object "$CANDIDATE_SHA" \
+            --root "$GITHUB_WORKSPACE/base/$EVOGUARD_MAINTAINER_ROOT" \
+            --expected-parent "$BASE_SHA" \
+            --receipt "$RUNNER_TEMP/final-local-commit-signature.json"
+
+      - name: Recapture the exact freeze declaration's GitHub server-time anchor
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DECLARATION_SHA: ${{ needs.preflight.outputs.base_sha }}
+          DECLARATION_TREE_SHA: ${{ needs.preflight.outputs.base_tree_sha }}
+          OUTPUT_PATH: ${{ runner.temp }}/final-release-freeze-github-anchor.json
+        with:
+          script: |
+            const capture = require(
+              `${process.env.GITHUB_WORKSPACE}/base/tools/ci/capture_minor_release_freeze_anchor.js`
+            );
+            await capture({
+              github,
+              context,
+              declarationSha: process.env.DECLARATION_SHA,
+              declarationTreeSha: process.env.DECLARATION_TREE_SHA,
+              outputPath: process.env.OUTPUT_PATH,
+            });
+
+      - name: Require the fresh GitHub server-time freeze anchor before promotion
+        env:
+          BASE_SHA: ${{ needs.preflight.outputs.base_sha }}
+          BASE_TREE_SHA: ${{ needs.preflight.outputs.base_tree_sha }}
+          FREEZE_WINDOWS_WORKFLOW_ID: ${{ needs.preflight.outputs.freeze_windows_workflow_id }}
+          FREEZE_CODEQL_WORKFLOW_ID: ${{ needs.preflight.outputs.freeze_codeql_workflow_id }}
+          FREEZE_CI_WORKFLOW_ID: ${{ needs.preflight.outputs.freeze_ci_workflow_id }}
+          FREEZE_CFLITE_WORKFLOW_ID: ${{ needs.preflight.outputs.freeze_cflite_workflow_id }}
+        run: |
+          set -euo pipefail
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_release_freeze_github_anchor.py" \
+            --root "$GITHUB_WORKSPACE/base" \
+            --snapshot "$RUNNER_TEMP/final-release-freeze-github-anchor.json" \
+            --expected-declaration-commit "$BASE_SHA" \
+            --expected-declaration-tree "$BASE_TREE_SHA" \
+            --expected-repository-id "$GITHUB_REPOSITORY_ID" \
+            --expected-windows-workflow-id "$FREEZE_WINDOWS_WORKFLOW_ID" \
+            --expected-codeql-workflow-id "$FREEZE_CODEQL_WORKFLOW_ID" \
+            --expected-ci-workflow-id "$FREEZE_CI_WORKFLOW_ID" \
+            --expected-cflite-workflow-id "$FREEZE_CFLITE_WORKFLOW_ID" \
+            --receipt "$RUNNER_TEMP/final-release-freeze-github-anchor-receipt.json"
+
+      - name: Capture the live ruleset-only main authority with an administration-read observer
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OUTPUT_PATH: ${{ runner.temp }}/pre-push-source-protection.json
+          EXPECTED_RULESET_ID: ${{ needs.preflight.outputs.main_ruleset_id }}
+        with:
+          github-token: ${{ secrets.EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN }}
+          script: |
+            const capture = require(
+              `${process.env.GITHUB_WORKSPACE}/base/tools/ci/capture_release_source_protection.js`
+            );
+            await capture({
+              github,
+              context,
+              outputPath: process.env.OUTPUT_PATH,
+              expectedRulesetId: process.env.EXPECTED_RULESET_ID,
+            });
+
+      - name: Fail closed on classic protection, effective rules, and deploy-key inventory
+        env:
+          BASE_SHA: ${{ needs.preflight.outputs.base_sha }}
+          EXPECTED_RULESET_ID: ${{ needs.preflight.outputs.main_ruleset_id }}
+          EXPECTED_DEPLOY_KEY_ID: ${{ needs.preflight.outputs.source_deploy_key_id }}
+          EXPECTED_DEPLOY_KEY_FINGERPRINT: ${{ needs.preflight.outputs.source_deploy_key_fingerprint }}
+        run: |
+          set -euo pipefail
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_release_source_protection.py" \
+            --snapshot "$RUNNER_TEMP/pre-push-source-protection.json" \
+            --expected-repository "EvoRiseKsa/EvoOM-Guard-m" \
+            --expected-repository-id "$GITHUB_REPOSITORY_ID" \
+            --expected-main-sha "$BASE_SHA" \
+            --expected-ruleset-id "$EXPECTED_RULESET_ID" \
+            --expected-deploy-key-id "$EXPECTED_DEPLOY_KEY_ID" \
+            --expected-deploy-key-fingerprint "$EXPECTED_DEPLOY_KEY_FINGERPRINT" \
+            --receipt "$RUNNER_TEMP/pre-push-source-protection-receipt.json"
+
+      - name: Recapture the authority immediately before exposing the transport key
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OUTPUT_PATH: ${{ runner.temp }}/source-authority-active.json
+          EXPECTED_RULESET_ID: ${{ needs.preflight.outputs.main_ruleset_id }}
+        with:
+          github-token: ${{ secrets.EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN }}
+          script: |
+            const capture = require(
+              `${process.env.GITHUB_WORKSPACE}/base/tools/ci/capture_release_source_protection.js`
+            );
+            await capture({
+              github,
+              context,
+              outputPath: process.env.OUTPUT_PATH,
+              expectedRulesetId: process.env.EXPECTED_RULESET_ID,
+            });
+
+      - name: Validate immediate source authority before any transport secret is exposed
+        env:
+          BASE_SHA: ${{ needs.preflight.outputs.base_sha }}
+          EXPECTED_RULESET_ID: ${{ needs.preflight.outputs.main_ruleset_id }}
+          EXPECTED_DEPLOY_KEY_ID: ${{ needs.preflight.outputs.source_deploy_key_id }}
+          EXPECTED_DEPLOY_KEY_FINGERPRINT: ${{ needs.preflight.outputs.source_deploy_key_fingerprint }}
+        run: |
+          set -euo pipefail
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_release_source_protection.py" \
+            --snapshot "$RUNNER_TEMP/source-authority-active.json" \
+            --expected-repository "EvoRiseKsa/EvoOM-Guard-m" \
+            --expected-repository-id "$GITHUB_REPOSITORY_ID" \
+            --expected-main-sha "$BASE_SHA" \
+            --expected-ruleset-id "$EXPECTED_RULESET_ID" \
+            --expected-deploy-key-id "$EXPECTED_DEPLOY_KEY_ID" \
+            --expected-deploy-key-fingerprint "$EXPECTED_DEPLOY_KEY_FINGERPRINT" \
+            --receipt "$RUNNER_TEMP/source-authority-active-receipt.json"
+
+      - id: active_evidence
+        name: Bind the create-only source-active artifact descriptors
+        env:
+          SNAPSHOT: ${{ runner.temp }}/source-authority-active.json
+          RECEIPT: ${{ runner.temp }}/source-authority-active-receipt.json
+        run: |
+          set -euo pipefail
+          python -I - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import stat
+
+          paths = {
+              'snapshot': pathlib.Path(os.environ['SNAPSHOT']),
+              'receipt': pathlib.Path(os.environ['RECEIPT']),
+          }
+          for label, path in paths.items():
+              metadata = path.lstat()
+              if not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+                  raise SystemExit(f'unsafe source-active {label}')
+              raw = path.read_bytes()
+              if not raw or len(raw) > 2 * 1024 * 1024:
+                  raise SystemExit(f'unbounded source-active {label}')
+              json.loads(raw)
+              with pathlib.Path(os.environ['GITHUB_OUTPUT']).open(
+                  'a', encoding='utf-8', newline='\n'
+              ) as output:
+                  output.write(f'{label}_sha256={hashlib.sha256(raw).hexdigest()}\n')
+                  output.write(f'{label}_size={len(raw)}\n')
+          PY
+
+      - id: active_upload
+        name: Upload exact current-run source-active authority evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-signed-source-active-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/source-authority-active.json
+            ${{ runner.temp }}/source-authority-active-receipt.json
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 7
+
+      - name: Fast-forward main to the exact pre-signed commit
+        env:
+          SOURCE_DEPLOY_KEY: ${{ secrets.EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY }}
+          EXPECTED_DEPLOY_KEY_FINGERPRINT: ${{ needs.preflight.outputs.source_deploy_key_fingerprint }}
+          BASE_SHA: ${{ needs.preflight.outputs.base_sha }}
+          CANDIDATE_SHA: ${{ needs.preflight.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_DEPLOY_KEY_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]
+          test -s "$RUNNER_TEMP/pre-push-source-protection-receipt.json"
+          test -s "$RUNNER_TEMP/source-authority-active-receipt.json"
+          test -n "$SOURCE_DEPLOY_KEY"
+          key="$RUNNER_TEMP/release-source-promotion.key"
+          public="$RUNNER_TEMP/release-source-promotion.pub"
+          known_hosts="$RUNNER_TEMP/release-source-known-hosts"
+          cleanup_key() {
+            rm -f -- "$key" "$public" "$known_hosts"
+            unset SOURCE_DEPLOY_KEY
+          }
+          trap cleanup_key EXIT
+          umask 077
+          printf '%s\n' "$SOURCE_DEPLOY_KEY" > "$key"
+          unset SOURCE_DEPLOY_KEY
+          grep -q '^-----BEGIN OPENSSH PRIVATE KEY-----$' "$key"
+          grep -q '^-----END OPENSSH PRIVATE KEY-----$' "$key"
+          ssh-keygen -y -f "$key" > "$public"
+          actual="$(ssh-keygen -lf "$public" -E sha256 | awk 'NR == 1 {print $2}')"
+          test "$actual" = "$EXPECTED_DEPLOY_KEY_FINGERPRINT"
+          cat > "$known_hosts" <<'EOF'
+          github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+          EOF
+          chmod 600 "$key" "$known_hosts"
+          ssh_command="ssh -F /dev/null -i $key -o IdentityAgent=none -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$known_hosts -o HostKeyAlgorithms=ssh-ed25519"
+          objects="$RUNNER_TEMP/promotion-objects.git"
+          test "$(git -C "$objects" rev-parse "$CANDIDATE_SHA^")" = "$BASE_SHA"
+          test "$(git -C "$objects" merge-base "$BASE_SHA" "$CANDIDATE_SHA")" = "$BASE_SHA"
+          current="$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | awk 'NR == 1 {print $1}')"
+          test "$current" = "$BASE_SHA"
+          if GIT_SSH_COMMAND="$ssh_command" git -C "$objects" push --porcelain \
+            --force-with-lease="refs/heads/main:$BASE_SHA" \
+            "git@github.com:$GITHUB_REPOSITORY.git" \
+            "$CANDIDATE_SHA:refs/heads/main" \
+            > "$RUNNER_TEMP/source-promotion-push.txt" 2>&1; then
+            :
+          else
+            rc=$?
+            cat "$RUNNER_TEMP/source-promotion-push.txt" >&2
+            exit "$rc"
+          fi
+          cleanup_key
+          trap - EXIT
+          BASE_SHA="$BASE_SHA" CANDIDATE_SHA="$CANDIDATE_SHA" \
+            TRANSCRIPT="$RUNNER_TEMP/source-promotion-push.txt" \
+            RECEIPT="$RUNNER_TEMP/source-promotion-mutation.json" \
+            GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            python -I - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          transcript_path = Path(os.environ['TRANSCRIPT'])
+          raw = transcript_path.read_bytes()
+          text = raw.decode('utf-8', 'strict')
+          rows = [line.split('\t') for line in text.splitlines() if '\t' in line]
+          expected_refspec = f"{os.environ['CANDIDATE_SHA']}:refs/heads/main"
+          if (
+              len(rows) != 1
+              or len(rows[0]) != 3
+              or rows[0][0] != ' '
+              or rows[0][1] != expected_refspec
+              or '[up to date]' in rows[0][2]
+          ):
+              raise SystemExit('push transcript does not prove one true fast-forward of the exact candidate to main')
+          receipt = {
+              'format': 'EVOGUARD_SIGNED_SOURCE_MUTATION_RECEIPT_V1',
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
+              'base_sha': os.environ['BASE_SHA'],
+              'candidate_sha': os.environ['CANDIDATE_SHA'],
+              'transport': 'ssh-deploy-key-fast-forward-with-lease',
+              'ref': 'refs/heads/main',
+              'push_transcript_sha256': hashlib.sha256(raw).hexdigest(),
+              'push_transcript_size': len(raw),
+          }
+          output = Path(os.environ['RECEIPT'])
+          with output.open('x', encoding='utf-8', newline='\n') as handle:
+              json.dump(receipt, handle, sort_keys=True, separators=(',', ':'), allow_nan=False)
+              handle.write('\n')
+          PY
+          test "$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | awk 'NR == 1 {print $1}')" = "$CANDIDATE_SHA"
+
+      - id: post_capture
+        name: Capture the post-push main authority without a write API token
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OUTPUT_PATH: ${{ runner.temp }}/post-push-source-protection.json
+          EXPECTED_RULESET_ID: ${{ needs.preflight.outputs.main_ruleset_id }}
+        with:
+          github-token: ${{ secrets.EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN }}
+          script: |
+            const capture = require(
+              `${process.env.GITHUB_WORKSPACE}/base/tools/ci/capture_release_source_protection.js`
+            );
+            await capture({
+              github,
+              context,
+              outputPath: process.env.OUTPUT_PATH,
+              expectedRulesetId: process.env.EXPECTED_RULESET_ID,
+            });
+
+      - id: post_validate
+        name: Prove exact post-push main and unchanged source authority
+        continue-on-error: true
+        env:
+          CANDIDATE_SHA: ${{ needs.preflight.outputs.candidate_sha }}
+          EXPECTED_RULESET_ID: ${{ needs.preflight.outputs.main_ruleset_id }}
+          EXPECTED_DEPLOY_KEY_ID: ${{ needs.preflight.outputs.source_deploy_key_id }}
+          EXPECTED_DEPLOY_KEY_FINGERPRINT: ${{ needs.preflight.outputs.source_deploy_key_fingerprint }}
+        run: |
+          set -euo pipefail
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_release_source_protection.py" \
+            --snapshot "$RUNNER_TEMP/post-push-source-protection.json" \
+            --expected-repository "EvoRiseKsa/EvoOM-Guard-m" \
+            --expected-repository-id "$GITHUB_REPOSITORY_ID" \
+            --expected-main-sha "$CANDIDATE_SHA" \
+            --expected-ruleset-id "$EXPECTED_RULESET_ID" \
+            --expected-deploy-key-id "$EXPECTED_DEPLOY_KEY_ID" \
+            --expected-deploy-key-fingerprint "$EXPECTED_DEPLOY_KEY_FINGERPRINT" \
+            --receipt "$RUNNER_TEMP/post-push-source-protection-receipt.json"
+
+      - id: post_upload
+        name: Upload closed source-promotion authority evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-signed-source-authority-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/pre-push-source-protection.json
+            ${{ runner.temp }}/pre-push-source-protection-receipt.json
+            ${{ runner.temp }}/source-authority-active.json
+            ${{ runner.temp }}/source-authority-active-receipt.json
+            ${{ runner.temp }}/post-push-source-protection.json
+            ${{ runner.temp }}/post-push-source-protection-receipt.json
+            ${{ runner.temp }}/source-promotion-push.txt
+            ${{ runner.temp }}/source-promotion-mutation.json
+            ${{ runner.temp }}/final-release-freeze-github-anchor.json
+            ${{ runner.temp }}/final-release-freeze-github-anchor-receipt.json
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 7
+
+  prove-source-authority-retired:
+    needs: [preflight, promote]
+    if: always() && needs.preflight.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: evoguard-release-source-retirement
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      promotion_completed: ${{ steps.retired_main.outputs.promotion_completed }}
+    steps:
+      - name: Check out the frozen workflow revision only
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          path: base
+
+      - name: Download the exact current-run source-active authority artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-signed-source-active-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/source-active
+
+      - id: active_authority
+        name: Verify and bind the downloaded source-active authority identity
+        env:
+          ARTIFACT: ${{ runner.temp }}/source-active
+          ACTIVE_UPLOAD_OUTCOME: ${{ needs.promote.outputs.active_upload_outcome }}
+          EXPECTED_SNAPSHOT_SHA256: ${{ needs.promote.outputs.active_snapshot_sha256 }}
+          EXPECTED_SNAPSHOT_SIZE: ${{ needs.promote.outputs.active_snapshot_size }}
+          EXPECTED_RECEIPT_SHA256: ${{ needs.promote.outputs.active_receipt_sha256 }}
+          EXPECTED_RECEIPT_SIZE: ${{ needs.promote.outputs.active_receipt_size }}
+          EXPECTED_BASE_SHA: ${{ needs.preflight.outputs.base_sha }}
+          EXPECTED_MAIN_RULESET_ID: ${{ needs.preflight.outputs.main_ruleset_id }}
+          EXPECTED_SOURCE_DEPLOY_KEY_ID: ${{ needs.preflight.outputs.source_deploy_key_id }}
+          EXPECTED_SOURCE_DEPLOY_KEY_FINGERPRINT: ${{ needs.preflight.outputs.source_deploy_key_fingerprint }}
+        run: |
+          set -euo pipefail
+          test "$ACTIVE_UPLOAD_OUTCOME" = success
+          python -I - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import re
+          import stat
+
+          root = pathlib.Path(os.environ['ARTIFACT'])
+          expected_names = {
+              'source-authority-active.json',
+              'source-authority-active-receipt.json',
+          }
+          if {item.name for item in root.iterdir()} != expected_names:
+              raise SystemExit('source-active artifact inventory is not exact')
+          paths = {name: root / name for name in expected_names}
+          values = {}
+          for name, path in paths.items():
+              metadata = path.lstat()
+              if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+                  raise SystemExit(f'unsafe source-active artifact member: {name}')
+              values[name] = path.read_bytes()
+          snapshot = values['source-authority-active.json']
+          receipt_raw = values['source-authority-active-receipt.json']
+          expected = {
+              'snapshot': (
+                  os.environ['EXPECTED_SNAPSHOT_SHA256'],
+                  os.environ['EXPECTED_SNAPSHOT_SIZE'],
+                  snapshot,
+              ),
+              'receipt': (
+                  os.environ['EXPECTED_RECEIPT_SHA256'],
+                  os.environ['EXPECTED_RECEIPT_SIZE'],
+                  receipt_raw,
+              ),
+          }
+          for label, (digest, size, raw) in expected.items():
+              if (
+                  re.fullmatch(r'[0-9a-f]{64}', digest or '') is None
+                  or re.fullmatch(r'[1-9][0-9]*', size or '') is None
+                  or hashlib.sha256(raw).hexdigest() != digest
+                  or len(raw) != int(size)
+              ):
+                  raise SystemExit(f'source-active {label} descriptor mismatch')
+          receipt = json.loads(receipt_raw)
+          authority = receipt.get('main_authority')
+          authority_members = {
+              'authority_state', 'main_sha',
+              'classic_branch_protection_absent', 'ruleset_id',
+              'ruleset_target', 'ruleset_enforcement', 'sole_bypass_actor',
+              'deploy_key_id', 'deploy_key_fingerprint',
+              'retired_deploy_key_id', 'retired_deploy_key_fingerprint',
+              'enabled_write_deploy_key_count',
+          }
+          ruleset_id = int(os.environ['EXPECTED_MAIN_RULESET_ID'])
+          deploy_key_id = int(os.environ['EXPECTED_SOURCE_DEPLOY_KEY_ID'])
+          fingerprint = os.environ['EXPECTED_SOURCE_DEPLOY_KEY_FINGERPRINT']
+          if (
+              receipt.get('format')
+              != 'EVOGUARD_RELEASE_SOURCE_PROTECTION_VERIFICATION_V1'
+              or receipt.get('verdict') != 'PASS'
+              or receipt.get('snapshot_sha256') != hashlib.sha256(snapshot).hexdigest()
+              or not isinstance(authority, dict)
+              or set(authority) != authority_members
+              or authority.get('authority_state') != 'source-active'
+              or authority.get('main_sha') != os.environ['EXPECTED_BASE_SHA']
+              or type(authority.get('ruleset_id')) is not int
+              or authority.get('ruleset_id') != ruleset_id
+              or authority.get('sole_bypass_actor') != 'DeployKey'
+              or type(authority.get('deploy_key_id')) is not int
+              or authority.get('deploy_key_id') != deploy_key_id
+              or authority.get('deploy_key_fingerprint') != fingerprint
+              or authority.get('retired_deploy_key_id') is not None
+              or authority.get('retired_deploy_key_fingerprint') is not None
+              or type(authority.get('enabled_write_deploy_key_count')) is not int
+              or authority.get('enabled_write_deploy_key_count') != 1
+          ):
+              raise SystemExit('source-active authority identity is not exact')
+          with pathlib.Path(os.environ['GITHUB_OUTPUT']).open(
+              'a', encoding='utf-8', newline='\n'
+          ) as output:
+              output.write(f'main_ruleset_id={ruleset_id}\n')
+              output.write(f'source_deploy_key_id={deploy_key_id}\n')
+              output.write(f'source_deploy_key_fingerprint={fingerprint}\n')
+          PY
+
+      - name: Capture source authority after operator retirement
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OUTPUT_PATH: ${{ runner.temp }}/source-authority-retired.json
+          EXPECTED_RULESET_ID: ${{ steps.active_authority.outputs.main_ruleset_id }}
+        with:
+          github-token: ${{ secrets.EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN }}
+          script: |
+            const capture = require(
+              `${process.env.GITHUB_WORKSPACE}/base/tools/ci/capture_release_source_protection.js`
+            );
+            await capture({
+              github,
+              context,
+              outputPath: process.env.OUTPUT_PATH,
+              expectedRulesetId: process.env.EXPECTED_RULESET_ID,
+            });
+
+      - id: retired_main
+        name: Bind the post-attempt main SHA before validating retirement
+        env:
+          BASE_SHA: ${{ needs.preflight.outputs.base_sha }}
+          CANDIDATE_SHA: ${{ needs.preflight.outputs.candidate_sha }}
+          SNAPSHOT: ${{ runner.temp }}/source-authority-retired.json
+        run: |
+          set -euo pipefail
+          observed="$(jq -er '.main_branch.sha | select(type == "string")' "$SNAPSHOT")"
+          [[ "$observed" =~ ^[0-9a-f]{40}$ ]]
+          test "$BASE_SHA" != "$CANDIDATE_SHA"
+          case "$observed" in
+            "$CANDIDATE_SHA") promotion_completed=true ;;
+            "$BASE_SHA") promotion_completed=false ;;
+            *)
+              echo 'main is neither the exact promotion base nor candidate at retirement' >&2
+              exit 1
+              ;;
+          esac
+          printf 'main_sha=%s\n' "$observed" >> "$GITHUB_OUTPUT"
+          printf 'promotion_completed=%s\n' "$promotion_completed" >> "$GITHUB_OUTPUT"
+
+      - name: Prove source deploy key and generic main bypass are retired
+        env:
+          OBSERVED_MAIN_SHA: ${{ steps.retired_main.outputs.main_sha }}
+          EXPECTED_RULESET_ID: ${{ steps.active_authority.outputs.main_ruleset_id }}
+          RETIRED_DEPLOY_KEY_ID: ${{ steps.active_authority.outputs.source_deploy_key_id }}
+          RETIRED_DEPLOY_KEY_FINGERPRINT: ${{ steps.active_authority.outputs.source_deploy_key_fingerprint }}
+        run: |
+          set -euo pipefail
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_release_source_protection.py" \
+            --snapshot "$RUNNER_TEMP/source-authority-retired.json" \
+            --authority-state source-retired \
+            --expected-repository "EvoRiseKsa/EvoOM-Guard-m" \
+            --expected-repository-id "$GITHUB_REPOSITORY_ID" \
+            --expected-main-sha "$OBSERVED_MAIN_SHA" \
+            --expected-ruleset-id "$EXPECTED_RULESET_ID" \
+            --expected-deploy-key-id "$RETIRED_DEPLOY_KEY_ID" \
+            --expected-deploy-key-fingerprint "$RETIRED_DEPLOY_KEY_FINGERPRINT" \
+            --receipt "$RUNNER_TEMP/source-authority-retired-receipt.json"
+
+      - name: Assemble the terminal source-authority closure receipt
+        env:
+          BASE_SHA: ${{ needs.preflight.outputs.base_sha }}
+          CANDIDATE_SHA: ${{ needs.preflight.outputs.candidate_sha }}
+          OBSERVED_MAIN_SHA: ${{ steps.retired_main.outputs.main_sha }}
+          PROMOTION_COMPLETED: ${{ steps.retired_main.outputs.promotion_completed }}
+          PR_NUMBER: ${{ needs.preflight.outputs.pull_request_number }}
+          MAIN_RULESET_ID: ${{ steps.active_authority.outputs.main_ruleset_id }}
+          SOURCE_DEPLOY_KEY_ID: ${{ steps.active_authority.outputs.source_deploy_key_id }}
+          SOURCE_DEPLOY_KEY_FINGERPRINT: ${{ steps.active_authority.outputs.source_deploy_key_fingerprint }}
+          ACTIVE_SNAPSHOT: ${{ runner.temp }}/source-active/source-authority-active.json
+          ACTIVE_VERIFICATION: ${{ runner.temp }}/source-active/source-authority-active-receipt.json
+          RETIRED_SNAPSHOT: ${{ runner.temp }}/source-authority-retired.json
+          RETIRED_VERIFICATION: ${{ runner.temp }}/source-authority-retired-receipt.json
+          OUTPUT_DIRECTORY: ${{ runner.temp }}/source-authority-retirement
+        run: |
+          set -euo pipefail
+          python -I - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import shutil
+          from pathlib import Path
+
+          def descriptor(path: Path) -> dict[str, object]:
+              raw = path.read_bytes()
+              return {'sha256': hashlib.sha256(raw).hexdigest(), 'size': len(raw)}
+
+          active_snapshot = Path(os.environ['ACTIVE_SNAPSHOT'])
+          active_verification = Path(os.environ['ACTIVE_VERIFICATION'])
+          retired_snapshot = Path(os.environ['RETIRED_SNAPSHOT'])
+          retired_verification = Path(os.environ['RETIRED_VERIFICATION'])
+          active_receipt = json.loads(
+              active_verification.read_text(encoding='utf-8')
+          )
+          retired_receipt = json.loads(
+              retired_verification.read_text(encoding='utf-8')
+          )
+          active_authority = active_receipt.get('main_authority')
+          retired_authority = retired_receipt.get('main_authority')
+          authority_members = {
+              'authority_state', 'main_sha',
+              'classic_branch_protection_absent', 'ruleset_id',
+              'ruleset_target', 'ruleset_enforcement', 'sole_bypass_actor',
+              'deploy_key_id', 'deploy_key_fingerprint',
+              'retired_deploy_key_id', 'retired_deploy_key_fingerprint',
+              'enabled_write_deploy_key_count',
+          }
+          if (
+              not isinstance(active_authority, dict)
+              or set(active_authority) != authority_members
+              or not isinstance(retired_authority, dict)
+              or set(retired_authority) != authority_members
+          ):
+              raise SystemExit('source authority receipt inventory is not exact')
+          ruleset_id = int(os.environ['MAIN_RULESET_ID'])
+          source_key_id = int(os.environ['SOURCE_DEPLOY_KEY_ID'])
+          source_fingerprint = os.environ['SOURCE_DEPLOY_KEY_FINGERPRINT']
+          promotion_text = os.environ['PROMOTION_COMPLETED']
+          if promotion_text not in {'true', 'false'}:
+              raise SystemExit('promotion completion state is not an exact boolean output')
+          promotion_completed = promotion_text == 'true'
+          expected_terminal_sha = (
+              os.environ['CANDIDATE_SHA']
+              if promotion_completed
+              else os.environ['BASE_SHA']
+          )
+          if (
+              re.fullmatch(r'SHA256:[A-Za-z0-9+/]{43}', source_fingerprint) is None
+              or active_authority.get('authority_state') != 'source-active'
+              or active_authority.get('main_sha') != os.environ['BASE_SHA']
+              or type(active_authority.get('ruleset_id')) is not int
+              or active_authority.get('ruleset_id') != ruleset_id
+              or active_authority.get('sole_bypass_actor') != 'DeployKey'
+              or type(active_authority.get('deploy_key_id')) is not int
+              or active_authority.get('deploy_key_id') != source_key_id
+              or active_authority.get('deploy_key_fingerprint') != source_fingerprint
+              or active_authority.get('retired_deploy_key_id') is not None
+              or active_authority.get('retired_deploy_key_fingerprint') is not None
+              or type(active_authority.get('enabled_write_deploy_key_count')) is not int
+              or active_authority.get('enabled_write_deploy_key_count') != 1
+              or retired_authority.get('authority_state') != 'source-retired'
+              or retired_authority.get('main_sha') != expected_terminal_sha
+              or type(retired_authority.get('ruleset_id')) is not int
+              or retired_authority.get('ruleset_id') != ruleset_id
+              or retired_authority.get('sole_bypass_actor') is not None
+              or retired_authority.get('deploy_key_id') is not None
+              or retired_authority.get('deploy_key_fingerprint') is not None
+              or type(retired_authority.get('retired_deploy_key_id')) is not int
+              or retired_authority.get('retired_deploy_key_id') != source_key_id
+              or retired_authority.get('retired_deploy_key_fingerprint')
+                 != source_fingerprint
+              or type(retired_authority.get('enabled_write_deploy_key_count')) is not int
+              or retired_authority.get('enabled_write_deploy_key_count') != 0
+              or os.environ['OBSERVED_MAIN_SHA'] != expected_terminal_sha
+          ):
+              raise SystemExit('active/retired source authority identity is invalid')
+
+          receipt = {
+              'format': 'EVOGUARD_SIGNED_SOURCE_AUTHORITY_CLOSURE_V1',
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
+              'base_sha': os.environ['BASE_SHA'],
+              'candidate_sha': os.environ['CANDIDATE_SHA'],
+              'pull_request_number': int(os.environ['PR_NUMBER']),
+              'main_sha_after_attempt': os.environ['OBSERVED_MAIN_SHA'],
+              'promotion_completed': promotion_completed,
+              'main_ruleset_id': ruleset_id,
+              'source_deploy_key_id': source_key_id,
+              'source_deploy_key_fingerprint': source_fingerprint,
+              'retired_source_deploy_key_id': source_key_id,
+              'retired_source_deploy_key_fingerprint': source_fingerprint,
+              'source_deploy_key_absent': True,
+              'main_deploy_key_bypass_absent': True,
+              'active_snapshot': descriptor(active_snapshot),
+              'active_verification': descriptor(active_verification),
+              'retired_snapshot': descriptor(retired_snapshot),
+              'retired_verification': descriptor(retired_verification),
+              'boundary': {
+                  'github_control_plane_point_in_time': True,
+                  'private_key_erasure_claimed': False,
+                  'future_non_readdition_claimed': False,
+              },
+          }
+          output_directory = Path(os.environ['OUTPUT_DIRECTORY'])
+          output_directory.mkdir(mode=0o700)
+          for source in (
+              active_snapshot,
+              active_verification,
+              retired_snapshot,
+              retired_verification,
+          ):
+              shutil.copyfile(source, output_directory / source.name)
+          output = output_directory / 'source-authority-closure.json'
+          with output.open('x', encoding='utf-8', newline='\n') as handle:
+              json.dump(receipt, handle, sort_keys=True, separators=(',', ':'), allow_nan=False)
+              handle.write('\n')
+          PY
+
+      - name: Fail closed on the complete active-to-retired artifact contract
+        run: |
+          set -euo pipefail
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_release_source_retirement_artifact.py" \
+            --artifact "$RUNNER_TEMP/source-authority-retirement" \
+            --expected-repository "EvoRiseKsa/EvoOM-Guard-m" \
+            --expected-repository-id "$GITHUB_REPOSITORY_ID" \
+            --expected-base-sha "${{ needs.preflight.outputs.base_sha }}" \
+            --expected-candidate-sha "${{ needs.preflight.outputs.candidate_sha }}" \
+            --expected-promotion-run-id "$GITHUB_RUN_ID" \
+            --expected-promotion-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --allow-unpromoted-terminal-closure \
+            --binding-out "$RUNNER_TEMP/source-retirement-binding.json"
+
+      - name: Upload closed source-authority retirement evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-signed-source-retirement-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/source-authority-retirement/source-authority-active.json
+            ${{ runner.temp }}/source-authority-retirement/source-authority-active-receipt.json
+            ${{ runner.temp }}/source-authority-retirement/source-authority-retired.json
+            ${{ runner.temp }}/source-authority-retirement/source-authority-retired-receipt.json
+            ${{ runner.temp }}/source-authority-retirement/source-authority-closure.json
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 7
+
+  enforce-source-promotion-closure:
+    needs: [promote, prove-source-authority-retired]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require complete post-push evidence and terminal authority retirement
+        env:
+          PROMOTE_RESULT: ${{ needs.promote.result }}
+          RETIREMENT_RESULT: ${{ needs.prove-source-authority-retired.result }}
+          PROMOTION_COMPLETED: ${{ needs.prove-source-authority-retired.outputs.promotion_completed }}
+          POST_CAPTURE_OUTCOME: ${{ needs.promote.outputs.post_capture_outcome }}
+          POST_VALIDATE_OUTCOME: ${{ needs.promote.outputs.post_validate_outcome }}
+          POST_UPLOAD_OUTCOME: ${{ needs.promote.outputs.post_upload_outcome }}
+          ACTIVE_UPLOAD_OUTCOME: ${{ needs.promote.outputs.active_upload_outcome }}
+        run: |
+          set -euo pipefail
+          test "$PROMOTE_RESULT" = success
+          test "$RETIREMENT_RESULT" = success
+          test "$PROMOTION_COMPLETED" = true
+          test "$POST_CAPTURE_OUTCOME" = success
+          test "$POST_VALIDATE_OUTCOME" = success
+          test "$POST_UPLOAD_OUTCOME" = success
+          test "$ACTIVE_UPLOAD_OUTCOME" = success
+          printf '%s\n' 'signed source promotion closed with complete post-push evidence and retired transport authority'

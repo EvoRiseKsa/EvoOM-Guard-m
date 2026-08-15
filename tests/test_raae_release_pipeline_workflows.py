@@ -36,6 +36,7 @@ E = WORKFLOWS / "evoguard-build-release-artifact.yml"
 F = WORKFLOWS / "evoguard-admit-release-artifact.yml"
 G = WORKFLOWS / "evoguard-verify-release-artifact.yml"
 H = WORKFLOWS / "evoguard-publish-admitted-release.yml"
+P = WORKFLOWS / "evoguard-promote-signed-release-source.yml"
 LEGACY = WORKFLOWS / "release.yml"
 
 PINNED_GH_VERSION = "2.97.0"
@@ -175,7 +176,16 @@ def test_release_workflow_python_heredocs_are_exact_and_compile() -> None:
         for source_index, source in enumerate(_python_heredocs(path)):
             compile(source, f"{path.name}:heredoc:{source_index}", "exec")
             count += 1
-    assert count == 33
+    assert count == 36
+
+
+def test_source_provenance_workflow_python_heredocs_compile() -> None:
+    count = 0
+    for path in (A, P):
+        for source_index, source in enumerate(_python_heredocs(path)):
+            compile(source, f"{path.name}:heredoc:{source_index}", "exec")
+            count += 1
+    assert count == 8
 
 
 def test_sensitive_release_jobs_materialize_one_exact_github_cli() -> None:
@@ -281,6 +291,7 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
     )
     assert bootstrap["format"] == "EVOGUARD_RELEASE_PIPELINE_BOOTSTRAP_V1"
     assert bootstrap["activation"] == {
+        "EVOGUARD_RELEASE_SOURCE_PROMOTION_ENABLED": False,
         "EVOGUARD_RELEASE_SOURCE_V2_ENABLED": False,
         "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_ENABLED": False,
         "EVOGUARD_RELEASE_PUBLICATION_ENABLED": False,
@@ -290,6 +301,7 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
     )
     required = bootstrap["post_merge_required"]
     assert set(required["workflow_ids"]) == {
+        "EVOGUARD_RELEASE_SOURCE_PROMOTION_WORKFLOW_ID",
         "EVOGUARD_RELEASE_SOURCE_REVERIFY_WORKFLOW_ID",
         "EVOGUARD_RELEASE_SOURCE_RECEIPT_WORKFLOW_ID",
         "EVOGUARD_RELEASE_SOURCE_ADMIT_WORKFLOW_ID",
@@ -315,6 +327,47 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
         "evoguard-release-publication"
     ]["secret"] == "EVOGUARD_RELEASE_TAG_DEPLOY_KEY"
     assert set(required["tag_authority"].values()) == {"POST_MERGE_REQUIRED"}
+    assert set(required["source_promotion_authority"].values()) == {
+        "POST_MERGE_REQUIRED"
+    }
+    assert required["git_signing"] == {
+        "maintainer_signing_root": "security/release-maintainer-roots/v4.7.0.json",
+        "maintainer_public_key": "security/release-maintainer-roots/v4.7.0.pub",
+        "maintainer_public_key_fingerprint": (
+            "SHA256:iCn7wa6HgKdu7luf/16rrKZzSk5FygJoA8EKNl3LJ24"
+        ),
+        "source_commit_object_type": "commit",
+        "release_tag_object_type": "tag",
+        "github_verification_required": True,
+        "private_key_in_actions": False,
+    }
+    assert required["minor_release_freeze"]["stabilization_seconds"] == 1209600
+    assert required["minor_release_freeze"]["candidate_promotion_policy"] == (
+        "exact-stable-promotion-scope-only"
+    )
+    assert required["minor_release_freeze"][
+        "stabilization_window_allowed_changes"
+    ] == ["release-record-corrections-only"]
+    freeze_contract = required["minor_release_freeze"]
+    assert freeze_contract["git_commit_timestamp_role"] == (
+        "SANITY_CHECK_ONLY_NOT_TRUSTED_TIME"
+    )
+    assert freeze_contract["github_server_time_anchor_validator"] == (
+        "tools/ci/validate_release_freeze_github_anchor.py"
+    )
+    for name in (
+        "EVOGUARD_V470_FREEZE_WINDOWS_WORKFLOW_ID",
+        "EVOGUARD_V470_FREEZE_CODEQL_WORKFLOW_ID",
+        "EVOGUARD_V470_FREEZE_CI_WORKFLOW_ID",
+        "EVOGUARD_V470_FREEZE_CFLITE_WORKFLOW_ID",
+    ):
+        assert freeze_contract[name] == "POST_MERGE_REQUIRED"
+    assert bootstrap["protected_environments"][
+        "evoguard-release-source-promotion"
+    ]["secret"] == "EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY"
+    assert bootstrap["protected_environments"][
+        "evoguard-release-source-promotion"
+    ]["observer_secret"] == "EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN"
     assert bootstrap["protected_environments"][
         "evoguard-release-draft"
     ]["secret"] is None
@@ -326,9 +379,36 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
     assert bootstrap["activation_prerequisites"]["repository"][
         "strict_status_checks_required"
     ] is True
-    assert bootstrap["activation_prerequisites"]["repository"][
-        "enforce_admins_required"
-    ] is True
+    repository = bootstrap["activation_prerequisites"]["repository"]
+    assert repository["main_governance_model"] == (
+        "RULESET_ONLY_NO_CLASSIC_BRANCH_PROTECTION"
+    )
+    assert repository["classic_main_branch_protection_required_http_status"] == 404
+    assert repository["main_admin_or_role_bypass"] == "FORBIDDEN"
+    authority = repository["source_promotion_authority"]
+    assert authority["bypass_actor"] == "DeployKey"
+    assert authority["bypass_actor_id"] is None
+    assert authority["bypass_mode"] == "always"
+    assert authority["only_one_write_deploy_key_required"] is True
+    assert authority["must_differ_from_maintainer_signing_key"] is True
+    assert authority["control_plane_observer_permission"] == (
+        "repository Administration:read only"
+    )
+    ruleset = authority["ruleset_contract"]
+    assert ruleset["name"] == "EvoOM Guard main signed-source authority"
+    assert ruleset["conditions"] == {
+        "include": ["refs/heads/main"],
+        "exclude": [],
+    }
+    assert ruleset["required_rule_types"] == [
+        "creation",
+        "deletion",
+        "non_fast_forward",
+        "pull_request",
+        "required_linear_history",
+        "required_status_checks",
+    ]
+    assert "required_signatures" not in ruleset["required_rule_types"]
     assert bootstrap["activation_prerequisites"]["repository"][
         "immutable_releases_required"
     ] is True
@@ -338,11 +418,323 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
     assert "v*" in bootstrap["activation_prerequisites"]["repository"][
         "release_tag_ruleset"
     ]
+    tag_authority = repository["release_tag_authority"]
+    assert tag_authority["bypass_actor"] == "DeployKey"
+    assert tag_authority["only_one_write_deploy_key_required"] is True
+    assert tag_authority["must_differ_from_maintainer_signing_key"] is True
+    assert tag_authority["must_differ_from_source_promotion_key"] is True
+    assert tag_authority["private_key_environment"] == (
+        "evoguard-release-publication"
+    )
+    assert tag_authority["ruleset_contract"] == {
+        "name": "EvoOM Guard release tag authority",
+        "target": "tag",
+        "source_type": "Repository",
+        "source": "EvoRiseKsa/EvoOM-Guard-m",
+        "enforcement": "active",
+        "conditions": {"include": ["refs/tags/v*"], "exclude": []},
+        "required_rule_types": [
+            "creation",
+            "deletion",
+            "non_fast_forward",
+            "update",
+        ],
+    }
     assert bootstrap["post_publication_evidence"]["first_ledger"] == "v4.4.2"
     frozen = bootstrap["post_publication_evidence"]["required_frozen_material"]
     assert "six admission public roots and key IDs" in frozen
     assert "one distinct release-ledger signing public root and key ID" in frozen
     assert "six public roots and key IDs" not in frozen
+
+
+def test_signed_source_promotion_has_executable_ruleset_only_authority() -> None:
+    whole = _text(P)
+    preflight = _job(P, "preflight")
+    promote = _job(P, "promote")
+    capture = _text(ROOT / "tools/ci/capture_release_source_protection.js")
+    assert "EVOGUARD_RELEASE_MAIN_RULESET_ID" in preflight
+    assert "EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY_ID" in preflight
+    assert "EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY_FINGERPRINT" in preflight
+    assert "source_authority: {" in preflight
+    assert "freeze_workflow_ids: {" in preflight
+    assert "core.setOutput('main_ruleset_id'" in preflight
+    assert "core.setOutput('source_deploy_key_id'" in preflight
+    assert "core.setOutput('source_deploy_key_fingerprint'" in preflight
+    assert "needs.preflight.outputs.main_ruleset_id" in promote
+    assert "needs.preflight.outputs.source_deploy_key_id" in promote
+    assert "needs.preflight.outputs.source_deploy_key_fingerprint" in promote
+    assert "${{ vars." not in promote
+    assert "EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN" in promote
+    assert "validate_release_source_protection.py" in promote
+    assert "classic_main_branch_protection" in capture
+    assert "branches/{branch}/protection" in capture
+    assert "targets: 'branch,push'" in capture
+    assert "includes_parents: true" in capture
+    assert "rules/branches/{branch}" in capture
+    assert "GET /repos/{owner}/{repo}/keys" in capture
+    assert "MAX_PAGES = 10" in capture
+    assert "EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN" not in capture
+    assert "SOURCE_DEPLOY_KEY" not in capture
+    first_capture = promote.index("Capture the live ruleset-only main authority")
+    first_validation = promote.index("Fail closed on classic protection")
+    immediate_capture = promote.index("Recapture the authority immediately")
+    immediate_validation = promote.index(
+        "Validate immediate source authority before any transport secret is exposed"
+    )
+    active_upload = promote.index(
+        "Upload exact current-run source-active authority evidence"
+    )
+    deploy_secret = promote.index("secrets.EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY")
+    push = promote.index("git -C \"$objects\" push")
+    post_capture = promote.index("Capture the post-push main authority")
+    assert first_capture < first_validation < immediate_capture < immediate_validation
+    assert immediate_validation < active_upload < deploy_secret < push < post_capture
+    assert promote.count("--expected-main-sha") == 3
+    assert promote.count("capture_release_source_protection.js") == 3
+    assert promote.count("validate_release_source_protection.py") == 3
+    assert promote.count("reviewDecision") == 2
+    assert promote.count("mergeStateStatus") == 2
+    assert promote.count("globally approved and clean") == 1
+    assert "exact PR is no longer globally approved and clean" in promote
+    assert "capture_minor_release_freeze_anchor.js" in whole
+    assert whole.count("validate_release_freeze_github_anchor.py") == 2
+    for argument in (
+        "--expected-windows-workflow-id",
+        "--expected-codeql-workflow-id",
+        "--expected-ci-workflow-id",
+        "--expected-cflite-workflow-id",
+    ):
+        assert whole.count(argument) == 2
+    assert "${{ runner.temp }}/pre-push-source-protection.json" in whole
+    assert "${{ runner.temp }}/source-authority-active.json" in whole
+    assert "${{ runner.temp }}/source-authority-active-receipt.json" in whole
+    assert "${{ runner.temp }}/post-push-source-protection.json" in whole
+    assert '--force-with-lease="refs/heads/main:$BASE_SHA"' in promote
+    assert "EVOGUARD_SIGNED_SOURCE_MUTATION_RECEIPT_V1" in promote
+    assert "expected_refspec = f\"{os.environ['CANDIDATE_SHA']}:refs/heads/main\"" in promote
+    assert "rows[0][0] != ' '" in promote
+    assert promote.index("cleanup_key\n          trap - EXIT") < promote.index(
+        "EVOGUARD_SIGNED_SOURCE_MUTATION_RECEIPT_V1"
+    )
+    retirement = _job(P, "prove-source-authority-retired")
+    assert "if: always() && needs.preflight.result == 'success'" in retirement
+    assert "environment: evoguard-release-source-retirement" in retirement
+    assert "${{ vars." not in retirement
+    assert "Download the exact current-run source-active authority artifact" in retirement
+    assert "Verify and bind the downloaded source-active authority identity" in retirement
+    assert "needs.promote.outputs.active_snapshot_sha256" in retirement
+    assert "needs.promote.outputs.active_receipt_sha256" in retirement
+    assert "Bind the post-attempt main SHA before validating retirement" in retirement
+    assert "steps.retired_main.outputs.main_sha" in retirement
+    assert "steps.retired_main.outputs.promotion_completed" in retirement
+    assert '"$CANDIDATE_SHA") promotion_completed=true' in retirement
+    assert '"$BASE_SHA") promotion_completed=false' in retirement
+    assert "main_sha_after_attempt" in retirement
+    assert "--authority-state source-retired" in retirement
+    assert "EVOGUARD_SIGNED_SOURCE_AUTHORITY_CLOSURE_V1" in retirement
+    assert "promotion_completed" in retirement
+    assert "retired_source_deploy_key_id" in retirement
+    assert "retired_source_deploy_key_fingerprint" in retirement
+    assert "active_snapshot" in retirement
+    assert "active_verification" in retirement
+    assert "main_ruleset_id" in retirement
+    assert "source_deploy_key_id" in retirement
+    assert "source_deploy_key_fingerprint" in retirement
+    assert "validate_release_source_retirement_artifact.py" in retirement
+    assert retirement.count("--expected-base-sha") == 1
+    assert retirement.count("--expected-candidate-sha") == 1
+    assert retirement.count("--allow-unpromoted-terminal-closure") == 1
+    assert "source-authority-retirement" in retirement
+    assert "continue-on-error: true" in promote
+    assert "post_capture_outcome: ${{ steps.post_capture.outcome }}" in promote
+    assert "post_validate_outcome: ${{ steps.post_validate.outcome }}" in promote
+    assert "post_upload_outcome: ${{ steps.post_upload.outcome }}" in promote
+    assert "active_upload_outcome: ${{ steps.active_upload.outcome }}" in promote
+    closure = _job(P, "enforce-source-promotion-closure")
+    assert "needs: [promote, prove-source-authority-retired]" in closure
+    assert "if: always()" in closure
+    assert "needs.promote.result" in closure
+    assert "needs.prove-source-authority-retired.result" in closure
+    assert "needs.prove-source-authority-retired.outputs.promotion_completed" in closure
+    assert 'test "$PROMOTE_RESULT" = success' in closure
+    assert 'test "$RETIREMENT_RESULT" = success' in closure
+    assert 'test "$PROMOTION_COMPLETED" = true' in closure
+    assert "needs.promote.outputs.post_capture_outcome" in closure
+    assert "needs.promote.outputs.post_validate_outcome" in closure
+    assert "needs.promote.outputs.post_upload_outcome" in closure
+    assert "needs.promote.outputs.active_upload_outcome" in closure
+    assert 'test "$POST_CAPTURE_OUTCOME" = success' in closure
+    assert 'test "$POST_VALIDATE_OUTCOME" = success' in closure
+    assert 'test "$POST_UPLOAD_OUTCOME" = success' in closure
+    assert 'test "$ACTIVE_UPLOAD_OUTCOME" = success' in closure
+    assert "release-source-promotion.key" not in whole[:first_validation]
+
+
+def test_signed_source_push_parser_accepts_real_raw_sha_fast_forward_only(
+    tmp_path: Path,
+) -> None:
+    parser_source = next(
+        source
+        for source in _python_heredocs(P)
+        if "EVOGUARD_SIGNED_SOURCE_MUTATION_RECEIPT_V1" in source
+    )
+    remote = tmp_path / "remote.git"
+    local = tmp_path / "local"
+
+    def git(*arguments: str, capture: bool = False) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", *arguments],
+            cwd=local if local.exists() else tmp_path,
+            check=True,
+            capture_output=capture,
+            text=True,
+        )
+
+    git("init", "--bare", str(remote))
+    git("init", str(local))
+    git("config", "user.name", "EvoGuard transcript fixture")
+    git("config", "user.email", "fixture@example.invalid")
+    tracked = local / "tracked.txt"
+    tracked.write_text("base\n", encoding="utf-8")
+    git("add", "tracked.txt")
+    git("commit", "-m", "base")
+    git("branch", "-M", "main")
+    git("remote", "add", "origin", str(remote))
+    git("push", "origin", "main")
+    base_sha = git("rev-parse", "HEAD", capture=True).stdout.strip()
+
+    tracked.write_text("candidate\n", encoding="utf-8")
+    git("commit", "-am", "candidate")
+    candidate_sha = git("rev-parse", "HEAD", capture=True).stdout.strip()
+    fast_forward = git(
+        "push",
+        "--porcelain",
+        "origin",
+        f"{candidate_sha}:refs/heads/main",
+        capture=True,
+    )
+    transcript = tmp_path / "fast-forward.txt"
+    transcript.write_text(
+        fast_forward.stdout + fast_forward.stderr,
+        encoding="utf-8",
+        newline="",
+    )
+    receipt = tmp_path / "receipt.json"
+    environment = {
+        **os.environ,
+        "BASE_SHA": base_sha,
+        "CANDIDATE_SHA": candidate_sha,
+        "TRANSCRIPT": str(transcript),
+        "RECEIPT": str(receipt),
+        "GITHUB_RUN_ID": "123456789",
+        "GITHUB_RUN_ATTEMPT": "1",
+    }
+    parsed = subprocess.run(
+        [sys.executable, "-I", "-c", parser_source],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    assert parsed.returncode == 0, parsed.stderr
+    assert json.loads(receipt.read_bytes())["candidate_sha"] == candidate_sha
+
+    git("switch", "--orphan", "divergent")
+    tracked.write_text("divergent\n", encoding="utf-8")
+    git("add", "tracked.txt")
+    git("commit", "-m", "divergent")
+    divergent_sha = git("rev-parse", "HEAD", capture=True).stdout.strip()
+    forced = git(
+        "push",
+        "--porcelain",
+        "--force",
+        "origin",
+        f"{divergent_sha}:refs/heads/main",
+        capture=True,
+    )
+    transcript.write_text(
+        forced.stdout + forced.stderr,
+        encoding="utf-8",
+        newline="",
+    )
+    receipt.unlink()
+    environment["CANDIDATE_SHA"] = divergent_sha
+    rejected = subprocess.run(
+        [sys.executable, "-I", "-c", parser_source],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    assert rejected.returncode != 0
+    assert "true fast-forward" in rejected.stderr
+    assert not receipt.exists()
+
+
+def test_h_live_tag_authority_is_proved_before_and_after_publication() -> None:
+    preflight = _job(H, "preflight")
+    publish = _job(H, "publish")
+    capture = _text(ROOT / "tools/ci/capture_release_tag_authority.js")
+
+    resolve_p = preflight.index(
+        "Resolve the authenticated source-promotion run from admitted source bytes"
+    )
+    download_p = preflight.index("Download the exact terminal P retirement artifact")
+    bind_p = preflight.index(
+        "Bind the exact retired source transport identity from P evidence"
+    )
+    stage = preflight.index(
+        "Stage the exact three draft assets, signed tag, and publication record"
+    )
+    assert resolve_p < download_p < bind_p < stage
+    assert "validate_release_source_retirement_artifact.py" in preflight
+    assert "source-retirement-binding.json" in preflight
+    assert "evoguard-signed-source-retirement-" in preflight
+    assert "--expected-base-sha" in preflight
+    assert "--expected-candidate-sha" in preflight
+    assert "--allow-unpromoted-terminal-closure" not in preflight
+    assert ".target.promotion_completed" in preflight
+
+    pre_capture = publish.index(
+        "Capture live tag authority immediately before exposing the transport key"
+    )
+    pre_validate = publish.index(
+        "Fail closed unless source authority is retired and tag authority is exact"
+    )
+    secret = publish.index("secrets.EVOGUARD_RELEASE_TAG_DEPLOY_KEY")
+    tag_push = publish.index('git -C "$tag_repo" push')
+    post_capture = publish.index(
+        "Capture live tag authority after immutable publication"
+    )
+    post_validate = publish.index(
+        "Revalidate unchanged tag authority after publication"
+    )
+    upload = publish.index("Upload closed tag-authority evidence")
+
+    assert pre_capture < pre_validate < secret < tag_push < post_capture
+    assert post_capture < post_validate < upload
+    assert publish.count("capture_release_tag_authority.js") == 2
+    assert publish.count("validate_release_tag_authority.py") == 2
+    assert publish.count("secrets.EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN") == 2
+    for name in (
+        "EVOGUARD_RELEASE_MAIN_RULESET_ID",
+        "EVOGUARD_RELEASE_TAG_RULESET_ID",
+        "EVOGUARD_RELEASE_TAG_DEPLOY_KEY_ID",
+        "EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT",
+    ):
+        assert publish.count(name) >= 2
+    assert "EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY_ID" not in publish
+    assert "EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY_FINGERPRINT" not in publish
+    assert publish.count("--retired-source-deploy-key-fingerprint") == 2
+    assert publish.count("--maintainer-signing-root") == 2
+    assert publish.count("source-retirement-binding.json") >= 4
+    assert "GET /repos/{owner}/{repo}/keys" in capture
+    assert "branches/{branch}/protection" in capture
+    assert "'branch,push'" in capture
+    assert "'tag'" in capture
+    assert "EVOGUARD_RELEASE_TAG_DEPLOY_KEY" not in capture
+    assert "EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN" not in capture
+    assert "if-no-files-found: error" in publish[upload:]
 
 
 def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
@@ -480,9 +872,9 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert "sys.path.insert(0, str(base))" in source
     assert "candidate / 'benchmarks/run-manifest.json'" in source
     assert "base / 'benchmarks/run-manifest.json'" in source
-    assert "ENGINE_VERSION != '4.6.0.dev0'" in source
+    assert "ENGINE_VERSION != '4.7.0.dev0'" in source
     assert "trusted parent benchmark rejected" in source
-    assert "engine_version='4.6.0'" in source
+    assert "engine_version='4.7.0'" in source
     assert "require_release_promotion=True" in source
     assert source.count("required_history_tip='HEAD'") == 2
     assert "relation=exact-release-version-transition" in source
@@ -594,11 +986,11 @@ def test_release_scope_validator_accepts_only_the_exact_version_byte_change(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.6.0.dev0"',
+        version_assignment='__version__ = "4.7.0.dev0"',
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.6.0"',
+        version_assignment='__version__ = "4.7.0"',
         readme="candidate\n",
         security="candidate security policy\n",
     )
@@ -657,12 +1049,12 @@ def test_release_scope_validator_rejects_an_unlisted_source_edit(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.6.0.dev0"',
+        version_assignment='__version__ = "4.7.0.dev0"',
         guard="VALUE = 1\n",
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.6.0"',
+        version_assignment='__version__ = "4.7.0"',
         guard="VALUE = 2\n",
     )
 
@@ -680,12 +1072,12 @@ def test_release_scope_validator_rejects_an_unlisted_source_deletion(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.6.0.dev0"',
+        version_assignment='__version__ = "4.7.0.dev0"',
         guard="VALUE = 1\n",
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.6.0"',
+        version_assignment='__version__ = "4.7.0"',
     )
 
     with pytest.raises(
@@ -702,11 +1094,11 @@ def test_release_scope_validator_rejects_an_allowed_path_deletion(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.6.0.dev0"',
+        version_assignment='__version__ = "4.7.0.dev0"',
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.6.0"',
+        version_assignment='__version__ = "4.7.0"',
     )
     (candidate / "README.md").unlink()
 
@@ -720,15 +1112,15 @@ def test_release_scope_validator_rejects_an_allowed_path_deletion(
 @pytest.mark.parametrize(
     "candidate_init",
     (
-        '# frozen prefix\n__version__ = "4.6.0"\n# changed suffix\n',
+        '# frozen prefix\n__version__ = "4.7.0"\n# changed suffix\n',
         '# frozen prefix\n__version__ = "4.4.3"\n# frozen suffix\n',
         (
-            '# frozen prefix\n__version__ = "4.6.0"\n'
-            'SECOND_VERSION = "4.6.0"\n# frozen suffix\n'
+            '# frozen prefix\n__version__ = "4.7.0"\n'
+            'SECOND_VERSION = "4.7.0"\n# frozen suffix\n'
         ),
         (
             "# frozen prefix\n"
-            'import os\n__version__ = "4.6.0"\n# frozen suffix\n'
+            'import os\n__version__ = "4.7.0"\n# frozen suffix\n'
         ),
     ),
 )
@@ -740,11 +1132,11 @@ def test_release_scope_validator_rejects_version_file_mutations(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.6.0.dev0"',
+        version_assignment='__version__ = "4.7.0.dev0"',
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.6.0"',
+        version_assignment='__version__ = "4.7.0"',
     )
     (candidate / candidate_scope.VERSION_PATH).write_text(
         candidate_init,
@@ -761,6 +1153,7 @@ def test_release_scope_validator_rejects_version_file_mutations(
 
 def test_a_b_c_separate_candidate_execution_provider_and_key_access() -> None:
     a = _text(A)
+    a_metadata = _job(A, "metadata")
     b = _text(B)
     c_preflight = _job(C, "preflight")
     c_seal = _job(C, "seal")
@@ -769,7 +1162,27 @@ def test_a_b_c_separate_candidate_execution_provider_and_key_access() -> None:
     assert "id-token: write" not in a
     assert "attestations: write" not in a
     assert "contents: write" not in a
-    assert "secrets." not in a
+    assert a.count("secrets.") == 1
+    assert "secrets.EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN" in a
+    assert "secrets.EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY" not in a
+    assert "PRIVATE_KEY" not in a
+    assert "environment: evoguard-release-source-reverify" in a
+    assert "--authority-state source-retired" in a
+    assert "Download the exact promotion-run retirement artifact" in a_metadata
+    assert "run-id: ${{ inputs.promotion_run_id }}" in a_metadata
+    assert "evoguard-signed-source-retirement-${{ inputs.promotion_run_attempt }}" in a_metadata
+    assert "validate_release_source_retirement_artifact.py" in a_metadata
+    assert "source-retirement-binding.json" in a_metadata
+    assert "--expected-base-sha" in a_metadata
+    assert "--expected-candidate-sha" in a_metadata
+    assert "--allow-unpromoted-terminal-closure" not in a_metadata
+    assert ".target.promotion_completed" in a_metadata
+    assert "steps.retirement_binding.outputs.main_ruleset_id" in a_metadata
+    assert "steps.retirement_binding.outputs.source_deploy_key_id" in a_metadata
+    assert "steps.retirement_binding.outputs.source_deploy_key_fingerprint" in a_metadata
+    assert "EVOGUARD_RELEASE_MAIN_RULESET_ID" not in a_metadata
+    assert "EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY_ID" not in a_metadata
+    assert "EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY_FINGERPRINT" not in a_metadata
 
     assert "actions/checkout@" not in b
     assert "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64" not in b
@@ -1205,7 +1618,7 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "secrets.EVOGUARD_RELEASE_TAG_DEPLOY_KEY" in publish
     assert "vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT" in _text(F)
     assert "vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT" in _text(G)
-    assert "vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT" not in publish
+    assert "vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT" in publish
     assert "tag_deploy_key_fingerprint" in preflight
     assert "expected_tag_deploy_key_fingerprint" in publish
     assert "actual_tag_key_fingerprint" in publish
@@ -1232,9 +1645,10 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     ) not in publish
     assert publish.count("cleanup_verified_unpublished_draft 1") == 2
     assert "git -C \"$tag_repo\" push" in publish
-    assert '"$TARGET_SHA:refs/tags/$tag"' in publish
+    assert '"$tag_object_sha:refs/tags/$tag"' in publish
+    assert '"$TARGET_SHA:refs/tags/$tag"' not in publish
     assert '":refs/tags/$tag"' in publish
-    assert '--force-with-lease="refs/tags/$tag:$TARGET_SHA"' in publish
+    assert '--force-with-lease="refs/tags/$tag:$tag_object_sha"' in publish
     assert "deploy-key tag push failed before ref proof" in publish
     assert 'cleanup_verified_unpublished_draft "$tag_push_rc"' in publish
     assert "deploy-key push did not prove a newly created tag" in publish
@@ -1248,14 +1662,21 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
         'test -n "$TAG_DEPLOY_KEY"'
     )
     assert 'if ! GIT_SSH_COMMAND="$tag_ssh_command"' not in publish[
-        publish.index('"$TARGET_SHA:refs/tags/$tag"') - 400 :
-        publish.index('"$TARGET_SHA:refs/tags/$tag"') + 100
+        publish.index('"$tag_object_sha:refs/tags/$tag"') - 400 :
+        publish.index('"$tag_object_sha:refs/tags/$tag"') + 100
     ]
-    assert publish.index('"$TARGET_SHA:refs/tags/$tag"') < publish.index(
+    assert publish.index('"$tag_object_sha:refs/tags/$tag"') < publish.index(
         "printf '%s\\n' '{\"draft\":false}'"
     )
+    assert "EVOGUARD_V470_SIGNED_TAG_OBJECT_B64" in preflight
+    assert "EVOGUARD_V470_SIGNED_TAG_OBJECT_SHA" in whole
+    assert "verify_release_git_object.py\" tag" in whole
+    assert "hash-object -t tag -w --stdin" in whole
+    assert 'object.type == "tag"' in publish
+    assert 'verification.verified == true' in publish
+    assert 'verification.reason == "valid"' in publish
     assert publish.index("trap cleanup_verified_unpublished_draft ERR") < publish.index(
-        'trap - ERR\n          "$EVOGUARD_PINNED_GH_EXECUTABLE" api'
+        "trap - ERR\n          umask 077"
     )
     assert publish.count("release.get('author', {}).get('id')") >= 4
     assert publish.count("41898282") >= 4
@@ -1306,6 +1727,53 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "observed != expected_tools.get(name)" in draft
     assert "observed != expected_tools.get(name)" in publish
     assert publish.count("$RUNNER_TEMP/publication-final/") >= 3
+
+
+def test_h_failure_only_cleanup_removes_only_an_exact_pre_patch_draft() -> None:
+    publish = _job(H, "publish")
+    cleanup = next(
+        block
+        for block in _literal_run_blocks(H)
+        if "pre-PATCH cleanup preserved the draft" in block
+    )
+
+    cleanup_step = publish.index(
+        "Remove only an exact unpublished draft after a pre-PATCH step failure"
+    )
+    post_authority = publish.index(
+        "Capture live tag authority after immutable publication"
+    )
+    patch_marker = publish.index(
+        'printf \'release_id=%s\\n\' "$RELEASE_ID" '
+        '> "$RUNNER_TEMP/publication-patch-started"'
+    )
+    patch_request = publish.index("--method PATCH", patch_marker)
+    assert patch_marker < patch_request < cleanup_step < post_authority
+    assert "if: ${{ failure() && steps.create.outcome == 'success' }}" in publish
+    assert "RELEASE_ID: ${{ steps.create.outputs.release_id }}" in publish
+    assert 'if test -e "$marker"; then' in cleanup
+    assert "the publication PATCH boundary may have been crossed" in cleanup
+    assert "secrets." not in cleanup
+    assert "TAG_DEPLOY_KEY" not in cleanup
+    assert "release.get('id') != expected_id" in cleanup
+    assert "release.get('draft') is not True" in cleanup
+    assert "release.get('immutable') is not False" in cleanup
+    assert "release.get('published_at') is not None" in cleanup
+    assert "release.get('body') != body" in cleanup
+    assert "release.get('author', {}).get('id') != 41898282" in cleanup
+    assert "cleanup release asset count is not exact" in cleanup
+    assert "cleanup release asset names are not exact" in cleanup
+    assert "asset.get('digest') != f\"sha256:{expected['sha256']}\"" in cleanup
+    assert cleanup.count("validate_exact_unpublished_draft") == 3
+    assert cleanup.count("prove_tag_absent_for_cleanup") == 3
+    assert 'test "$probe_rc" -ne 0 && test "$status" = 404' in cleanup
+    assert '"repos/$GITHUB_REPOSITORY/git/ref/tags/$tag"' in cleanup
+    assert '"repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"' in cleanup
+    assert "--method DELETE" in cleanup
+    assert "prove_release_absent after-delete" in cleanup
+    assert "draft deletion was not proven by an exact HTTP 404" in cleanup
+    assert "the release tag exists or its absence is not an exact HTTP 404" in cleanup
+    assert "manual recovery is required" in cleanup
 
 
 def test_h_draft_discovery_retries_only_an_absent_release(tmp_path: Path) -> None:
@@ -1657,7 +2125,8 @@ cleanup_verified_unpublished_draft() {{
 tag_ssh_command='ssh pinned'
 tag_repo=tag.git
 tag_remote=git@github.com:EvoRiseKsa/EvoOM-Guard-m.git
-TARGET_SHA={'a' * 40}
+    TARGET_SHA={'a' * 40}
+    tag_object_sha={'b' * 40}
 tag=v4.4.0
 RUNNER_TEMP=.
 {push_block}

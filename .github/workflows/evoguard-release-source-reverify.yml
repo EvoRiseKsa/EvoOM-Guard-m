@@ -2,15 +2,29 @@ name: EvoGuard Release Source Reverify
 
 on:
   workflow_dispatch:
+    inputs:
+      promotion_run_id:
+        description: Exact successful signed-source promotion run with retirement proof
+        required: true
+        type: string
+      promotion_run_attempt:
+        description: Exact promotion run attempt
+        required: true
+        type: string
 
 permissions: {}
+
+env:
+  EVOGUARD_MAINTAINER_ROOT: security/release-maintainer-roots/v4.7.0.json
 
 jobs:
   metadata:
     if: github.ref == 'refs/heads/main' && vars.EVOGUARD_RELEASE_SOURCE_V2_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    environment: evoguard-release-source-reverify
     permissions:
+      actions: read
       contents: read
     outputs:
       target_sha: ${{ steps.main.outputs.target_sha }}
@@ -26,6 +40,8 @@ jobs:
           CONTROL_PATH: ${{ runner.temp }}/release-source.json
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
+          PROMOTION_RUN_ID: ${{ inputs.promotion_run_id }}
+          PROMOTION_RUN_ATTEMPT: ${{ inputs.promotion_run_attempt }}
         with:
           script: |
             const fs = require('fs');
@@ -39,11 +55,41 @@ jobs:
             }
             const targetSha = branch.commit.sha;
             const target = (await github.rest.git.getCommit({ owner, repo, commit_sha: targetSha })).data;
+            const repositoryCommit = (await github.rest.repos.getCommit({
+              owner, repo, ref: targetSha,
+            })).data;
             if (!Array.isArray(target.parents) || target.parents.length !== 1) {
               throw new Error('V2 source reverify requires a non-merge main commit with one parent');
             }
+            const verification = repositoryCommit.commit?.verification;
+            if (repositoryCommit.parents?.length !== 1 ||
+                repositoryCommit.parents[0].sha !== target.parents[0].sha ||
+                verification?.verified !== true || verification.reason !== 'valid' ||
+                typeof verification.signature !== 'string' || !verification.signature ||
+                typeof verification.payload !== 'string' || !verification.payload ||
+                repositoryCommit.author?.login !== 'EvoRiseKsa' ||
+                repositoryCommit.author?.id !== 231647061 ||
+                repositoryCommit.committer?.login !== 'EvoRiseKsa' ||
+                repositoryCommit.committer?.id !== 231647061) {
+              throw new Error('release source is not the exact GitHub-verified maintainer-signed commit');
+            }
             const parentSha = target.parents[0].sha;
             const parent = (await github.rest.git.getCommit({ owner, repo, commit_sha: parentSha })).data;
+            if (!/^[1-9][0-9]*$/.test(process.env.PROMOTION_RUN_ID || '') ||
+                !/^[1-9][0-9]*$/.test(process.env.PROMOTION_RUN_ATTEMPT || '')) {
+              throw new Error('promotion run identity is not canonical');
+            }
+            const promotionRun = (await github.rest.actions.getWorkflowRun({
+              owner, repo, run_id: Number(process.env.PROMOTION_RUN_ID),
+            })).data;
+            if (promotionRun.path !== '.github/workflows/evoguard-promote-signed-release-source.yml' ||
+                promotionRun.event !== 'workflow_dispatch' || promotionRun.status !== 'completed' ||
+                promotionRun.conclusion !== 'success' || promotionRun.head_branch !== 'main' ||
+                promotionRun.head_sha !== parentSha ||
+                promotionRun.run_attempt !== Number(process.env.PROMOTION_RUN_ATTEMPT) ||
+                promotionRun.repository?.id !== context.payload.repository.id) {
+              throw new Error('promotion run is not the exact successful parent-bound authority closure');
+            }
             const source = {
               default_branch: 'main',
               protected_ref: 'refs/heads/main',
@@ -53,6 +99,8 @@ jobs:
               target_tree_sha: target.tree.sha,
               workflow_run_attempt: Number(process.env.RUN_ATTEMPT),
               workflow_run_id: process.env.RUN_ID,
+              promotion_run_id: process.env.PROMOTION_RUN_ID,
+              promotion_run_attempt: Number(process.env.PROMOTION_RUN_ATTEMPT),
             };
             fs.writeFileSync(process.env.CONTROL_PATH, JSON.stringify(source) + '\n', { encoding: 'utf8', mode: 0o600 });
             core.setOutput('target_sha', targetSha);
@@ -61,11 +109,102 @@ jobs:
             core.setOutput('parent_tree_sha', parent.tree.sha);
             core.setOutput('repository_id', String(context.payload.repository.id));
 
+      - name: Check out the exact trusted parent authority verifier without credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ steps.main.outputs.parent_sha }}
+          persist-credentials: false
+          path: authority
+
+      - name: Download the exact promotion-run retirement artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-signed-source-retirement-${{ inputs.promotion_run_attempt }}
+          path: ${{ runner.temp }}/promotion-retirement
+          run-id: ${{ inputs.promotion_run_id }}
+          github-token: ${{ github.token }}
+
+      - id: retirement_binding
+        name: Verify and bind the exact active-to-retired promotion artifact
+        env:
+          TARGET_SHA: ${{ steps.main.outputs.target_sha }}
+          PARENT_SHA: ${{ steps.main.outputs.parent_sha }}
+          REPOSITORY_ID: ${{ steps.main.outputs.repository_id }}
+          PROMOTION_RUN_ID: ${{ inputs.promotion_run_id }}
+          PROMOTION_RUN_ATTEMPT: ${{ inputs.promotion_run_attempt }}
+        run: |
+          set -euo pipefail
+          binding="$RUNNER_TEMP/source-retirement-binding.json"
+          python -I "$GITHUB_WORKSPACE/authority/tools/ci/validate_release_source_retirement_artifact.py" \
+            --artifact "$RUNNER_TEMP/promotion-retirement" \
+            --expected-repository "EvoRiseKsa/EvoOM-Guard-m" \
+            --expected-repository-id "$REPOSITORY_ID" \
+            --expected-base-sha "$PARENT_SHA" \
+            --expected-candidate-sha "$TARGET_SHA" \
+            --expected-promotion-run-id "$PROMOTION_RUN_ID" \
+            --expected-promotion-run-attempt "$PROMOTION_RUN_ATTEMPT" \
+            --binding-out "$binding"
+          test "$(jq -er '.target.base_sha | select(type == "string")' "$binding")" = "$PARENT_SHA"
+          test "$(jq -er '.target.candidate_sha | select(type == "string")' "$binding")" = "$TARGET_SHA"
+          test "$(jq -er '.target.promotion_completed | select(type == "boolean")' "$binding")" = true
+          test "$(jq -er '.active_source_authority.main_sha | select(type == "string")' "$binding")" = "$PARENT_SHA"
+          test "$(jq -er '.retired_source_authority.main_sha | select(type == "string")' "$binding")" = "$TARGET_SHA"
+          ruleset_id="$(jq -er '.main_ruleset_id | select(type == "number" and floor == . and . > 0)' "$binding")"
+          deploy_key_id="$(jq -er '.retired_source_deploy_key.id | select(type == "number" and floor == . and . > 0)' "$binding")"
+          fingerprint="$(jq -er '.retired_source_deploy_key.fingerprint | select(type == "string")' "$binding")"
+          [[ "$ruleset_id" =~ ^[1-9][0-9]*$ ]]
+          [[ "$deploy_key_id" =~ ^[1-9][0-9]*$ ]]
+          [[ "$fingerprint" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]
+          printf 'main_ruleset_id=%s\n' "$ruleset_id" >> "$GITHUB_OUTPUT"
+          printf 'source_deploy_key_id=%s\n' "$deploy_key_id" >> "$GITHUB_OUTPUT"
+          printf 'source_deploy_key_fingerprint=%s\n' "$fingerprint" >> "$GITHUB_OUTPUT"
+
+      - name: Recapture retired source authority before candidate execution
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OUTPUT_PATH: ${{ runner.temp }}/release-source-authority-retired.json
+          EXPECTED_RULESET_ID: ${{ steps.retirement_binding.outputs.main_ruleset_id }}
+        with:
+          github-token: ${{ secrets.EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN }}
+          script: |
+            const capture = require(
+              `${process.env.GITHUB_WORKSPACE}/authority/tools/ci/capture_release_source_protection.js`
+            );
+            await capture({
+              github,
+              context,
+              outputPath: process.env.OUTPUT_PATH,
+              expectedRulesetId: process.env.EXPECTED_RULESET_ID,
+            });
+
+      - name: Fail closed unless source transport authority remains retired
+        env:
+          TARGET_SHA: ${{ steps.main.outputs.target_sha }}
+          EXPECTED_RULESET_ID: ${{ steps.retirement_binding.outputs.main_ruleset_id }}
+          RETIRED_DEPLOY_KEY_ID: ${{ steps.retirement_binding.outputs.source_deploy_key_id }}
+          RETIRED_DEPLOY_KEY_FINGERPRINT: ${{ steps.retirement_binding.outputs.source_deploy_key_fingerprint }}
+        run: |
+          set -euo pipefail
+          python -I "$GITHUB_WORKSPACE/authority/tools/ci/validate_release_source_protection.py" \
+            --snapshot "$RUNNER_TEMP/release-source-authority-retired.json" \
+            --authority-state source-retired \
+            --expected-repository "EvoRiseKsa/EvoOM-Guard-m" \
+            --expected-repository-id "$GITHUB_REPOSITORY_ID" \
+            --expected-main-sha "$TARGET_SHA" \
+            --expected-ruleset-id "$EXPECTED_RULESET_ID" \
+            --expected-deploy-key-id "$RETIRED_DEPLOY_KEY_ID" \
+            --expected-deploy-key-fingerprint "$RETIRED_DEPLOY_KEY_FINGERPRINT" \
+            --receipt "$RUNNER_TEMP/release-source-authority-retired-receipt.json"
+
       - name: Upload pre-execution source control
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: evoguard-release-source-control-v2-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/release-source.json
+          path: |
+            ${{ runner.temp }}/release-source.json
+            ${{ runner.temp }}/source-retirement-binding.json
+            ${{ runner.temp }}/release-source-authority-retired.json
+            ${{ runner.temp }}/release-source-authority-retired-receipt.json
           if-no-files-found: error
           overwrite: false
           retention-days: 7
@@ -74,6 +213,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
+      actions: read
       contents: read
     steps:
       - name: Set up the unprivileged judge Python runtime
@@ -89,10 +229,17 @@ jobs:
       - name: Reject a partial re-run before candidate execution
         env:
           CONTROL: ${{ runner.temp }}/control/release-source.json
+          RETIREMENT_BINDING: ${{ runner.temp }}/control/source-retirement-binding.json
+          TARGET_SHA: ${{ needs.metadata.outputs.target_sha }}
+          PROMOTION_RUN_ID: ${{ inputs.promotion_run_id }}
+          PROMOTION_RUN_ATTEMPT: ${{ inputs.promotion_run_attempt }}
         run: |
           set -euo pipefail
           test "$(jq -r .workflow_run_id "$CONTROL")" = "$GITHUB_RUN_ID"
           test "$(jq -r .workflow_run_attempt "$CONTROL")" = "$GITHUB_RUN_ATTEMPT"
+          test "$(jq -er '.target.main_sha | select(type == "string")' "$RETIREMENT_BINDING")" = "$TARGET_SHA"
+          test "$(jq -er '.promotion_run.run_id | select(type == "string")' "$RETIREMENT_BINDING")" = "$PROMOTION_RUN_ID"
+          test "$(jq -er '.promotion_run.run_attempt | select(type == "number")' "$RETIREMENT_BINDING")" = "$PROMOTION_RUN_ATTEMPT"
 
       - name: Require the exact GitHub-hosted protected-main workflow revision
         env:
@@ -120,6 +267,75 @@ jobs:
           path: candidate
           persist-credentials: false
           fetch-depth: 0
+
+      - name: Capture GitHub server-time anchor for the exact freeze declaration
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DECLARATION_SHA: ${{ needs.metadata.outputs.parent_sha }}
+          DECLARATION_TREE_SHA: ${{ needs.metadata.outputs.parent_tree_sha }}
+          OUTPUT_PATH: ${{ runner.temp }}/release-freeze-github-anchor.json
+        with:
+          script: |
+            const capture = require(
+              `${process.env.GITHUB_WORKSPACE}/base/tools/ci/capture_minor_release_freeze_anchor.js`
+            );
+            await capture({
+              github,
+              context,
+              declarationSha: process.env.DECLARATION_SHA,
+              declarationTreeSha: process.env.DECLARATION_TREE_SHA,
+              outputPath: process.env.OUTPUT_PATH,
+            });
+
+      - name: Verify the raw release commit against the parent-pinned maintainer root
+        env:
+          PARENT_SHA: ${{ needs.metadata.outputs.parent_sha }}
+          TARGET_SHA: ${{ needs.metadata.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          objects="$RUNNER_TEMP/signed-release-source.git"
+          git init --bare "$objects"
+          git -C "$objects" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          GIT_TERMINAL_PROMPT=0 git -C "$objects" fetch --quiet --no-tags origin \
+            "$PARENT_SHA" "$TARGET_SHA"
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/verify_release_git_object.py" commit \
+            --repository "$objects" \
+            --object "$TARGET_SHA" \
+            --root "$GITHUB_WORKSPACE/base/$EVOGUARD_MAINTAINER_ROOT" \
+            --expected-parent "$PARENT_SHA" \
+            --receipt "$RUNNER_TEMP/release-source-signature.json"
+
+      - name: Require the exact elapsed v4.7.0 freeze declaration
+        env:
+          PARENT_SHA: ${{ needs.metadata.outputs.parent_sha }}
+          PARENT_TREE_SHA: ${{ needs.metadata.outputs.parent_tree_sha }}
+          AUTHORIZED_FREEZE_SHA: ${{ vars.EVOGUARD_V470_FREEZE_DECLARATION_SHA }}
+          AUTHORIZED_FREEZE_TREE_SHA: ${{ vars.EVOGUARD_V470_FREEZE_DECLARATION_TREE_SHA }}
+          FREEZE_WINDOWS_WORKFLOW_ID: ${{ vars.EVOGUARD_V470_FREEZE_WINDOWS_WORKFLOW_ID }}
+          FREEZE_CODEQL_WORKFLOW_ID: ${{ vars.EVOGUARD_V470_FREEZE_CODEQL_WORKFLOW_ID }}
+          FREEZE_CI_WORKFLOW_ID: ${{ vars.EVOGUARD_V470_FREEZE_CI_WORKFLOW_ID }}
+          FREEZE_CFLITE_WORKFLOW_ID: ${{ vars.EVOGUARD_V470_FREEZE_CFLITE_WORKFLOW_ID }}
+        run: |
+          set -euo pipefail
+          test "$PARENT_SHA" = "$AUTHORIZED_FREEZE_SHA"
+          test "$PARENT_TREE_SHA" = "$AUTHORIZED_FREEZE_TREE_SHA"
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_minor_release_freeze.py" \
+            --root "$GITHUB_WORKSPACE/base" \
+            --repository "$RUNNER_TEMP/signed-release-source.git" \
+            --declaration-commit "$PARENT_SHA" \
+            --expected-tree "$PARENT_TREE_SHA" \
+            --receipt "$RUNNER_TEMP/release-freeze-verification.json"
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_release_freeze_github_anchor.py" \
+            --root "$GITHUB_WORKSPACE/base" \
+            --snapshot "$RUNNER_TEMP/release-freeze-github-anchor.json" \
+            --expected-declaration-commit "$PARENT_SHA" \
+            --expected-declaration-tree "$PARENT_TREE_SHA" \
+            --expected-repository-id "$GITHUB_REPOSITORY_ID" \
+            --expected-windows-workflow-id "$FREEZE_WINDOWS_WORKFLOW_ID" \
+            --expected-codeql-workflow-id "$FREEZE_CODEQL_WORKFLOW_ID" \
+            --expected-ci-workflow-id "$FREEZE_CI_WORKFLOW_ID" \
+            --expected-cflite-workflow-id "$FREEZE_CFLITE_WORKFLOW_ID" \
+            --receipt "$RUNNER_TEMP/release-freeze-github-anchor-receipt.json"
 
       - name: Install hash-locked judge dependencies from the trusted parent
         run: |
@@ -207,7 +423,7 @@ jobs:
                   raise SystemExit(f'parent release policy mismatch: {key}')
           PY
 
-      - name: Enforce the exact parent-owned v4.6.0 candidate scope
+      - name: Enforce the exact parent-owned v4.7.0 candidate scope
         run: |
           set -euo pipefail
           python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_release_candidate_scope.py" \
@@ -236,8 +452,8 @@ jobs:
           )
           from benchmarks.run_manifest import verify_run_manifest
 
-          if ENGINE_VERSION != '4.6.0.dev0':
-              raise SystemExit('trusted parent is not the exact 4.6.0.dev0 source')
+          if ENGINE_VERSION != '4.7.0.dev0':
+              raise SystemExit('trusted parent is not the exact 4.7.0.dev0 source')
           exact_errors = verify_run_manifest(
               base / 'benchmarks/run-manifest.json',
               root=base,
@@ -257,7 +473,7 @@ jobs:
               corpus=corpus_definition(),
               settings=RUN_SETTINGS,
               baseline_definition=BASELINE_DEFINITION,
-              engine_version='4.6.0',
+              engine_version='4.7.0',
               require_release_promotion=True,
               required_history_tip='HEAD',
             )
@@ -334,6 +550,19 @@ jobs:
             ${{ runner.temp }}/context.json
             ${{ runner.temp }}/verdict.json
             ${{ runner.temp }}/handoff.json
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 7
+
+      - name: Upload independent source-signature and freeze receipts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-release-source-governance-v1-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/release-source-signature.json
+            ${{ runner.temp }}/release-freeze-verification.json
+            ${{ runner.temp }}/release-freeze-github-anchor.json
+            ${{ runner.temp }}/release-freeze-github-anchor-receipt.json
           if-no-files-found: error
           overwrite: false
           retention-days: 7

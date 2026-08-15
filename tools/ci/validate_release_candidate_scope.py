@@ -5,7 +5,7 @@
 # Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
 # -----------------------------------------------------------------------------
-"""Validate the exact, parent-owned v4.6.0 release-candidate scope.
+"""Validate the exact, parent-owned v4.7.0 release-candidate scope.
 
 This validator is executed from the trusted parent checkout before candidate
 code or the candidate verifier pack runs.  It deliberately overlays EvoGuard's
@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
 
-RELEASE_VERSION = "4.6.0"
+RELEASE_VERSION = "4.7.0"
 VERSION_PATH = "evoom_guard/__init__.py"
 ALLOWED_PATHS = (
     "CHANGELOG.md",
@@ -61,7 +61,7 @@ _MAX_TREE_BYTES = 512 * 1024 * 1024
 
 
 class CandidateScopeError(ValueError):
-    """The candidate is outside the exact reviewed v4.6.0 release scope."""
+    """The candidate is outside the exact reviewed v4.7.0 release scope."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -346,7 +346,7 @@ def validate_candidate_scope(base_root: Path, candidate_root: Path) -> tuple[str
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Validate the exact parent-owned v4.6.0 release-candidate scope."
+        description="Validate the exact parent-owned v4.7.0 release-candidate scope."
     )
     parser.add_argument("--base", required=True, type=Path)
     parser.add_argument("--candidate", required=True, type=Path)

@@ -5,7 +5,8 @@
 > guide. Consumers should start with [`README.md`](../README.md) or
 > [`START_HERE.md`](START_HERE.md).
 
-This document describes an inert-by-default A–H release pipeline. Except for
+This document describes an inert-by-default signed-source promotion P followed
+by the A–H release pipeline. Except for
 the exact retained `v4.4.2`, `v4.5.0`, and `v4.6.0` evidence named under **Current state**, its
 procedural sections do not claim that another release has traversed the
 pipeline, that mutable repository settings remain configured, or that any
@@ -56,11 +57,13 @@ For `v4.5.0`, the later signed, same-owner point-in-time retirement observation
 is retained separately as
 [`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json).
 
-The proposed `v4.5.1` stable patch is a separate, currently inert maintenance
-case. The present A–H implementation authenticates a target only when it is also
-the protected `main` workflow revision and H creates a lightweight tag. Those
-properties cannot establish the distinct trusted-workflow/source identities
-and locally verified, maintainer-signed annotated tag required for `v4.5.1`.
+The proposed `v4.5.1` stable patch remains a separate, inert maintenance case.
+Its Phase-0 analysis recorded the then-current main-line limitations: source
+promotion could not preserve a maintainer-signed commit and H created a
+lightweight tag. The v4.7.0 main-line contract now addresses those two issues
+for a new minor release with exact signed-commit promotion and a pre-signed
+annotated tag object; it does not retroactively activate or prove the v4.5.1
+maintenance lane.
 The Phase-0 model, negative tests, explicit blockers, and required redesign are
 recorded in [`V4.5.1_MAINTENANCE_LANE.md`](V4.5.1_MAINTENANCE_LANE.md). The model
 does not treat a self-reported snapshot as live or closed-world proof, and it is
@@ -81,25 +84,89 @@ variable limit. Control-plane timestamps are real, canonical whole-second UTC
 RFC3339 values, and the activation blocker inventory is an exact closed set of
 stable IDs.
 
+The v4.7.0 design, custody non-claims, server-time freeze anchor, ruleset-only
+promotion window, local signing procedure, and retirement order are specified
+in [`V4.7.0_SIGNED_RELEASE_LANE.md`](V4.7.0_SIGNED_RELEASE_LANE.md). GitHub
+registration of the pinned maintainer public signing key and all live
+post-merge configuration remain pending external prerequisites.
+
 ## Phase contracts
 
 | Phase | Workflow | Authority and prohibited operations |
 | --- | --- | --- |
-| A | `evoguard-release-source-reverify.yml` | Reads the exact one-parent protected-main candidate. The policy, verifier pack, dependency lock, executable runtime, and v4.6.0 scope validator come from the parent or protected settings. Before candidate execution, the parent validator compares both fresh trees, requires an exact-case subset of the frozen existing release paths with unchanged file modes, rejects additions, deletions, ordinary unlisted changes, and benchmark evidence rewrites, and permits `evoom_guard/__init__.py` to differ only by the exact `4.6.0.dev0` to `4.6.0` assignment bytes. Fresh benchmark evidence must first bind the `4.6.0.dev0` engine actually measured; the explicit release-promotion verifier then normalizes only that proven assignment while requiring every other source byte, result digest, and Git binding. A has no secret, OIDC, attestation, or write authority. |
+| P | `evoguard-promote-signed-release-source.yml` | From the exact frozen declaration commit, accepts only one reviewed, GitHub-verified and locally verified maintainer-signed one-parent v4.7.0 candidate. Preflight reads the source-transport and ruleset identities once, exports them as immutable job outputs, and all later jobs consume only those outputs. Before the transport secret is exposed, P requires aggregate PR approval/clean state, exact checks, resolved threads, a fresh GitHub server-time freeze anchor, no classic branch protection, one exact active/effective `main` ruleset, and one exact write deploy key; it then uploads a closed active-authority snapshot/receipt. A short key-bearing step pushes only the exact raw candidate SHA to `main` with a lease and accepts only Git's true-fast-forward porcelain record. Once the closed active artifact exists, the protected retirement job runs on ordinary failure even if promotion does not complete and accepts only `main` at the frozen base or exact candidate. Its five-file terminal artifact binds `promotion_completed` and the observed terminal SHA to the active evidence and fresh retired snapshot under the same ruleset/key identity. P fails overall for the base state and cannot succeed until it also has complete post-push capture, validation, and upload; A and H reject any state except the exact candidate. It has no maintainer signing key. |
+| A | `evoguard-release-source-reverify.yml` | Reads the exact one-parent protected-main v4.7.0 candidate. Before candidate execution, parent-owned code downloads and validates the exact five-file terminal P artifact named by run ID/attempt, derives the frozen source key/ruleset identity from that binding rather than mutable variables, recaptures and proves the source authority remains retired, then verifies the raw commit signature, release-record-only freeze declaration, GitHub exact-push server-time anchor and fourteen-day boundary, and exact `4.7.0.dev0` to `4.7.0` compatible-minor promotion scope. Its observer token is Administration-read only; A has no signing, OIDC, attestation, or write authority. |
 | B | `evoguard-produce-release-source-receipt.yml` | Produces an unsigned canonical receipt and GitHub attestation for A. It never checks out or executes candidate source. |
 | C/D | `evoguard-admit-release-source.yml` | Preflight freezes external controls before Environment access; protected C freshly verifies B under a provider UID that cannot read the RSAE key; detached D verifies the envelope and negative mutations without a key or provider call. |
 | E-build | `evoguard-build-release-artifact.yml` | Verifies RSAE and checks out the admitted source. The executable builder and SPDX generator are literal `100644` Git blobs from its sole parent, whose commit and tree must equal A's admitted base. E extracts and hashes those blobs without filters, runs them in one exact digest-pinned container with `network: none` against the read-only candidate, records the container reference/digest/network plus parent commit/tree in `builder-controls.json`, and independently compares every packaged byte to source. F reconstructs and requires that exact controls object from trusted Git/API context and the downloaded bytes. E has no OIDC, attestation, secret, or write permission. |
 | E-attest | same workflow, separate job | Downloads an exact closed file set, performs no checkout and executes neither source nor artifact, then creates build-provenance attestations for the pyz and SPDX subjects plus an SBOM attestation binding the SPDX predicate to the pyz. |
 | F | `evoguard-admit-release-artifact.yml` | Freezes E/F identities and six distinct admission public roots before Environment access. A no-secret `verify-attestations` job freshly verifies all three E attestations, retains their exact receipts and provider outputs in the complete F control artifact, and only then may the protected seal job create separate RAAEs for the pyz and SPDX bytes. |
 | G | `evoguard-verify-release-artifact.yml` | Re-verifies both detached RAAE envelopes, exact checksums, cross-artifact substitution, byte mutations, root substitution, and tool-pin mutations without a provider call or private key. It also requires each RAAE's embedded provider evidence to equal the complete F controls and the retained ledger evidence byte-for-byte. |
-| H | `evoguard-publish-admitted-release.yml` | Preflight independently re-verifies both RAAE envelopes, preserves the F-to-G attestation-evidence bindings, and stages exactly three assets. The repository owner must first verify the administration-only Immutable Releases endpoint and authorize only that candidate by setting `EVOGUARD_RELEASE_PUBLICATION_ENABLED` to the exact 40-hex target SHA; the built-in `GITHUB_TOKEN` cannot receive the endpoint's required `Administration: read` permission. The first protected Environment is read-only, rechecks that target-bound authorization, and rejects any existing tag/release. Only the second protected Environment has `contents: write` and the tag deploy key; it rechecks main and the same target-bound authorization, creates an attributable draft, reads back exact GitHub SHA-256 asset digests, creates the exact tag through the deploy-key-only `v*` ruleset, and immediately submits `draft=false` in the same job. Pre-PATCH failures delete only the exact verified draft and any exact tag created by that run; after PATCH begins no automatic deletion is safe. Bounded polling then requires GitHub to report `immutable=true` and the exact tag-to-target binding. Marketplace listing remains separate. |
+| H | `evoguard-publish-admitted-release.yml` | Preflight independently re-verifies both RAAE envelopes and the exact pre-signed annotated v4.7.0 tag object against the parent-pinned maintainer root, preserves the F-to-G bindings, and stages exactly three assets. It derives the retired source-transport ID and fingerprint from the exact P retirement artifact named by the admitted source, not from mutable repository variables. The two protected Environments retain read-only intent then publication separation. Immediately before exposing the tag transport secret, and again after publication, parent-owned code uses a read-only observer to prove the source key remains retired, main has no bypass, one exact `v*` tag ruleset has the sole generic `DeployKey` bypass, and the pinned, cryptographically distinct H key is the sole enabled writer. H imports the bounded raw tag bytes into a bare repository and pushes the tag-object SHA—not the target commit—through that key. It requires an annotated `tag` ref peeling to the admitted commit plus GitHub `verified=true`, `reason=valid`. H never receives a maintainer signing key. A failure-only step removes only the exact still-draft release after a pre-PATCH failure, only when the tag is provably absent and the ID, body, author, target, and complete asset set all match; ambiguity or a PATCH-boundary marker requires manual recovery. After PATCH begins no automatic destructive recovery is safe. |
 
 The pyz and SPDX document use separate RAAE envelopes because the core contract
 binds one regular file per envelope. `SHA256SUMS` is derived by E from those two
 exact files, checked by F, G, and H, and is not treated as a third independent
 admission.
 
-## Bootstrap sequence
+## v4.7.0 signed-minor bootstrap sequence
+
+1. Merge this parent contract while every activation flag remains false. Add
+   the pinned maintainer public key to the `EvoRiseKsa` account as a GitHub
+   signing key; the private key remains outside the repository and Actions.
+2. Create the exact active `main` repository ruleset in
+   [`V4.7.0_SIGNED_RELEASE_LANE.md`](V4.7.0_SIGNED_RELEASE_LANE.md), prove
+   ordinary PR behavior, then remove classic `main` protection. Record the
+   ruleset ID and the four exact freeze-push workflow IDs. No global
+   required-signatures rule is added; P/A enforce the release object instead.
+3. Merge a separate one-parent release-record-only freeze declaration. Pin its
+   resulting commit/tree. Git `%ct` is only a sanity check: the four exact
+   successful attempt-1 push runs and GitHub `created_at` values are the time
+   anchor. Wait at least fourteen full days with no candidate-tree change.
+4. Locally create the exact stable-scope one-parent commit with the offline
+   maintainer key. Push that immutable SHA to a same-repository review branch;
+   do not amend, squash, merge, or rebase it afterward. Require aggregate
+   `APPROVED`/`CLEAN`, exact-head MANA approval, resolved threads, and all eleven
+   check/App-ID pairs.
+5. Install exactly one temporary write deploy key and the Administration-read
+   observer token in `evoguard-release-source-promotion`. Confirm no other
+   enabled write deploy key exists, enable only the exact candidate SHA, and
+   approve P. P freezes the public key/ruleset identities once, uploads the
+   active-authority evidence before exposing the private key, performs its
+   pre/post snapshots and exact fast-forward, but remains non-terminal pending
+   authority retirement.
+6. Delete the source deploy key first, remove the generic DeployKey bypass from
+   the `main` ruleset, then approve only
+   `evoguard-release-source-retirement`. Require P's five-file terminal closure
+   artifact to bind the same active key/ruleset evidence to the retired state;
+   remove its private-key secret and one-shot variable, but retain the
+   read-only observer and frozen authority IDs through A and H. Do this before
+   any tag deploy key is installed.
+7. Enable and run A/B/C/D, then E/F/G, preserving the existing separation and
+   exact evidence-set contracts. A must independently bind the terminal P run,
+   re-prove live source retirement, and reproduce both the raw Git signature
+   result and GitHub server-time freeze result before candidate execution.
+8. Locally create and verify the signed annotated `v4.7.0` tag without pushing
+   it. Export its exact raw bytes, pin their Base64 and tag-object SHA, and
+   configure H's fresh sole write tag key plus `v*` ruleset.
+9. Approve H's read-only intent and publication Environments. Require its
+   immediate pre-secret and post-publication authority receipts, then require
+   the tag ref to remain an annotated object with the exact object SHA, peel to
+   the admitted commit, and be GitHub-verified before and after immutable
+   release publication.
+10. Freeze a new signed ledger version rather than mutating historical v2
+    schemas or records. It must retain the signed source/tag receipts, freeze
+    server-time anchor, P control-plane snapshots, A–H evidence, public roots,
+    workflow/tool pins, assets, and pending retirement state.
+11. Independently revalidate the committed ledger bytes, then remove H's tag
+    key/secret/raw-object variables and freeze a separate signed retirement
+    observation. Actions artifacts alone are not durable evidence.
+
+## Historical v4.6.0 bootstrap sequence
+
+The following retained sequence explains the already recorded v4.6.0 ledger.
+It must not be used to bypass the v4.7.0 signed-commit, server-time, ruleset, or
+annotated-tag requirements above.
 
 1. Merge this inert infrastructure through protected `main` with a merge
    commit. Squash and GitHub rebase-and-merge rewrite or discard the benchmark
@@ -157,8 +224,12 @@ admission.
 11. Before H, freeze every other `contents: write` actor and all manual or
     automated release operations. Require an active `v*` tag ruleset covering
     creation, update, deletion, and non-fast-forward, with `DeployKey` as its
-    only bypass class; verify the repository has exactly one write-enabled
-    deploy key and record its ID and public fingerprint.
+    only bypass class; require the main ruleset to expose no bypass, the retired
+    source-key ID to be absent, and the repository to have exactly one
+    write-enabled deploy key. Record the tag ruleset/key IDs and public
+    fingerprint, then require H's parent-owned validator to reproduce this
+    complete live state immediately before secret exposure and again after
+    publication.
     With an administrator credential outside Actions, require
     `GET /repos/EvoRiseKsa/EvoOM-Guard-m/immutable-releases` to return
     `enabled=true`, then set `EVOGUARD_RELEASE_PUBLICATION_ENABLED` to the exact
@@ -167,7 +238,9 @@ admission.
     Enable publication only for the reviewed G attempt. Approve the read-only
     `evoguard-release-draft` intent, then separately approve
     `evoguard-release-publication`; that one job creates and immediately
-    publishes the exact draft through the API. Require H success,
+    publishes the exact draft through the API. The read-only observer and
+    frozen source/tag authority IDs remain available through this gate but
+    cannot write. Require H success,
     `immutable=true`, and the new tag resolving to the admitted target. Do not
     use the GitHub **Publish release** button as a trusted alternative.
     If PATCH begins and H then fails, disable publication, inspect the exact
@@ -234,3 +307,8 @@ creation, deploy-key tag creation, and publication. The active tag ruleset
 prevents other actors from creating or mutating `v*`, while the
 `contents: write` freeze limits release-API races. The postcheck detects
 interference but cannot safely undo an already immutable wrong publication.
+GitHub force-cancellation, runner loss, or control-plane outage can prevent an
+`always()` cleanup or retirement step from running. Such a run is non-terminal:
+the operator must prove source/tag authority retirement and reconcile any exact
+draft/tag state before another release attempt. No workflow claim upgrades that
+operational recovery into globally exactly-once execution.
