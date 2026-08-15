@@ -222,10 +222,11 @@ Until all gates close, release notes must use **release candidate**, **beta**, o
    does not establish reproducibility, independent efficacy, hostile-code
    production readiness, or external adoption.
 2. **[Current field-pilot gate #266](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/266)
-   — open:** pre-register 64–96 total cases, including at least 48 held-out and
-   16 tuning cases, before execution. Each subset must span at least four
-   repositories and four ecosystems; each repository contributes 4–12 cases
-   to exactly one subset. Freeze the sampling unit, duplicate rule, label
+   — open:** pre-register exactly 80 total cases before execution: 32 tuning
+   cases from four repositories (eight per repository) and 48 held-out cases
+   from four different repositories (twelve per repository). Each subset spans
+   Python, Node, Go, and JVM; every repository belongs to exactly one subset.
+   Freeze the sampling unit, duplicate rule, label
    balance, exclusions, per-track policy/profile, verifier pack, runtime,
    baseline, authority identities, key separation, and ownership/control
    disclosure. Bind the exact release commit, asset digest, and signed-ledger

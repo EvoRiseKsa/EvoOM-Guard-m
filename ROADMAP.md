@@ -285,10 +285,11 @@ implemented; an issue or prototype alone does not lift the freeze.
    targets the immutable `v4.6.0` release. Neither the historical companion nor
    the open request is evidence that an independent review occurred. The separate
    [current field-pilot #266](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/266)
-   must pre-register **64–96 total cases**, including at least **48 held-out**
-   and **16 tuning** cases. Each subset must span at least four repositories
-   and four ecosystems, every repository must contribute 4–12 cases, and no
-   repository may cross the tuning/held-out boundary. Freeze the sampling
+   must pre-register exactly **80 total cases**: **32 tuning** cases from four
+   repositories (eight per repository) and **48 held-out** cases from four
+   different repositories (twelve per repository). Each subset spans Python,
+   Node, Go, and JVM, and no repository may cross the tuning/held-out boundary.
+   Freeze the sampling
    unit, duplicate rule, label balance, exclusions, per-track policy/profile,
    verifier pack, runtime and baseline, declared label/execution/finalizer
    authorities, distinct key identities, and ownership/control relationships
