@@ -1281,6 +1281,7 @@ def test_cli_init_command_has_one_stdlib_owner_and_public_facades() -> None:
         "execute_init_command",
         "infer_default_policy_path",
         "render_advisory_workflow",
+        "render_init_policy",
         "render_private_workflow",
         "render_public_workflow",
         "validate_github_actions_credential_key",
