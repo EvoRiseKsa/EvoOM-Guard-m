@@ -1070,3 +1070,80 @@ class JudgeOracleRedTeamTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(HAS_PYTEST, "pytest not installed")
+class RequireSuiteContinuityTests(unittest.TestCase):
+    """End-to-end opt-in: reject a suite that rewrites the judged tree."""
+
+    # Bytecode/cache writes would themselves be tree drift, so the trusted
+    # command must suppress them (documented alongside the flag). -B disables
+    # .pyc and no:cacheprovider disables .pytest_cache.
+    COMMAND = [
+        sys.executable, "-I", "-B", "-m", "pytest", "-p", "no:cacheprovider", "-q",
+    ]
+
+    def _make_repo(self, *, suite_writes: bool) -> str:
+        root = tempfile.mkdtemp(prefix="evo_suite_continuity_")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        os.makedirs(os.path.join(root, "tests"))
+        with open(os.path.join(root, "app.py"), "w", encoding="utf-8") as handle:
+            handle.write("VALUE = 1\n")
+        side_effect = (
+            "    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))\n"
+            "    with open(os.path.join(root, 'suite_side_effect.txt'), 'w') as fh:\n"
+            "        fh.write('x')\n"
+            if suite_writes
+            else ""
+        )
+        with open(
+            os.path.join(root, "tests", "test_app.py"), "w", encoding="utf-8"
+        ) as handle:
+            handle.write(
+                "import sys, os\n"
+                "sys.path.insert(0, os.path.dirname(os.path.dirname("
+                "os.path.abspath(__file__))))\n"
+                "from app import VALUE\n\n\n"
+                "def test_value():\n"
+                f"{side_effect}"
+                "    assert VALUE == 2\n"
+            )
+        return root
+
+    def test_flag_off_ignores_a_suite_that_writes_the_tree(self) -> None:
+        root = self._make_repo(suite_writes=True)
+        verifier = RepoVerifier(timeout=60, test_command=self.COMMAND)
+        result = verifier.verify(block("app.py", "VALUE = 2\n"), {"repo_path": root})
+
+        # Default behaviour is unchanged: the suite passes and its incidental
+        # write is not treated as tampering.
+        self.assertTrue(result.passed)
+
+    def test_flag_on_rejects_a_suite_that_writes_the_tree(self) -> None:
+        root = self._make_repo(suite_writes=True)
+        verifier = RepoVerifier(
+            timeout=60,
+            test_command=self.COMMAND,
+            require_suite_continuity=True,
+        )
+        result = verifier.verify(block("app.py", "VALUE = 2\n"), {"repo_path": root})
+
+        self.assertFalse(result.passed)
+        self.assertEqual(result.artifact["outcome"], "candidate_tree_changed")
+        self.assertTrue(result.artifact["tamper"])
+
+    def test_flag_on_passes_a_clean_suite(self) -> None:
+        root = self._make_repo(suite_writes=False)
+        verifier = RepoVerifier(
+            timeout=60,
+            test_command=self.COMMAND,
+            require_suite_continuity=True,
+        )
+        result = verifier.verify(block("app.py", "VALUE = 2\n"), {"repo_path": root})
+
+        # No false positive: a suite that leaves the tree untouched still passes,
+        # and continuity is delivered rather than left incomplete.
+        self.assertTrue(result.passed)
+        self.assertEqual(
+            result.artifact.get("runtime_continuity"), "snapshot_boundary_checked"
+        )

@@ -238,6 +238,34 @@ base-FAIL to candidate-repo-PASS transition; the attestation carries the repo
 counts/source/return code and `verify-record` reconciles them with the composite
 totals. A detached verdict signature, when configured, covers that attestation.
 
+### Suite continuity: `--require-suite-continuity` (opt-in, trusted repos)
+
+By default the whole-tree runtime-continuity check — capture the fully prepared
+candidate tree, then reject any modification observed after the suite runs — is
+active only when a verifier pack makes the tree a judged input. A plain
+`subprocess` + JUnit run has no such check: it relies on the judge-owned report
+and the exit code.
+
+`--require-suite-continuity` opts a pack-less run into the same after-suite tree
+check. If the repository suite rewrites the prepared tree while it runs, the
+verdict is `TAMPERED` (`candidate_tree_changed`) instead of a pass. It is off by
+default and intended for **trusted repositories** whose suite is expected never
+to write into the tree.
+
+Because the check compares the exact tree before and after the suite, ordinary
+incidental writes are themselves reported as tampering. The trusted test command
+must therefore suppress them — disable bytecode with `-B` (or
+`PYTHONDONTWRITEBYTECODE`) and pytest's cache with `-p no:cacheprovider`:
+
+```bash
+git diff main...HEAD | evo-guard guard --diff - --no-config \
+  --require-suite-continuity \
+  --test-command "python -I -B -m pytest -p no:cacheprovider -q"
+```
+
+This is not a policy field: like `--sign-key`, it is a trusted-local control and
+is never taken from candidate-controlled workflow input on a pull request.
+
 ### `--diff` safety (for untrusted PRs)
 
 `--diff` has only the candidate checkout available, so it deliberately refuses

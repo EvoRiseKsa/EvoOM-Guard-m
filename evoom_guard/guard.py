@@ -646,6 +646,7 @@ def guard(
     file_blocks: dict[str, str] | None = None,
     operating_profile: str | None = None,
     harness_inputs: tuple[str, ...] = (),
+    require_suite_continuity: bool = False,
 ) -> GuardResult:
     """Verify ``candidate`` against ``repo_path`` and return a :class:`GuardResult`.
 
@@ -1006,6 +1007,7 @@ def guard(
                 trust_setup_on_host=trust_setup_on_host,
                 setup_output_globs=setup_output_globs,
                 strict_harness=strict_harness,
+                require_suite_continuity=require_suite_continuity,
             ).verify(candidate, repo_problem)
 
         finalization_bx = finalize_blackbox_verification(
@@ -1134,6 +1136,7 @@ def guard(
             trust_setup_on_host=trust_setup_on_host,
             setup_output_globs=setup_output_globs,
             strict_harness=strict_harness,
+            require_suite_continuity=require_suite_continuity,
         ),
         services=judgment_services,
     )
@@ -2108,6 +2111,7 @@ def guard_from_diff(
     strict_harness: bool = False,
     operating_profile: str | None = None,
     harness_inputs: tuple[str, ...] = (),
+    require_suite_continuity: bool = False,
 ) -> tuple[GuardResult, list[str]]:
     """Verify a unified diff against the working tree it was produced from.
 
@@ -2249,6 +2253,7 @@ def guard_from_diff(
                 strict_harness=strict_harness,
                 operating_profile=operating_profile,
                 harness_inputs=harness_inputs,
+                require_suite_continuity=require_suite_continuity,
             ),
         ),
         DiffVerificationServices(

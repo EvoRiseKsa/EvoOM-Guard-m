@@ -78,6 +78,7 @@ class RepoRuntimeContinuityRequest:
     container_mode: bool
     setup_configured: bool
     trust_setup_on_host: bool
+    require_suite_continuity: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,7 +120,7 @@ class RepoRuntimeContinuity:
     )
 
     def __post_init__(self) -> None:
-        if not self.request.pack_configured:
+        if not self.required:
             return
         self.phase = "not_captured"
         self.delivery = (
@@ -134,9 +135,19 @@ class RepoRuntimeContinuity:
 
     @property
     def required(self) -> bool:
-        """Whether the accepted verifier pack requires runtime continuity."""
+        """Whether runtime continuity is captured and verified for this run.
 
-        return self.request.pack_configured
+        A verifier pack always requires it: the pack must judge the exact tree
+        the repository suite received. ``require_suite_continuity`` additionally
+        opts a pack-less repo run into the same after-suite tree check, so a
+        trusted repository can reject a suite that rewrites the judged tree at
+        runtime even when no pack is configured.
+        """
+
+        return (
+            self.request.pack_configured
+            or self.request.require_suite_continuity
+        )
 
     def evidence(self) -> RuntimeIdentityEvidence:
         """Freeze the currently observed runtime facts."""
@@ -250,6 +261,24 @@ class RepoRuntimeContinuity:
             )
         self.phase = "suite_verified"
         return None
+
+    def finalize_suite_only(self) -> None:
+        """Deliver continuity when the repository suite is the last judged phase.
+
+        With a verifier pack, :meth:`verify_after_pack` performs the final
+        identity check and marks delivery. A pack-less
+        ``require_suite_continuity`` run has no pack phase, so a clean
+        after-suite verification is itself the delivered boundary. This is a
+        no-op whenever a pack is configured (the pack path owns delivery) or the
+        after-suite verification has not completed.
+        """
+
+        if self.request.pack_configured:
+            return
+        if self.phase != "suite_verified":
+            return
+        self.continuity = self.delivery
+        self.phase = "delivered"
 
     def verify_after_pack(self) -> RepoRuntimeContinuityFailure | None:
         """Reject pack drift before its JUnit report is interpreted."""

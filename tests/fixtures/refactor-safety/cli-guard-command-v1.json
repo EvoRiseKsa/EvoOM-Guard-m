@@ -52,6 +52,7 @@
             "require_candidate_isolation": null,
             "require_demonstrated_fix": false,
             "require_report_integrity": null,
+            "require_suite_continuity": false,
             "setup_command": null,
             "setup_output_globs": [],
             "strict_harness": false,
@@ -151,6 +152,7 @@
             "require_candidate_isolation": "subprocess",
             "require_demonstrated_fix": true,
             "require_report_integrity": "external_process_isolated",
+            "require_suite_continuity": false,
             "setup_command": [
               "policy-setup"
             ],
@@ -274,6 +276,7 @@
             "require_candidate_isolation": null,
             "require_demonstrated_fix": false,
             "require_report_integrity": null,
+            "require_suite_continuity": false,
             "setup_command": null,
             "setup_output_globs": [],
             "strict_harness": false,
@@ -341,6 +344,7 @@
             "require_candidate_isolation": "subprocess",
             "require_demonstrated_fix": true,
             "require_report_integrity": "external_process_isolated",
+            "require_suite_continuity": false,
             "setup_command": [
               "policy-setup"
             ],

@@ -42,6 +42,7 @@ def _owner(
     container_mode: bool = False,
     setup_configured: bool = False,
     trust_setup_on_host: bool = False,
+    require_suite_continuity: bool = False,
     capture: Any,
     verify: Any,
 ) -> tuple[RepoRuntimeContinuity, SimpleNamespace]:
@@ -53,6 +54,7 @@ def _owner(
             container_mode=container_mode,
             setup_configured=setup_configured,
             trust_setup_on_host=trust_setup_on_host,
+            require_suite_continuity=require_suite_continuity,
         ),
         RepoRuntimeContinuityServices(
             trace=trace,
@@ -452,3 +454,115 @@ def test_projected_domain_evidence_is_immutable() -> None:
     assert isinstance(evidence, RuntimeIdentityEvidence)
     with pytest.raises(FrozenInstanceError):
         evidence.continuity = "changed"  # type: ignore[misc]
+
+
+def test_require_suite_continuity_makes_a_pack_less_run_required() -> None:
+    """The opt-in captures and delivers continuity with no verifier pack."""
+
+    baseline = _identity("a", 0.25)
+    events: list[str] = []
+
+    def capture(root: str) -> RuntimeIdentity:
+        events.append(f"capture:{root}")
+        return baseline
+
+    def verify(
+        root: str,
+        expected: RuntimeIdentity,
+    ) -> tuple[RuntimeIdentity, list[str]]:
+        assert expected is baseline
+        events.append(f"verify:{root}")
+        return _identity("a", 0.5), []
+
+    owner, trace = _owner(
+        pack_configured=False,
+        require_suite_continuity=True,
+        capture=capture,
+        verify=verify,
+    )
+
+    assert owner.required is True
+    assert owner.capture_baseline() is None
+    assert owner.continuity == "incomplete"
+    assert owner.verify_after_suite() is None
+    # With no pack, the clean after-suite check is the terminal boundary.
+    owner.finalize_suite_only()
+    assert owner.phase == "delivered"
+    assert owner.continuity == "snapshot_boundary_checked"
+    assert owner.elapsed_ms == 0.75
+    assert events == ["capture:candidate", "verify:candidate"]
+    assert runtime_identity_evidence_payload(owner.evidence()) == {
+        "runtime_tree_sha256": "a" * 64,
+        "runtime_tree_digest_format": baseline.digest_format,
+        "runtime_tree_entries": 3,
+        "runtime_tree_bytes": 17,
+        "runtime_identity_elapsed_ms": 0.75,
+        "runtime_continuity": "snapshot_boundary_checked",
+    }
+
+
+def test_finalize_suite_only_is_a_noop_when_a_pack_is_configured() -> None:
+    """A pack owns delivery; the suite-only terminal must not pre-empt it."""
+
+    baseline = _identity("a", 0.25)
+    owner, _trace = _owner(
+        pack_configured=True,
+        capture=lambda _root: baseline,
+        verify=lambda _root, _expected: (_identity("a", 0.5), []),
+    )
+
+    assert owner.capture_baseline() is None
+    assert owner.verify_after_suite() is None
+    assert owner.phase == "suite_verified"
+
+    owner.finalize_suite_only()
+
+    # Unchanged: the pack path still owns the final delivery transition.
+    assert owner.phase == "suite_verified"
+    assert owner.continuity == "incomplete"
+
+
+def test_finalize_suite_only_is_a_noop_before_after_suite_verification() -> None:
+    """Delivery cannot be claimed before the after-suite check completes."""
+
+    owner, _trace = _owner(
+        pack_configured=False,
+        require_suite_continuity=True,
+        capture=lambda _root: _identity("a", 0.25),
+        verify=lambda _root, _expected: (_identity("a", 0.5), []),
+    )
+
+    assert owner.capture_baseline() is None
+    assert owner.phase == "captured"
+
+    owner.finalize_suite_only()
+
+    assert owner.phase == "captured"
+    assert owner.continuity == "incomplete"
+
+
+def test_require_suite_continuity_rejects_a_suite_that_rewrites_the_tree() -> None:
+    """A pack-less opt-in run rejects an after-suite tree change as drift."""
+
+    baseline = _identity("a", 0.25)
+    owner, _trace = _owner(
+        pack_configured=False,
+        require_suite_continuity=True,
+        capture=lambda _root: baseline,
+        verify=lambda _root, _expected: (
+            _identity("b", 0.5),
+            ["modified: src/app.py"],
+        ),
+    )
+
+    assert owner.capture_baseline() is None
+    failure = owner.verify_after_suite()
+
+    assert failure is not None
+    assert failure.kind == "suite_drift"
+    assert failure.status == "verification_failed"
+    assert failure.changes == ("modified: src/app.py",)
+    assert owner.phase == "failed"
+    # A drift verdict must never be promoted to a delivered boundary.
+    owner.finalize_suite_only()
+    assert owner.phase == "failed"

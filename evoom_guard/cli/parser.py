@@ -277,6 +277,17 @@ def build_parser(
         const=False,
         help="explicitly override strict_harness: true from a trusted policy",
     )
+    g_p.add_argument(
+        "--require-suite-continuity",
+        dest="require_suite_continuity",
+        action="store_true",
+        default=False,
+        help="trusted-repository opt-in: capture the fully prepared tree and "
+        "reject a repo suite that rewrites it at runtime, even when no verifier "
+        "pack is configured. Default off; enable only for suites that never "
+        "write into the judged tree, since ordinary writes (caches, coverage "
+        "files) would be reported as tampering",
+    )
     g_p.add_argument("--json", dest="json_out", default=None, help="write the JSON verdict to this path")
     g_p.add_argument(
         "--sarif", default=None,

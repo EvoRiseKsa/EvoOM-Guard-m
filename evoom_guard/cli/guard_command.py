@@ -87,6 +87,7 @@ class _GuardCall(Protocol[_ResultCo]):
         file_blocks: dict[str, str] | None = ...,
         operating_profile: str | None = ...,
         harness_inputs: tuple[str, ...] = ...,
+        require_suite_continuity: bool = ...,
     ) -> _ResultCo: ...
 
 
@@ -127,6 +128,7 @@ class _GuardFromDiffCall(Protocol[_ResultCo]):
         strict_harness: bool = ...,
         operating_profile: str | None = ...,
         harness_inputs: tuple[str, ...] = ...,
+        require_suite_continuity: bool = ...,
     ) -> tuple[_ResultCo, list[str]]: ...
 
 
@@ -377,6 +379,12 @@ def execute_guard_command(
         "require_demonstrated_fix", args.require_demonstrated_fix
     )
     strict_harness = _policy_bool("strict_harness", args.strict_harness)
+    # Trusted-local only: not a policy field. Like --sign-key, it is never
+    # supplied by the Action's candidate-controlled PR path, so it is read
+    # straight from the flag rather than through the verified base policy.
+    require_suite_continuity = bool(
+        getattr(args, "require_suite_continuity", False)
+    )
 
     if blackbox_only and not blackbox:
         out("usage: --blackbox-only requires --blackbox")
@@ -693,6 +701,7 @@ def execute_guard_command(
             baseline_evidence=baseline_evidence,
             require_demonstrated_fix=require_demonstrated_fix,
             strict_harness=strict_harness,
+            require_suite_continuity=require_suite_continuity,
             **profile_options,
             **harness_input_options,
         )
@@ -758,6 +767,7 @@ def execute_guard_command(
                     baseline_evidence=baseline_evidence,
                     require_demonstrated_fix=require_demonstrated_fix,
                     strict_harness=strict_harness,
+                    require_suite_continuity=require_suite_continuity,
                     **profile_options,
                     **harness_input_options,
                 )
@@ -799,6 +809,7 @@ def execute_guard_command(
             baseline_evidence=baseline_evidence,
             require_demonstrated_fix=require_demonstrated_fix,
             strict_harness=strict_harness,
+            require_suite_continuity=require_suite_continuity,
             **profile_options,
             **harness_input_options,
         )
