@@ -1724,6 +1724,16 @@ def build_parser(
         "advisory (non-blocking observation with uploaded evidence)",
     )
     i_p.add_argument(
+        "--profile",
+        choices=("local", "protected", "hostile"),
+        default=argparse.SUPPRESS,
+        help="generated .evoguard.json hardening: local (default, subprocess), "
+        "protected (docker), or hostile (gvisor). protected/hostile scaffold a "
+        "network-less container judge, an observed candidate-isolation receipt, "
+        "and strict harness; you must replace the placeholder docker_image with a "
+        "digest-pinned image (see the printed note)",
+    )
+    i_p.add_argument(
         "--policy-path", default=None,
         help="where to write the trusted policy (default: .evoguard.json at the "
         "repository root inferred from --path)",

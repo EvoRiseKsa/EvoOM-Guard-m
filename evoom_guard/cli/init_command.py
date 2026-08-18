@@ -227,6 +227,41 @@ def render_private_workflow(
     )
 
 
+_DOCKER_IMAGE_PLACEHOLDER = "REPLACE-WITH-A-DIGEST-PINNED-IMAGE"
+
+
+def render_init_policy(
+    test_command: str,
+    *,
+    profile: str = "local",
+) -> dict[str, object]:
+    """Build the trusted ``.evoguard.json`` policy for one hardening profile.
+
+    ``local`` (default) keeps the historical minimal policy. ``protected`` and
+    ``hostile`` add container isolation (``docker`` / ``gvisor``), a network-less
+    boundary, an observed candidate-isolation receipt, and the strict harness
+    profile. Both leave ``docker_image`` as an explicit placeholder the adopter
+    must replace with a digest-pinned image; the policy loads as written, but the
+    judge fails closed until a real image is supplied. Neither sets the enforced
+    ``operating_profile`` contract — that additionally requires an independent
+    verifier pack, which ``init`` cannot scaffold — so the next-step guidance
+    explains how to escalate.
+    """
+
+    if profile == "local":
+        return {"test_command": test_command}
+    isolation = "gvisor" if profile == "hostile" else "docker"
+    return {
+        "test_command": test_command,
+        "isolation": isolation,
+        "docker_image": _DOCKER_IMAGE_PLACEHOLDER,
+        "docker_network": "none",
+        "require_candidate_isolation": isolation,
+        "trust_setup_on_host": False,
+        "strict_harness": True,
+    }
+
+
 def infer_default_policy_path(
     workflow_path: str,
     *,
@@ -341,9 +376,11 @@ def execute_init_command(
         default_policy_path = services.default_policy_path_provider()
         policy_path = default_policy_path(path)
     path_exists = services.path_exists_provider()
+    wrote_policy = False
     if path_exists(policy_path):
         out(f"kept existing trusted policy {policy_path}")
     else:
+        wrote_policy = True
         directory_name = services.directory_name_provider()
         policy_parent = directory_name(policy_path)
         if policy_parent:
@@ -357,7 +394,10 @@ def execute_init_command(
         ) as handle:
             dump_json = services.dump_json_provider()
             dump_json(
-                {"test_command": args.test_command},
+                render_init_policy(
+                    args.test_command,
+                    profile=getattr(args, "profile", "local"),
+                ),
                 handle,
                 indent=2,
             )
@@ -382,6 +422,28 @@ def execute_init_command(
             "summary and fails the check on anything but PASS. Edit .evoguard.json "
             "to change the trusted judge policy."
         )
+    profile = getattr(args, "profile", "local")
+    if profile in ("protected", "hostile"):
+        isolation = "gvisor" if profile == "hostile" else "docker"
+        if wrote_policy:
+            out(
+                f"hardening: --profile {profile} wrote a {isolation} judge policy "
+                "(network-less container, observed candidate-isolation receipt, "
+                f"strict harness). REPLACE the docker_image placeholder in "
+                f"{policy_path} with a digest-pinned image (for example "
+                "python:3.12-slim@sha256:...); the judge fails closed until you do. "
+                f"For the fully enforced operating_profile='{profile}' contract, "
+                "also add a verifier_pack + expect_verifier_pack_sha256, set "
+                "blackbox_only=true and "
+                "require_report_integrity='external_process_isolated', then set "
+                f"operating_profile='{profile}'. See docs/OPERATING_PROFILES.md."
+            )
+        else:
+            out(
+                f"note: --profile {profile} had no effect because {policy_path} "
+                "already exists; harden it by hand or rerun with a fresh "
+                "--policy-path. See docs/OPERATING_PROFILES.md."
+            )
     return 0
 
 
@@ -390,6 +452,7 @@ __all__ = [
     "InitPathServices",
     "execute_init_command",
     "infer_default_policy_path",
+    "render_init_policy",
     "render_advisory_workflow",
     "render_private_workflow",
     "render_public_workflow",
