@@ -40,13 +40,26 @@ separate contributor agreement may be required before acceptance. See
    and any compatibility effect in the pull request.
 3. Add or update tests for a behavioural change. Do not weaken an existing test,
    test configuration, CI workflow, or verifier pack to make a result pass.
-4. Run the checks appropriate to the change. The local baseline is:
+4. Run the checks appropriate to the change. First install the exact
+   hash-locked toolchain CI uses (pytest, ruff, mypy, coverage, cryptography,
+   jsonschema); a virtualenv keeps it isolated from system packages:
+
+   ```bash
+   python -m venv .venv && . .venv/bin/activate
+   python -m pip install --only-binary=:all: --require-hashes -r requirements/ci.lock
+   python -m pip install --no-deps --no-build-isolation -e .
+   ```
+
+   The local baseline is then:
 
    ```bash
    python -m pytest -q
    ruff check evoom_guard/ tests/
    mypy evoom_guard/
    ```
+
+   Claude Code on the web installs this automatically via the
+   `.claude/hooks/session-start.sh` SessionStart hook.
 
    Docker and black-box changes also need the relevant isolated test path from
    the CI workflow. A green local test run is not a substitute for reviewing an
