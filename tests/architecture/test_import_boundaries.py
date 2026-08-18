@@ -1277,6 +1277,7 @@ def test_cli_init_command_has_one_stdlib_owner_and_public_facades() -> None:
     owner_functions = {node.name for node in owner_tree.body if isinstance(node, ast.FunctionDef)}
     assert owner_functions == {
         "_advisory_ref_supported",
+        "_emit_profile_hardening_note",
         "_select_workflow",
         "execute_init_command",
         "infer_default_policy_path",

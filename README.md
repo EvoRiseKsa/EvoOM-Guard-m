@@ -106,8 +106,8 @@ The gate is not Python-only. Guard detects the runner from your
 `--test-command`, injects a **judge-owned JUnit reporter**, and reads the
 verdict from that report plus the process exit code — never from stdout. The
 same evidence-gaming resistance therefore applies across languages, not just to
-`pytest`. Pass your project's natural test command; no EvoGuard-specific flags
-are required.
+`pytest`. Pass your project's natural test command; no EvoOM Guard-specific
+flags are required.
 
 | Language | Runner | Example `--test-command` | JUnit reporter |
 |---|---|---|---|

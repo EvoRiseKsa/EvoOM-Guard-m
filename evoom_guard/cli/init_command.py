@@ -343,6 +343,39 @@ def _select_workflow(
     return None
 
 
+def _emit_profile_hardening_note(
+    *,
+    profile: str,
+    policy_path: str,
+    wrote_policy: bool,
+    out: Callable[[str], None],
+) -> None:
+    """Explain a protected/hostile scaffold's placeholder and escalation path."""
+
+    if profile not in ("protected", "hostile"):
+        return
+    if not wrote_policy:
+        out(
+            f"note: --profile {profile} had no effect because {policy_path} "
+            "already exists; harden it by hand or rerun with a fresh "
+            "--policy-path. See docs/OPERATING_PROFILES.md."
+        )
+        return
+    isolation = "gvisor" if profile == "hostile" else "docker"
+    out(
+        f"hardening: --profile {profile} wrote a {isolation} judge policy "
+        "(network-less container, observed candidate-isolation receipt, "
+        f"strict harness). REPLACE the docker_image placeholder in "
+        f"{policy_path} with a digest-pinned image (for example "
+        "python:3.12-slim@sha256:...); the judge fails closed until you do. "
+        f"For the fully enforced operating_profile='{profile}' contract, "
+        "also add a verifier_pack + expect_verifier_pack_sha256, set "
+        "blackbox_only=true and "
+        "require_report_integrity='external_process_isolated', then set "
+        f"operating_profile='{profile}'. See docs/OPERATING_PROFILES.md."
+    )
+
+
 def execute_init_command(
     args: argparse.Namespace,
     *,
@@ -422,28 +455,12 @@ def execute_init_command(
             "summary and fails the check on anything but PASS. Edit .evoguard.json "
             "to change the trusted judge policy."
         )
-    profile = getattr(args, "profile", "local")
-    if profile in ("protected", "hostile"):
-        isolation = "gvisor" if profile == "hostile" else "docker"
-        if wrote_policy:
-            out(
-                f"hardening: --profile {profile} wrote a {isolation} judge policy "
-                "(network-less container, observed candidate-isolation receipt, "
-                f"strict harness). REPLACE the docker_image placeholder in "
-                f"{policy_path} with a digest-pinned image (for example "
-                "python:3.12-slim@sha256:...); the judge fails closed until you do. "
-                f"For the fully enforced operating_profile='{profile}' contract, "
-                "also add a verifier_pack + expect_verifier_pack_sha256, set "
-                "blackbox_only=true and "
-                "require_report_integrity='external_process_isolated', then set "
-                f"operating_profile='{profile}'. See docs/OPERATING_PROFILES.md."
-            )
-        else:
-            out(
-                f"note: --profile {profile} had no effect because {policy_path} "
-                "already exists; harden it by hand or rerun with a fresh "
-                "--policy-path. See docs/OPERATING_PROFILES.md."
-            )
+    _emit_profile_hardening_note(
+        profile=getattr(args, "profile", "local"),
+        policy_path=policy_path,
+        wrote_policy=wrote_policy,
+        out=out,
+    )
     return 0
 
 
