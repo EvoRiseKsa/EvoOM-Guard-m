@@ -369,12 +369,12 @@ jobs:
       # These are provider attestations for the exact transferred files, not
       # release admission, a vulnerability result, or an EvoGuard verdict.
       - name: Generate GitHub build provenance for the exact artifact
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: dist/evo-guard.pyz
 
       - name: Generate GitHub SBOM attestation for the exact artifact
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: dist/evo-guard.pyz
           sbom-path: dist/evo-guard.spdx.json
