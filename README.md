@@ -100,6 +100,34 @@ Run `sha256sum -c SHA256SUMS`, then `python -I evo-guard.pyz ...`.
 The command never edits the checked working tree: it applies the diff to a
 throwaway copy and runs the selected judge there.
 
+## Supported test runners and languages
+
+The gate is not Python-only. Guard detects the runner from your
+`--test-command`, injects a **judge-owned JUnit reporter**, and reads the
+verdict from that report plus the process exit code — never from stdout. The
+same evidence-gaming resistance therefore applies across languages, not just to
+`pytest`. Pass your project's natural test command; no EvoOM Guard-specific
+flags are required.
+
+| Language | Runner | Example `--test-command` | JUnit reporter |
+|---|---|---|---|
+| Python | pytest | `python -m pytest -q` | built-in `--junitxml` |
+| JavaScript / TypeScript | Vitest | `npx vitest run` | built-in `--reporter=junit` |
+| JavaScript / TypeScript | Jest | `npx jest` | `jest-junit` |
+| JavaScript / TypeScript | Mocha | `npx mocha` | `mocha-junit-reporter` |
+| JavaScript / TypeScript | `node --test` | `node --test` | built-in reporter |
+| Go | gotestsum | `gotestsum ./...` | built-in `--junitfile` |
+| Java | Maven Surefire | `mvn -q test` | Surefire XML reports |
+| Ruby | RSpec | `bundle exec rspec` | `rspec_junit_formatter` |
+| Any of the above | `sh -c "…"` | `sh -c "npx jest && go test ./..."` | wraps the inner runner |
+
+pytest, Vitest, `node --test`, and Maven need no extra plugin; Jest, Mocha,
+RSpec, and Go require their reporter package (`jest-junit`,
+`mocha-junit-reporter`, `rspec_junit_formatter`, `gotestsum`) to be installed in
+the environment where the suite runs. For the exact instrumented `argv` and
+report environment per runner, and how to add a new one, see
+[Runner adapter conformance](docs/RUNNER_CONFORMANCE.md).
+
 ## Read the verdict
 
 | Verdict | Meaning | Exit |

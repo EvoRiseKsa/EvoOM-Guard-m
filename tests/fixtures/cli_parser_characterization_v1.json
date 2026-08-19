@@ -6,7 +6,7 @@
       "main"
     ],
     "exit_code": 2,
-    "stderr_sha256": "70cf1984cfecb567e334d29d5aa35a0b9b51d74f370d611c1be6ec35a8d5df0e",
+    "stderr_sha256": "47e634f122bdc8f860f9ecef5eba097dfb4ea6f506c5d50df2bce73317201758",
     "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "live_helper_contract": {
@@ -75,6 +75,7 @@
       "require_candidate_isolation": null,
       "require_demonstrated_fix": null,
       "require_report_integrity": null,
+      "require_suite_continuity": false,
       "sarif": null,
       "sign_key": null,
       "strict_harness": null,
@@ -101,7 +102,7 @@
   "program": "evo-guard",
   "root_help_sha256": "82c512aa1a41eb233719bacac4ca3e2c49ab8f8c1f19e131c608524f8c73547d",
   "schema": 1,
-  "structure_sha256": "401cec02e8a008b31540422c1af730fedb7c7b9e741a1112777a82554ce3b7e6",
+  "structure_sha256": "5e0bb29a119219c5930ff569a65968a3c5317d73341a411526b4cc18926437de",
   "subcommand_count": 45,
   "subcommand_help_sha256": {
     "bundle-evidence": "caa11579b59a4566c1a710c84d1b5344db0bf8a8fb88a3ccd96afb19b1329b6d",
@@ -115,8 +116,8 @@
     "finalizer-handoff": "c3c477f8c94658ddd3793ea60a477acb22a235f02f453103f5ce501b42250512",
     "finalizer-init": "c35ed3015fa0f9f7e4b146e9bc30f81d853718d937381f6e74a9f5a4ad1d28aa",
     "github-attestation-receipt": "8dc64e35a591c954ff298107edd3a715ee4173bb23b234d2c66aaa22e224e88d",
-    "guard": "f5fffbdaadeae404d71334b8cbcdd8733d5d99fe6889427fa33087c0e864a06e",
-    "init": "38c21a12ac93bc04632bedab03949fed8a2e3434b8cebd6654a776e332211da9",
+    "guard": "83a2c0c6744ef3692c305f5a6af501b0d8ee483425b237f2b291b14fe069f02e",
+    "init": "c848b557618ae5c585b9f879db784e1f4a26ee0a04e04643c7c670cb53f0c8dd",
     "keygen": "ec54bd619f261d096d2934989cd4abfe124e8027476e3a49d74dad3ff24bad18",
     "pack-doctor": "7f436467312daa810c729888830922387ed9e6109199123a5bb506f715884c9d",
     "preflight": "94457a9fb4015dde575d0345b9c25ddc34aabb1ca83e952ae639718ce438b654",

@@ -238,6 +238,34 @@ base-FAIL to candidate-repo-PASS transition; the attestation carries the repo
 counts/source/return code and `verify-record` reconciles them with the composite
 totals. A detached verdict signature, when configured, covers that attestation.
 
+### Suite continuity: `--require-suite-continuity` (opt-in, trusted repos)
+
+By default the whole-tree runtime-continuity check — capture the fully prepared
+candidate tree, then reject any modification observed after the suite runs — is
+active only when a verifier pack makes the tree a judged input. A plain
+`subprocess` + JUnit run has no such check: it relies on the judge-owned report
+and the exit code.
+
+`--require-suite-continuity` opts a pack-less run into the same after-suite tree
+check. If the repository suite rewrites the prepared tree while it runs, the
+verdict is `TAMPERED` (`candidate_tree_changed`) instead of a pass. It is off by
+default and intended for **trusted repositories** whose suite is expected never
+to write into the tree.
+
+Because the check compares the exact tree before and after the suite, ordinary
+incidental writes are themselves reported as tampering. The trusted test command
+must therefore suppress them — disable bytecode with `-B` (or
+`PYTHONDONTWRITEBYTECODE`) and pytest's cache with `-p no:cacheprovider`:
+
+```bash
+git diff main...HEAD | evo-guard guard --diff - --no-config \
+  --require-suite-continuity \
+  --test-command "python -I -B -m pytest -p no:cacheprovider -q"
+```
+
+This is not a policy field: like `--sign-key`, it is a trusted-local control and
+is never taken from candidate-controlled workflow input on a pull request.
+
 ### `--diff` safety (for untrusted PRs)
 
 `--diff` has only the candidate checkout available, so it deliberately refuses
@@ -289,6 +317,31 @@ A composite action ships at the repository root
 > `FAIL` (tests genuinely failing), `TAMPERED` signature, or `ERROR` **green**.
 > It is available only for a trusted non-PR invocation where a maintainer
 > deliberately wants a narrow harness-integrity report.
+
+### Hardening profiles: `evo-guard init --profile`
+
+`evo-guard init` scaffolds the workflow and a trusted `.evoguard.json`. By
+default it writes the minimal `local` (subprocess) policy. `--profile` scaffolds
+a container-isolated policy instead:
+
+```bash
+evo-guard init --ref v4.6.0 --profile hostile \
+  --test-command "python -I -B -m pytest -q -p no:cacheprovider"
+```
+
+| `--profile` | Isolation | Policy adds |
+|---|---|---|
+| `local` (default) | subprocess | nothing beyond `test_command` |
+| `protected` | `docker` | network-less container, `require_candidate_isolation: docker`, `strict_harness` |
+| `hostile` | `gvisor` | network-less gVisor guest kernel, `require_candidate_isolation: gvisor`, `strict_harness` |
+
+The generated `protected`/`hostile` policy loads as written but leaves
+`docker_image` as an explicit placeholder you must replace with a digest-pinned
+image; the judge fails closed until you do. These profiles deliver real
+container isolation without the full **operating profile** contract — that
+additionally requires an independent verifier pack (`blackbox_only`,
+`require_report_integrity: external_process_isolated`, and
+`operating_profile`). See [Operating profiles](OPERATING_PROFILES.md).
 
 ### Pull-request policy source (security-critical)
 

@@ -277,6 +277,17 @@ def build_parser(
         const=False,
         help="explicitly override strict_harness: true from a trusted policy",
     )
+    g_p.add_argument(
+        "--require-suite-continuity",
+        dest="require_suite_continuity",
+        action="store_true",
+        default=False,
+        help="trusted-repository opt-in: capture the fully prepared tree and "
+        "reject a repo suite that rewrites it at runtime, even when no verifier "
+        "pack is configured. Default off; enable only for suites that never "
+        "write into the judged tree, since ordinary writes (caches, coverage "
+        "files) would be reported as tampering",
+    )
     g_p.add_argument("--json", dest="json_out", default=None, help="write the JSON verdict to this path")
     g_p.add_argument(
         "--sarif", default=None,
@@ -1711,6 +1722,16 @@ def build_parser(
         default=argparse.SUPPRESS,
         help="generated workflow posture: blocking (default, admission check) or "
         "advisory (non-blocking observation with uploaded evidence)",
+    )
+    i_p.add_argument(
+        "--profile",
+        choices=("local", "protected", "hostile"),
+        default=argparse.SUPPRESS,
+        help="generated .evoguard.json hardening: local (default, subprocess), "
+        "protected (docker), or hostile (gvisor). protected/hostile scaffold a "
+        "network-less container judge, an observed candidate-isolation receipt, "
+        "and strict harness; you must replace the placeholder docker_image with a "
+        "digest-pinned image (see the printed note)",
     )
     i_p.add_argument(
         "--policy-path", default=None,

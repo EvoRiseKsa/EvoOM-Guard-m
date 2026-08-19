@@ -741,6 +741,7 @@ class RepoVerifier:
         setup_output_globs: tuple[str, ...] = (),
         strict_harness: bool = False,
         harness_inputs: tuple[str, ...] = (),
+        require_suite_continuity: bool = False,
     ) -> None:
         validate_isolation_mode(isolation)
         self.timeout = timeout
@@ -779,6 +780,11 @@ class RepoVerifier:
         # zero-test success, and the preflight treats execution-environment
         # manifests as immutable judge inputs.
         self.strict_harness = strict_harness
+        # Opt-in trusted-repository control: capture the fully prepared tree and
+        # reject a repo suite that rewrites it at runtime, even when no verifier
+        # pack is configured. Default off, so the ordinary subprocess path is
+        # unchanged; intended for trusted suites that never write into the tree.
+        self.require_suite_continuity = require_suite_continuity
         # Command wrappers and explicitly declared helper files are judge-owned
         # and cannot be waived through the ordinary adopter allowlist.
         self.harness_inputs = normalize_harness_inputs(harness_inputs)
@@ -1439,6 +1445,7 @@ class RepoVerifier:
                         if pack_dir and container_mode and bool(setup_cmd_raw)
                         else False
                     ),
+                    require_suite_continuity=self.require_suite_continuity,
                 ),
                 RepoRuntimeContinuityServices(
                     trace=trace,
@@ -1570,6 +1577,10 @@ class RepoVerifier:
                             **runtime_evidence(),
                         },
                     )
+            # With no verifier pack, a clean after-suite check is the terminal
+            # continuity boundary (an opt-in require_suite_continuity run). This
+            # is a no-op when a pack is configured — the pack path owns delivery.
+            runtime_continuity.finalize_suite_only()
 
             repo_phase = interpret_repo_suite(
                 RepoSuiteInterpretationRequest(
