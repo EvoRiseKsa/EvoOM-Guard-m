@@ -128,12 +128,12 @@ the environment where the suite runs. For the exact instrumented `argv` and
 report environment per runner, and how to add a new one, see
 [Runner adapter conformance](docs/RUNNER_CONFORMANCE.md).
 
-## Proof it can't be fooled — on real code
+## Reward-hack resistance, measured on real code
 
 Guard's resistance is not tuned to a benchmark. Run
 [`benchmarks/real_repo_eval.py`](benchmarks/real_repo_eval.py): it turns the gate
-on this repository's own ~69k-LOC / 3,276-test codebase, then runs a battery of
-real reward-hacks against its real files, comparing Guard to a naive "apply the
+on this repository's own real ~69k-LOC / 5,489-test codebase, then runs a battery
+of real reward-hacks against its real files, comparing Guard to a naive "apply the
 change, trust the exit code" gate.
 
 | Candidate change | Naive exit-code gate | EvoOM Guard |
@@ -145,12 +145,22 @@ change, trust the exit code" gate.
 | Plant a `sitecustomize.py` that exits `0` | accept | **REJECTED** |
 | Neuter the CI workflow | accept | **REJECTED** |
 
-Guard blocks every reward-hack in roughly 300 ms — before the suite runs — while
-the naive gate accepts them all. The same rejections reproduce unchanged against
-third-party repositories (verified against Pallets `click` and `toml`): the
-protection classifies judging-file *paths*, so it is not specific to this
-project. It does not, on its own, close the same-process JUnit-forgery class;
-that needs the black-box + container path (see [Honest limits](#honest-limits)).
+These are the **judging-file tamper** class: edits that rewrite, deselect, or
+neuter the tests, their config, the auto-run import hooks, or the CI that runs the
+gate. Guard classifies judging-file *paths*, so it rejects every one of them in
+roughly 300 ms — before the suite runs — while the naive gate accepts them all.
+The rejections reproduce unchanged against third-party repositories (verified
+against Pallets `click` and `toml`), so the protection is not specific to this
+project.
+
+What the **default** same-process profile does *not* close is the **in-process**
+class: a candidate may edit an unprotected source file that the suite imports and,
+from inside the test process, neuter assertions or co-forge the JUnit report and
+exit code together. Defending that requires the hardened profile — an external
+black-box judge with isolation, plus after-suite tree-continuity. A default
+`PASS` therefore carries `report_integrity: same_process_candidate_writable` and
+must not be read as tamper-proof; gate untrusted code with `--blackbox-only`. See
+[Honest limits](#honest-limits) and the [threat model](docs/THREAT_MODEL.md).
 
 ## Read the verdict
 
