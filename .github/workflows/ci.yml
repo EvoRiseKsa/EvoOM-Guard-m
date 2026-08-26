@@ -143,6 +143,20 @@ jobs:
             echo "cheat patch correctly rejected"
           fi
 
+      - name: Reward-hack proof on real code (Python 3.12)
+        if: matrix.python-version == '3.12'
+        # Run the flagship demonstration against this repo's own real files so the
+        # protected-path proof cannot silently rot; exits non-zero on any wrong
+        # verdict. Scope is the protected-path tamper class (see docs/THREAT_MODEL.md).
+        run: python benchmarks/real_repo_eval.py
+
+      - name: Provenance ancestry gate (Python 3.12)
+        if: matrix.python-version == '3.12'
+        # The source->evidence->finalization->HEAD ancestry gate for the failure
+        # registry. Needs full history (fetch-depth: 0 above); fails the build on a
+        # broken ancestry chain so registry/evidence drift is caught automatically.
+        run: python -I tools/evaluation/failure_registry.py
+
   e2e-runners:
     # Exercise the structured-verdict oracle END-TO-END against real runners (not
     # just the adapter wiring): vitest + node --test, producing junit+exit verdicts
