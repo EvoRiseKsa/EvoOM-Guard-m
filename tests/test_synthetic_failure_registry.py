@@ -63,7 +63,10 @@ def _clone_current_repo(tmp_path: Path) -> Path:
     _git(ROOT.parent, "clone", "--shared", str(ROOT), str(repo))
     _git(repo, "repack", "-a", "-d")
     alternates = repo / ".git" / "objects" / "info" / "alternates"
-    alternates.unlink()
+    # git >= 2.43 `clone --shared` may leave no alternates file (and `repack -a -d`
+    # internalizes objects), so the file is absent on those versions. Tolerate its
+    # absence rather than crashing before the security assertions run.
+    alternates.unlink(missing_ok=True)
     return repo
 
 
