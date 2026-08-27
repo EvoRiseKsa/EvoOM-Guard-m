@@ -60,6 +60,7 @@ REASON_CODES = (
     "candidate_tree_changed_during_run",
     "test_command_unavailable",
     "runtime_cleanup_failed",
+    "assertion_liveness_failed",
 )
 
 _POLICY_VERSION_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")

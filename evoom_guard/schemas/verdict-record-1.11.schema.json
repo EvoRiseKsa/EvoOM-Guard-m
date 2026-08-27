@@ -71,7 +71,8 @@
         "candidate_not_exercised",
         "candidate_tree_changed_during_run",
         "test_command_unavailable",
-        "runtime_cleanup_failed"
+        "runtime_cleanup_failed",
+        "assertion_liveness_failed"
       ]
     },
     "reason": { "type": "string", "minLength": 1 },

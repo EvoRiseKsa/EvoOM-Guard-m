@@ -17,7 +17,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from evoom_guard.verifiers.junit_oracle import canary_case_failed
 from evoom_guard.verifiers.repo_verifier import parse_junit_xml
+
+_CANARY = "test_evoguard_assertion_liveness"
 
 # A classic "billion laughs": nested entity defs that, if expanded, blow up memory.
 _BILLION_LAUGHS = (
@@ -185,3 +188,47 @@ def test_rejects_aggregate_claim_that_disagrees_with_testcases():
 
     assert parse_junit_xml(hidden_failure) is None
     assert parse_junit_xml(invented_failure) is None
+
+
+def test_canary_case_failed_detects_the_named_failing_node():
+    # The canary node failed (or errored) -> True; a passing canary or an absent
+    # canary -> False. This is what upgrades a neutered run from FAIL to TAMPERED.
+    failed = (
+        '<testsuite tests="2" failures="1">'
+        '<testcase classname="tests.test_m" name="test_value"/>'
+        f'<testcase classname=".evoguard.assert_liveness_canary" name="{_CANARY}">'
+        "<failure>assertion machinery neutered</failure></testcase>"
+        "</testsuite>"
+    )
+    errored = failed.replace("<failure>assertion machinery neutered</failure>", "<error/>")
+    passed = (
+        '<testsuite tests="2">'
+        '<testcase name="test_value"/>'
+        f'<testcase name="{_CANARY}"/>'
+        "</testsuite>"
+    )
+    absent = '<testsuite tests="1"><testcase name="test_value"><failure/></testcase></testsuite>'
+
+    assert canary_case_failed(failed, _CANARY) is True
+    assert canary_case_failed(errored, _CANARY) is True
+    assert canary_case_failed(passed, _CANARY) is False
+    assert canary_case_failed(absent, _CANARY) is False
+
+
+def test_canary_case_failed_is_fail_open_on_hostile_or_empty_reports():
+    # Fail-open is safe: the ordinary grader still counts the canary's failure, so a
+    # missed detection degrades TAMPERED to a plain FAIL, never to a PASS.
+    assert canary_case_failed("", _CANARY) is False
+    assert canary_case_failed("not xml at all", _CANARY) is False
+    # A namespaced testcase is still matched by local name.
+    namespaced = (
+        f'<ns:testsuite xmlns:ns="urn:x"><ns:testcase name="{_CANARY}">'
+        "<ns:failure/></ns:testcase></ns:testsuite>"
+    )
+    assert canary_case_failed(namespaced, _CANARY) is True
+    # DTD/ENTITY reports are refused before parsing (shared parser hardening).
+    dtd = (
+        '<?xml version="1.0"?><!DOCTYPE t [<!ENTITY x "y">]>'
+        f'<testsuite><testcase name="{_CANARY}"><failure/></testcase></testsuite>'
+    )
+    assert canary_case_failed(dtd, _CANARY) is False

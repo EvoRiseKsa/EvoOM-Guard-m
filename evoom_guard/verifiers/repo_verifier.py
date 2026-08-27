@@ -274,6 +274,9 @@ from evoom_guard.verifiers.junit_oracle import (
     _count_testcases as _count_testcases,
 )
 from evoom_guard.verifiers.junit_oracle import (
+    canary_case_failed as canary_case_failed,
+)
+from evoom_guard.verifiers.junit_oracle import (
     detect_tamper as detect_tamper,
 )
 from evoom_guard.verifiers.junit_oracle import (
@@ -1643,6 +1646,34 @@ class RepoVerifier:
             # continuity boundary (an opt-in require_suite_continuity run). This
             # is a no-op when a pack is configured — the pack path owns delivery.
             runtime_continuity.finalize_suite_only()
+
+            # Assertion-liveness (catalog row 11b): when the flag is set the
+            # judge-owned canary was appended to the suite. If its own node failed
+            # in the judge-owned report, candidate-imported code neutered the
+            # assertion machinery, so the report's *passes* cannot be trusted — this
+            # is tamper, not a plain test failure. Grade TAMPERED with a distinct
+            # reason rather than letting it fold into ``tests_failed``.
+            if self.require_assert_liveness and canary_case_failed(
+                _read_text_or_none(completed_suite.report_path) or "",
+                assert_liveness.CANARY_TESTID,
+            ):
+                return VerdictResult(
+                    passed=False,
+                    score=0.0,
+                    diagnostics=(
+                        "the assertion-liveness canary "
+                        f"({assert_liveness.CANARY_TESTID}) failed: candidate-"
+                        "imported code neutered the test framework's assertion "
+                        "methods, so the suite's reported passes are not trustworthy"
+                    ),
+                    artifact={
+                        "files_changed": changed,
+                        "outcome": "assertion_liveness_failed",
+                        "tamper": True,
+                        "setup_isolation": setup_isolation,
+                        **runtime_evidence(),
+                    },
+                )
 
             repo_phase = interpret_repo_suite(
                 RepoSuiteInterpretationRequest(

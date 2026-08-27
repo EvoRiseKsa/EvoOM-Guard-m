@@ -23,6 +23,7 @@ from evoom_guard.domain.verdict import (
     ERROR,
     FAIL,
     PASS,
+    REASON_ASSERTION_LIVENESS_FAILED,
     REASON_ASSURANCE_REQUIREMENT_NOT_MET,
     REASON_CANDIDATE_TREE_CHANGED,
     REASON_JUNIT_EXIT_MISMATCH,
@@ -139,6 +140,12 @@ def test_outcome_policy_tables_are_exact_and_immutable() -> None:
         "pack_snapshot_changed": (
             REASON_VERIFIER_PACK_SNAPSHOT_CHANGED,
             "the accepted verifier-pack snapshot changed before or during execution",
+        ),
+        "assertion_liveness_failed": (
+            REASON_ASSERTION_LIVENESS_FAILED,
+            "the judge-owned assertion-liveness canary failed — candidate-imported "
+            "code neutered the test framework's assertion machinery, so the report's "
+            "passes cannot be trusted",
         ),
     }
 

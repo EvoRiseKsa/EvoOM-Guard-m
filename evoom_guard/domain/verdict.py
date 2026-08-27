@@ -66,6 +66,7 @@ REASON_CANDIDATE_NOT_EXERCISED = "candidate_not_exercised"
 REASON_CANDIDATE_TREE_CHANGED = "candidate_tree_changed_during_run"
 REASON_TEST_COMMAND_UNAVAILABLE = "test_command_unavailable"
 REASON_RUNTIME_CLEANUP_FAILED = "runtime_cleanup_failed"
+REASON_ASSERTION_LIVENESS_FAILED = "assertion_liveness_failed"
 
 REASON_CODES = frozenset(
     {
@@ -97,6 +98,7 @@ REASON_CODES = frozenset(
         REASON_CANDIDATE_TREE_CHANGED,
         REASON_TEST_COMMAND_UNAVAILABLE,
         REASON_RUNTIME_CLEANUP_FAILED,
+        REASON_ASSERTION_LIVENESS_FAILED,
     }
 )
 
@@ -230,6 +232,10 @@ REASON_CONTRACT: Mapping[
             frozenset({ERROR}),
             frozenset({EXECUTION_STARTED_INCOMPLETE}),
         ),
+        REASON_ASSERTION_LIVENESS_FAILED: (
+            frozenset({TAMPERED}),
+            frozenset({EXECUTION_COMPLETED}),
+        ),
     }
 )
 
@@ -242,6 +248,7 @@ __all__ = [
     "EXECUTION_STATIC_GATE",
     "FAIL",
     "PASS",
+    "REASON_ASSERTION_LIVENESS_FAILED",
     "REASON_ASSURANCE_REQUIREMENT_NOT_MET",
     "REASON_BINARY_PATCH",
     "REASON_CANDIDATE_NOT_EXERCISED",

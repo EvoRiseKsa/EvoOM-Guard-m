@@ -8,6 +8,10 @@
     "static_gate"
   ],
   "reason_contract": {
+    "assertion_liveness_failed": {
+      "verdicts": ["TAMPERED"],
+      "execution_states": ["completed"]
+    },
     "assurance_requirement_not_met": {
       "verdicts": ["ERROR"],
       "execution_states": ["completed", "not_started", "started_incomplete"]

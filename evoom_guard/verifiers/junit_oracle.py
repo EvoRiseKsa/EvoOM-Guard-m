@@ -265,6 +265,39 @@ def parse_junit_xml(xml_text: str) -> JUnitCounts | None:
     return _count_testcases(root)
 
 
+def canary_case_failed(xml_text: str, testid: str) -> bool:
+    """Did the judge-owned assertion-liveness canary node fail (or error)?
+
+    Scans a JUnit report for a ``<testcase name="{testid}">`` carrying a
+    ``<failure>``/``<error>`` child. Used only under ``--require-assert-liveness``:
+    a canary failure means candidate-imported code neutered the assertion
+    machinery, so the whole report is untrustworthy and the run is graded
+    ``TAMPERED`` rather than a plain ``FAIL``.
+
+    Shares the parser's hardening — size cap and DTD/``ENTITY`` refusal — and is
+    deliberately **fail-open**: any malformed/absent report, or a missing canary
+    node, returns ``False``. That is safe because the ordinary grader still counts
+    the canary's failure in ``failures`` and fails the run; a missed detection here
+    only degrades ``TAMPERED`` to a plain ``FAIL``, never to a ``PASS``.
+    """
+    if not xml_text or not xml_text.strip():
+        return False
+    if len(xml_text) > _MAX_REPORT_CHARS:
+        return False
+    if "<!DOCTYPE" in xml_text or "<!ENTITY" in xml_text:
+        return False
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return False
+    for element in root.iter():
+        if _local_name(element) != "testcase" or element.get("name") != testid:
+            continue
+        if any(_local_name(child) in ("failure", "error") for child in element):
+            return True
+    return False
+
+
 def _read_text_or_none(path: str) -> str | None:
     """Read one JUnit report without ever allocating beyond its byte cap.
 
@@ -423,6 +456,7 @@ __all__ = [
     "JUNIT_REPORT_SET_DIGEST_FORMAT",
     "JUNIT_XML_DIGEST_FORMAT",
     "JUnitCounts",
+    "canary_case_failed",
     "detect_tamper",
     "grade_repo_run",
     "parse_junit_dir",

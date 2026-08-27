@@ -119,12 +119,16 @@ rebind. A repo-native **assertion-liveness canary** ships for this, two ways:
   to your own pytest command (useful outside the gate).
 
 The canary probes the neutable `unittest.TestCase` assertion methods and enforces
-with a bare `assert`, so a neutered run fails instead of yielding a false `PASS`.
-Verified end-to-end through the real gate by
+with a bare `assert`, so a neutered run cannot yield a false `PASS`. Under
+`--require-assert-liveness`, when the judge-owned canary node itself fails the
+assertion machinery was neutered, so the report's *passes* are untrustworthy — the
+run is graded **`TAMPERED`** with the distinct reason `assertion_liveness_failed`,
+not a plain `FAIL`. A genuine break (live assertions, canary passes) stays a plain
+`FAIL`, so the two are never conflated. Verified end-to-end through the real gate by
 [`benchmarks/self_proof/assert_liveness.py`](../benchmarks/self_proof/assert_liveness.py)
-(neuter without the canary → false `PASS`; with it → `FAIL`) and by
-`tests/test_report_integrity.py` (the flag turns the neuter into a `FAIL`, keeps an
-honest suite passing, does not suppress the repository suite, and refuses a
+and by `tests/test_report_integrity.py` (the flag turns the neuter into a
+`TAMPERED`/`assertion_liveness_failed`, keeps an honest suite passing, leaves a
+genuine break a plain `FAIL`, does not suppress the repository suite, and refuses a
 non-pytest command). See catalog row 11b.
 
 ### E. Mid-run mutation of a protected judging file — boundary by default, closed by continuity

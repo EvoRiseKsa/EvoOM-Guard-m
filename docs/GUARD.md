@@ -281,7 +281,14 @@ whatever the command already collects — it never replaces the repository's own
 `testpaths`, so the real suite still runs — and the canary runs in the same
 session, the only place the monkeypatch is active. The canary probes the neutable
 assertion methods and enforces with a bare `assert` (a statement the candidate
-cannot rebind), so a neutered run is a `FAIL` instead of a false `PASS`.
+cannot rebind), so a neutered run cannot be a false `PASS`.
+
+When the judge-owned canary node itself fails in the report, the assertion
+machinery was neutered, so the report's *passes* cannot be trusted either — this is
+tamper, not an honest test failure. The run is graded **`TAMPERED`** with the
+distinct reason code **`assertion_liveness_failed`** (not a plain
+`FAIL`/`tests_failed`). A *genuine* break with the flag — live assertions, canary
+passes — stays a plain `FAIL`, so the two are never conflated.
 
 ```bash
 git diff main...HEAD | evo-guard guard --diff - --no-config \

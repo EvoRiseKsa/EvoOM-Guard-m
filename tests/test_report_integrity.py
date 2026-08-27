@@ -201,19 +201,36 @@ class InProcessForgeryIsTheKnownBoundary(unittest.TestCase):
 class RequireAssertLivenessClosesNeutering(unittest.TestCase):
     """``guard --require-assert-liveness`` auto-injects the canary (catalog 11b)."""
 
-    def test_the_flag_turns_a_neuter_false_pass_into_a_fail(self) -> None:
+    def test_the_flag_turns_a_neuter_false_pass_into_a_tamper(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = _unittest_repo(tmp)
             # Without the flag the neuter is the documented false PASS (boundary).
             boundary = guard(repo, _block("pkg/m.py", _ASSERT_NEUTER))
             self.assertEqual(boundary.verdict, PASS)
-            # With the flag the auto-injected canary fails, so the run FAILs.
+            # With the flag the auto-injected canary fails. Neutering the assertion
+            # machinery is tamper, not an honest test failure — the report's passes
+            # cannot be trusted — so the run is TAMPERED with a distinct reason.
             r = guard(
                 repo,
                 _block("pkg/m.py", _ASSERT_NEUTER),
                 require_assert_liveness=True,
             )
+            self.assertEqual(r.verdict, TAMPERED, r.reason)
+            self.assertEqual(r.reason_code, "assertion_liveness_failed", r.reason)
+
+    def test_a_genuine_break_stays_a_plain_fail_not_a_tamper(self) -> None:
+        # The distinct reason must fire ONLY for neutering: a genuine break with the
+        # flag has live assertions, the canary passes, and the run is a plain FAIL
+        # (tests_failed), never mislabelled as assertion-liveness tamper.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            r = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 2\n"),
+                require_assert_liveness=True,
+            )
             self.assertEqual(r.verdict, FAIL, r.reason)
+            self.assertEqual(r.reason_code, "tests_failed", r.reason)
 
     def test_the_flag_keeps_an_honest_suite_passing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
