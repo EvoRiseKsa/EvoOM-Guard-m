@@ -99,7 +99,7 @@
   },
   "engine_version": "4.7.0.dev0",
   "environment": {
-    "captured_at_utc": "2026-08-18T02:29:00.314628Z",
+    "captured_at_utc": "2026-08-27T00:01:18.381460Z",
     "case_interpreter": {
       "build": [
         "main",
@@ -125,7 +125,7 @@
     },
     "execution_environment": {
       "all_non_allowlisted_parent_keys_removed": true,
-      "effective_environment_sha256": "3a52d1e37c32dc036f887a081138fb30b5ae1e1e32be85e3097857273f1cecf9",
+      "effective_environment_sha256": "5829a29bb604f949a5c1a0f9f2ff0e0aec67d70a589a52c12f3a7da06bd6a8da",
       "effective_key_names": [
         "LC_CTYPE",
         "NO_COLOR",
@@ -149,7 +149,7 @@
       ],
       "inherited_value_sha256": {
         "LC_CTYPE": "99fed2d548c2eb1022f4067f97fe838a2c3ea60ee0e0f53086788505c3ababad",
-        "PATH": "1ee2dd77ea89d83de1cab90a8b27c383369b21ff89d20233e6895732ab2eba88"
+        "PATH": "a6a18ae95a399faaf7ada0c1f14cce900199f6b01cfc1012184a0108f1c5c4e9"
       },
       "removed_influential_keys_present": [
         "GIT_CONFIG_COUNT",
@@ -162,8 +162,8 @@
       "cpu_count": 4,
       "machine": "x86_64",
       "name": "posix",
-      "platform": "Linux-6.18.5-fc-v20-x86_64-with-glibc2.39",
-      "release": "6.18.5-fc-v20",
+      "platform": "Linux-6.18.44-fc-v21-x86_64-with-glibc2.39",
+      "release": "6.18.44-fc-v21",
       "system": "Linux"
     },
     "tools": {
@@ -265,7 +265,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "c65baea16ea97530a99c3c55c1ac6cf86191e03a",
+    "head": "f4b105dbeb6444caf1025286c06d694605596637",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -316,7 +316,7 @@
     "evidence_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "e2ccabce15bc8aea818ee880f6acfde4b8d4af58",
+      "commit": "a36d9ad43bf360c801aa2076663fb3cecf333008",
       "final_manifest_in_commit": false,
       "observation_point": "after results commit and before final manifest publication",
       "reason": "source_and_results_match_commit_final_manifest_excluded",
@@ -328,7 +328,7 @@
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "c65baea16ea97530a99c3c55c1ac6cf86191e03a",
+      "commit": "f4b105dbeb6444caf1025286c06d694605596637",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -340,13 +340,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14818,
+    "bytes": 14813,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "1d84d540207428d4394ee0aec1b711699fea5b97687ee9bcaac76c527252d512"
+    "sha256": "841167cfc350fd9c7872c1aaf19f7b9919028145ebcdf6434c95e50c54452ff0"
   },
-  "run_id": "321b316b-aecf-4f49-b106-6cb2f6a7dad3",
+  "run_id": "f72d1709-1f28-4ede-a150-da543ea4c8d3",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -1383,9 +1383,9 @@
         "sha256": "1e7efc828f1a31079a9f46d117bb5ad167ca96f9e798aef400fec748b3d58779"
       },
       {
-        "bytes": 11419,
+        "bytes": 13521,
         "path": "evoom_guard/verifiers/repo_runtime_continuity.py",
-        "sha256": "c9aba982f83aa333572598869bdcf137ea4cc996343373892679790756aebdda"
+        "sha256": "c152858cccad678aa4b63da43634b7af833bbb87fc1f7955b5de52c6afd908d4"
       },
       {
         "bytes": 22315,
@@ -1447,14 +1447,14 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "20ecd170d61418e5fd7cd75ab0e7fa7e7b9c3bbda90d87eab4ca6ba491cc696b",
-    "total_bytes": 3056122
+    "sha256": "5aa9e7d6e6ea31e877c3b2185be13a441db2367d71f725fdd9ace8f28a931869",
+    "total_bytes": 3058224
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.181,
-    "guard_full_run_median_s": 0.199,
-    "guard_full_run_p95_s": 0.219,
-    "pre_gate_only_median_s": 0.003,
+    "controlled_direct_pytest_median_s": 0.184,
+    "guard_full_run_median_s": 0.211,
+    "guard_full_run_p95_s": 0.222,
+    "pre_gate_only_median_s": 0.002,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }
 }
