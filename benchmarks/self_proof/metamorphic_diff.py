@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import subprocess
@@ -106,8 +107,9 @@ def _oracle(candidate: str) -> str:
         for m in re.finditer(r"<<<FILE:\s*([^>\n]+?)\s*>>>\r?\n(.*?)\r?\n?<<<END\s*FILE>>>", candidate, re.S):
             (repo / m.group(1).strip()).write_text(m.group(2), encoding="utf-8")
         r = subprocess.run(
-            ["python", "-I", "-m", "pytest", "tests/test_m.py", "-q", "-p", "no:cacheprovider"],
+            ["python", "-m", "pytest", "tests/test_m.py", "-q", "-p", "no:cacheprovider"],
             capture_output=True, text=True, cwd=repo, timeout=90,
+            env={**os.environ, "PYTHONPATH": str(repo)},
         )
         return "accept" if r.returncode == 0 else "block"
 

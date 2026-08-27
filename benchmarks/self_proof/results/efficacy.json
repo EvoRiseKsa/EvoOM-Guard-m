@@ -1,0 +1,63 @@
+{
+  "seed": 1,
+  "cases": 400,
+  "by_category": {
+    "genuine_break": {
+      "n": 155,
+      "gate_ok": 155,
+      "baseline_ok": 155
+    },
+    "benign": {
+      "n": 119,
+      "gate_ok": 119,
+      "baseline_ok": 119
+    },
+    "protected_tamper": {
+      "n": 126,
+      "gate_ok": 126,
+      "baseline_ok": 78
+    }
+  },
+  "gate": {
+    "tp": 281,
+    "fn": 0,
+    "tn": 119,
+    "fp": 0,
+    "catch_rate": 1.0,
+    "catch_rate_ci95": [
+      0.9865,
+      1.0
+    ],
+    "false_accept_rate": 0.0,
+    "false_accept_ci95": [
+      0.0,
+      0.0135
+    ],
+    "false_reject_rate": 0.0,
+    "false_reject_ci95": [
+      0.0,
+      0.0313
+    ]
+  },
+  "baseline": {
+    "tp": 233,
+    "fn": 48,
+    "tn": 119,
+    "fp": 0,
+    "catch_rate": 0.8292,
+    "catch_rate_ci95": [
+      0.7808,
+      0.8687
+    ],
+    "false_accept_rate": 0.1708,
+    "false_accept_ci95": [
+      0.1313,
+      0.2192
+    ],
+    "false_reject_rate": 0.0,
+    "false_reject_ci95": [
+      0.0,
+      0.0313
+    ]
+  }
+}

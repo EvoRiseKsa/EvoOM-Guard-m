@@ -1,0 +1,14 @@
+{
+  "seed": 1,
+  "cases": 2000,
+  "case_kinds": {
+    "unprotected_break": 554,
+    "protected_delete": 252,
+    "unsafe_path": 242,
+    "protected_edit": 490,
+    "lookalike": 236,
+    "unprotected_benign": 226
+  },
+  "violation_count": 0,
+  "violations": []
+}

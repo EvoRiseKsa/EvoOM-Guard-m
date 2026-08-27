@@ -42,6 +42,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import random
 import re
 import subprocess
@@ -130,10 +131,13 @@ def _baseline_decision(candidate: str) -> str:
         repo.mkdir()
         _seed_repo(repo)
         _apply(repo, candidate)
+        # A fair naive gate makes the project importable, exactly as an editable
+        # install or a rootdir-aware CI runner would; put the repo root on the path
+        # (which -I would otherwise strip) so a benign edit is not blocked spuriously.
         r = subprocess.run(
-            ["python", "-I", "-m", "pytest", "tests/test_m.py", "-q",
-             "-p", "no:cacheprovider"],
+            ["python", "-m", "pytest", "tests/test_m.py", "-q", "-p", "no:cacheprovider"],
             capture_output=True, text=True, cwd=repo, timeout=90,
+            env={**os.environ, "PYTHONPATH": str(repo)},
         )
         return "accept" if r.returncode == 0 else "block"
 
