@@ -50,15 +50,15 @@
   "benchmark_id": "live-labelled-corpus-global-phases-contained-worker-v5",
   "claims": {
     "authenticated": false,
-    "content_identity": "source-and-results-git-commits-plus-content-digests",
-    "evidence_commit_bound": true,
+    "content_identity": "source-git-commit-plus-content-digests",
+    "evidence_commit_bound": false,
     "evidence_status": "self_consistent_unattributed",
     "execution_authenticity_claim": false,
     "execution_source_snapshot_bound": true,
     "final_manifest_in_evidence_commit": false,
     "general_performance_claim": false,
     "installed_environment_matches_lock": false,
-    "source_and_results_commit_bound": true,
+    "source_and_results_commit_bound": false,
     "source_commit_bound": true,
     "source_snapshot_matches_worktree_at_manifest_build": true
   },
@@ -99,7 +99,7 @@
   },
   "engine_version": "4.7.0.dev0",
   "environment": {
-    "captured_at_utc": "2026-08-27T06:52:19.132817Z",
+    "captured_at_utc": "2026-08-27T14:37:12.440042Z",
     "case_interpreter": {
       "build": [
         "main",
@@ -125,7 +125,7 @@
     },
     "execution_environment": {
       "all_non_allowlisted_parent_keys_removed": true,
-      "effective_environment_sha256": "ec9ec2f4536c49118a2cfa897a7c941823a8ef118b7bebe166ed9ec4cc31ea03",
+      "effective_environment_sha256": "58081b8f932e4a16a685be64b2e2d04d3f5baffe685a0e5fc485ec4a56770390",
       "effective_key_names": [
         "LC_CTYPE",
         "NO_COLOR",
@@ -149,7 +149,7 @@
       ],
       "inherited_value_sha256": {
         "LC_CTYPE": "99fed2d548c2eb1022f4067f97fe838a2c3ea60ee0e0f53086788505c3ababad",
-        "PATH": "783e534b7b50ad31a2b07b89c61ea93429b7fdfb1ab63d8843f1a212471dc6d2"
+        "PATH": "f4207409c07d2dc178fead2fa9b01eace7bd1bb50608b8d523a8ffa15139487c"
       },
       "removed_influential_keys_present": [
         "GIT_CONFIG_COUNT",
@@ -265,7 +265,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "ffd650ee3e84b3bb1442746a9542c0066480338a",
+    "head": "d084eba551f786b87d6d99b5f912f0c5769d66f1",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -313,22 +313,12 @@
     "tp": 10
   },
   "provenance": {
-    "evidence_commit": {
-      "binding": "git-commit",
-      "bound": true,
-      "commit": "54062d5f2ca811566546d908af2380d822fa76ab",
-      "final_manifest_in_commit": false,
-      "observation_point": "after results commit and before final manifest publication",
-      "reason": "source_and_results_match_commit_final_manifest_excluded",
-      "results_match_commit": true,
-      "source_inventory_matches_commit": true,
-      "source_paths_match_commit": true
-    },
+    "evidence_commit": null,
     "final_manifest_in_evidence_commit": false,
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "ffd650ee3e84b3bb1442746a9542c0066480338a",
+      "commit": "d084eba551f786b87d6d99b5f912f0c5769d66f1",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -340,13 +330,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14817,
+    "bytes": 14819,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "93bd17329a9e1acbe00cdbca234dac17c8e939dc7f68b26adcc518b1d3fc6773"
+    "sha256": "a605efce53a344455037db8d49a2450e48f8974ef38da21eb365d4279684f375"
   },
-  "run_id": "6d07083a-a170-47c6-b33f-f1e40bc3d58e",
+  "run_id": "41a5d2c6-bf9d-4400-bf12-3f79e8f8f13e",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -578,9 +568,9 @@
         "sha256": "ee0b9f638f32641e073a16cacae505e7e80a64b4596b0ce05ac0a313d98520fa"
       },
       {
-        "bytes": 8445,
+        "bytes": 8793,
         "path": "evoom_guard/application/repo_decision.py",
-        "sha256": "42f2972c65010a4c676c0255aa2f15d701ff8db53f62dc7c8f24c312a33d1624"
+        "sha256": "4b30641364b21581f763d0f2d6ca95ab99e9e5fdc2aeacfbaa6e7911cd3b34d6"
       },
       {
         "bytes": 18034,
@@ -803,9 +793,9 @@
         "sha256": "ab76ef6282f8aef92e447ebc3b84eff289b6fcef582c6eea2af5fb17beaa0db9"
       },
       {
-        "bytes": 9332,
+        "bytes": 9613,
         "path": "evoom_guard/domain/verdict.py",
-        "sha256": "87837a838107446fd256796bf15d3bb4825b9eb65927bc7d13284c4889c88fba"
+        "sha256": "fdf87a3c80f83708e8bd3035ada6d81729f12c6e0f62fb2be2d514de58b24dbc"
       },
       {
         "bytes": 2359,
@@ -1103,9 +1093,9 @@
         "sha256": "29fb2492807d37533795b7eae3ee1dcb66f14a13854c3e6925fe59819a9ac85c"
       },
       {
-        "bytes": 25588,
+        "bytes": 25629,
         "path": "evoom_guard/schemas/change-attempt-observation-1.schema.json",
-        "sha256": "f0cedd1e960ef4d1fdb8fbdab089902af4388ed97faacd5ec30b93f51f7eafb5"
+        "sha256": "8b501a5cb69dd881797f9a16dd6663fe40cb4f3ec795402c55c1c50e69832b01"
       },
       {
         "bytes": 2183,
@@ -1198,14 +1188,14 @@
         "sha256": "419bd0a1e0b7b55234355fb244641958185c2f36e72d59f8ab9e12fdc3c46043"
       },
       {
-        "bytes": 19905,
+        "bytes": 19942,
         "path": "evoom_guard/schemas/verdict-record-1.11.schema.json",
-        "sha256": "b6772c30df35bae2c8371f24baa2a44b40ade05c7fc654d544d65574d6bebdd5"
+        "sha256": "01a7c8f199bc688a94e38ed5f330941141193f28bd1c5a7493ca20ad888b9881"
       },
       {
-        "bytes": 22939,
+        "bytes": 22976,
         "path": "evoom_guard/schemas/verdict-record-1.12.schema.json",
-        "sha256": "786a839726d7764480f1b587512f4e738a8244133da4e9c103a90c60ec3b4bdb"
+        "sha256": "5ae767107c90a4661411a454b4230fb9e25005e39c1d5a8f197a74bffc5b4c81"
       },
       {
         "bytes": 54010,
@@ -1298,9 +1288,9 @@
         "sha256": "e34af36db1d79d5a924c0bcf4ca04a03a880eed93b09d7fdda164c80919e75cd"
       },
       {
-        "bytes": 15486,
+        "bytes": 16975,
         "path": "evoom_guard/verifiers/junit_oracle.py",
-        "sha256": "6bc1212553715fb4ecaac7099ced88a363334f46303bd4df50680fa9f9fa26ad"
+        "sha256": "9e5b4768bd3f2b3ac9e3addeadf3b3186e1b75e735d1800b90dd64c0459f4db2"
       },
       {
         "bytes": 6449,
@@ -1413,9 +1403,9 @@
         "sha256": "f471c0d04d828286ad5663c9d68604f456202b403211ba36108b0fe903030eb1"
       },
       {
-        "bytes": 81105,
+        "bytes": 82679,
         "path": "evoom_guard/verifiers/repo_verifier.py",
-        "sha256": "759b815ab9b685569149249fa06d78abd2c84ba2903af919edc02b56c21bb989"
+        "sha256": "6121e5a0029122a7f94601fc163316bfcac3e87c28ab577f6e3b7497eac0c9a8"
       },
       {
         "bytes": 18600,
@@ -1462,14 +1452,14 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "3b17168f65b4fa14546ba9add02f18a8579d97c82bc589ed39c28eba245220b5",
-    "total_bytes": 3074164
+    "sha256": "4619c2243ced5bdf9a9306e6b7c165d29035691fee141a4354133e6de162e1e3",
+    "total_bytes": 3077971
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.165,
-    "guard_full_run_median_s": 0.177,
-    "guard_full_run_p95_s": 0.196,
-    "pre_gate_only_median_s": 0.002,
+    "controlled_direct_pytest_median_s": 0.277,
+    "guard_full_run_median_s": 0.291,
+    "guard_full_run_p95_s": 0.312,
+    "pre_gate_only_median_s": 0.004,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }
 }
