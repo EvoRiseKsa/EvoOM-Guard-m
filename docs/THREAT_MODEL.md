@@ -113,10 +113,11 @@ file rewrites a protected test at collection time and turns `FAIL` into a wrong
 `PASS`. It is closed by **after-suite tree-continuity** — a verifier pack, or the
 opt-in `--require-suite-continuity`, which re-verifies the judged tree's identity
 after the suite and rejects `suite_drift`. Catalog rows 9e–9f (declared
-`harness_inputs`) and row 11c. (Note: the pack-less `--require-suite-continuity`
-path today also flags *benign* runner cache writes such as `.pytest_cache/` as
-drift — a usability limitation with a tracked fix; verifier-pack runs are
-unaffected.)
+`harness_inputs`) and row 11c. (The pack-less `--require-suite-continuity` path
+tolerates benign runner bookkeeping — `__pycache__/`, `.pytest_cache/`, `*.pyc`,
+linter caches, coverage temp — so real runner cache churn is not mistaken for
+drift, while any change to a judged source / test / config file still trips it;
+the verifier-pack path keeps the strict exact-tree identity.)
 
 ## Profile-defense matrix
 

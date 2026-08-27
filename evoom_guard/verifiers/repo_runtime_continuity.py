@@ -37,6 +37,42 @@ RuntimeContinuityFailureKind = Literal[
     "suite_drift",
     "pack_drift",
 ]
+
+# Directory names and file suffixes that a cooperative test runner writes into the
+# tree as *derived, non-authoritative* bookkeeping (bytecode caches, the pytest
+# cache, linter/type/property caches, coverage temp files). They are ignored ONLY
+# on the pack-less ``require_suite_continuity`` path, whose sole job is to prove
+# the suite did not rewrite a *judged* file (source / test / config) at runtime.
+#
+# Safety: the authoritative source, test, and config files are still hashed in
+# full, so any mid-run rewrite of them remains ``suite_drift``. These entries are
+# outputs derived from source the check still covers (a ``.pyc`` reflects its
+# ``.py``; the pytest cache stores only nodeids/outcomes and is not executed by a
+# fixed harness ``--test-command``), so tolerating their churn cannot hide a
+# change to anything the verdict depends on. The verifier-pack path keeps the
+# strict full-tree identity unchanged: a pack must judge the exact tree.
+_BENIGN_RUNTIME_WRITE_SEGMENTS = frozenset(
+    {
+        "__pycache__",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".mypy_cache",
+        ".hypothesis",
+    }
+)
+_BENIGN_RUNTIME_WRITE_SUFFIXES = (".pyc", ".pyo")
+
+
+def _is_benign_runtime_write(path: str) -> bool:
+    """Whether ``path`` is derived runner bookkeeping, not a judged file."""
+
+    segments = path.replace("\\", "/").split("/")
+    if _BENIGN_RUNTIME_WRITE_SEGMENTS.intersection(segments):
+        return True
+    basename = segments[-1] if segments else path
+    if basename.endswith(_BENIGN_RUNTIME_WRITE_SUFFIXES):
+        return True
+    return basename == ".coverage" or basename.startswith(".coverage.")
 RuntimeContinuityPhase = Literal[
     "not_required",
     "not_captured",
@@ -246,6 +282,12 @@ class RepoRuntimeContinuity:
         if failure is not None:
             return self._record_failure(failure)
         assert changes is not None
+        # A pack-less require_suite_continuity run only needs the suite to leave
+        # every *judged* file untouched; tolerate derived runner bookkeeping so
+        # the check is usable with real runners (pytest writes .pytest_cache).
+        # The verifier-pack path keeps the exact-tree requirement (no filtering).
+        if changes and not self.request.pack_configured:
+            changes = [c for c in changes if not _is_benign_runtime_write(c)]
         if changes:
             return self._record_failure(
                 RepoRuntimeContinuityFailure(

@@ -188,6 +188,18 @@ class SuiteContinuityClosesMidRunRewrite(unittest.TestCase):
             self.assertEqual(r.verdict, TAMPERED, r.reason)
             self.assertIn("tests/test_m.py", r.reason)
 
+    def test_a_benign_change_still_passes_under_suite_continuity(self) -> None:
+        # Guardrail for the benign-write allowlist: pytest's own cache churn must
+        # NOT be mistaken for suite drift, or the mitigation is unusable.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _repo(tmp)
+            r = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1  # benign\n"),
+                require_suite_continuity=True,
+            )
+            self.assertEqual(r.verdict, PASS, r.reason)
+
 
 class AssuranceProfileTests(unittest.TestCase):
     def test_every_run_carries_an_honest_assurance_profile(self) -> None:
