@@ -45,6 +45,32 @@ contents. It proves the declared bundle path, size, and digest binding.
 Establishing that those bytes faithfully embody the declared source identities
 is an external evaluator/launcher responsibility.
 
+## Quickstart — see it run
+
+Before assembling a real held-out corpus, an evaluator can watch the whole
+commit → freeze → score chain execute end to end against a small synthetic
+corpus:
+
+```bash
+python -m tools.evaluation.blind_eval_demo --out-dir ./blind-demo-run
+```
+
+`tools/evaluation/blind_eval_demo.py` builds a five-case illustrative manifest,
+generates three cryptographically distinct signing keypairs (label authority,
+verdict finalizer, execution freezer), signs canned verdict records and an
+ordinary-CI baseline for each case, then drives the real `commit-labels`,
+`freeze-predictions`, and `score-reveal` phases into the output directory. It
+prints the confusion matrix and Wilson intervals the scorer computes and writes
+the same `public-label-commitment.json`, `frozen-predictions.json`, and
+`score-report.json` artifacts a real round produces.
+
+The demo exists to prove the mechanism runs and that the worked example never
+silently rots, not to measure Guard. Its corpus is fabricated to populate every
+confusion cell, its three "authorities" are the same process, and its report
+therefore still records `externally_declared_not_verified_by_tool`. **The
+printed numbers are illustrative and carry no efficacy claim.** A real round
+replaces every input with externally controlled ones, per the sections below.
+
 ## Inputs
 
 The UTF-8 case manifest is strict JSON:
