@@ -50,15 +50,15 @@
   "benchmark_id": "live-labelled-corpus-global-phases-contained-worker-v5",
   "claims": {
     "authenticated": false,
-    "content_identity": "source-and-results-git-commits-plus-content-digests",
-    "evidence_commit_bound": true,
+    "content_identity": "source-git-commit-plus-content-digests",
+    "evidence_commit_bound": false,
     "evidence_status": "self_consistent_unattributed",
     "execution_authenticity_claim": false,
     "execution_source_snapshot_bound": true,
     "final_manifest_in_evidence_commit": false,
     "general_performance_claim": false,
     "installed_environment_matches_lock": false,
-    "source_and_results_commit_bound": true,
+    "source_and_results_commit_bound": false,
     "source_commit_bound": true,
     "source_snapshot_matches_worktree_at_manifest_build": true
   },
@@ -99,7 +99,7 @@
   },
   "engine_version": "4.7.0.dev0",
   "environment": {
-    "captured_at_utc": "2026-08-27T15:08:22.094173Z",
+    "captured_at_utc": "2026-08-27T18:48:05.221724Z",
     "case_interpreter": {
       "build": [
         "main",
@@ -125,7 +125,7 @@
     },
     "execution_environment": {
       "all_non_allowlisted_parent_keys_removed": true,
-      "effective_environment_sha256": "58081b8f932e4a16a685be64b2e2d04d3f5baffe685a0e5fc485ec4a56770390",
+      "effective_environment_sha256": "54486eb192b6c7745bf1847231931ca0b8c45ab06a261ca0ea9fe13731244c49",
       "effective_key_names": [
         "LC_CTYPE",
         "NO_COLOR",
@@ -149,7 +149,7 @@
       ],
       "inherited_value_sha256": {
         "LC_CTYPE": "99fed2d548c2eb1022f4067f97fe838a2c3ea60ee0e0f53086788505c3ababad",
-        "PATH": "f4207409c07d2dc178fead2fa9b01eace7bd1bb50608b8d523a8ffa15139487c"
+        "PATH": "dc45d4beca579a18debf681cefcde4f5029ca5f1221a7f8697a156f8d835d5c9"
       },
       "removed_influential_keys_present": [
         "GIT_CONFIG_COUNT",
@@ -162,8 +162,8 @@
       "cpu_count": 4,
       "machine": "x86_64",
       "name": "posix",
-      "platform": "Linux-6.18.44-fc-v21-x86_64-with-glibc2.39",
-      "release": "6.18.44-fc-v21",
+      "platform": "Linux-6.18.44-fc-v22-x86_64-with-glibc2.39",
+      "release": "6.18.44-fc-v22",
       "system": "Linux"
     },
     "tools": {
@@ -265,7 +265,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "e65b4b7a4cf7e4daf2ea962582315f9e824aa5b6",
+    "head": "a4ed9080cabda9aba36ba4600ed2fdac128fea62",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -313,22 +313,12 @@
     "tp": 10
   },
   "provenance": {
-    "evidence_commit": {
-      "binding": "git-commit",
-      "bound": true,
-      "commit": "d453268b93b640541164a2d6fd07dfc59676dda5",
-      "final_manifest_in_commit": false,
-      "observation_point": "after results commit and before final manifest publication",
-      "reason": "source_and_results_match_commit_final_manifest_excluded",
-      "results_match_commit": true,
-      "source_inventory_matches_commit": true,
-      "source_paths_match_commit": true
-    },
+    "evidence_commit": null,
     "final_manifest_in_evidence_commit": false,
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "e65b4b7a4cf7e4daf2ea962582315f9e824aa5b6",
+      "commit": "a4ed9080cabda9aba36ba4600ed2fdac128fea62",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -340,13 +330,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14816,
+    "bytes": 14818,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "9aab092b7b10d97b6526a8fb7b89602ceba901ba36d418865405ad0233f2115a"
+    "sha256": "cffb196009ed015a7abd4b2752fbabbc4200c4efd747257aed61586e0968276e"
   },
-  "run_id": "9b4f6f87-1407-4bc0-9745-d35b6c9a30bb",
+  "run_id": "2f925ed4-be4b-4223-bef4-0b6a722d393a",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -1413,9 +1403,9 @@
         "sha256": "f471c0d04d828286ad5663c9d68604f456202b403211ba36108b0fe903030eb1"
       },
       {
-        "bytes": 82679,
+        "bytes": 85524,
         "path": "evoom_guard/verifiers/repo_verifier.py",
-        "sha256": "6121e5a0029122a7f94601fc163316bfcac3e87c28ab577f6e3b7497eac0c9a8"
+        "sha256": "5857612a2def829d2dc70b0adddf024ee4774a9c825179f3d694f184144cadf5"
       },
       {
         "bytes": 18600,
@@ -1462,13 +1452,13 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "e83f6efac5945fa6c2a7f7b250ffc4f4644199ba1e408127ddf08fc032b475ad",
-    "total_bytes": 3078049
+    "sha256": "7d3adb1dfcd0183d6d23e3e57ba50a90285819f48150088ecc6538a41d5a94fa",
+    "total_bytes": 3080894
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.268,
-    "guard_full_run_median_s": 0.313,
-    "guard_full_run_p95_s": 0.352,
+    "controlled_direct_pytest_median_s": 0.195,
+    "guard_full_run_median_s": 0.23,
+    "guard_full_run_p95_s": 0.242,
     "pre_gate_only_median_s": 0.003,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }
