@@ -85,6 +85,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Any, TypedDict, cast
 
@@ -1028,6 +1029,163 @@ class RepoVerifier:
         finally:
             self._active_docker_image.reset(image_token)
 
+    # ------------------------------------------------------------------ #
+    # Assertion-liveness (catalog row 11b) lifecycle, factored out of
+    # ``_verify`` so the main flow stays readable: a pre-suite preflight, a
+    # suite-environment tweak, and an after-suite tamper check. Each is a no-op
+    # when ``--require-assert-liveness`` is off, so the default path is unchanged.
+    def _assert_liveness_preflight(
+        self,
+        *,
+        problem: RepoProblem | dict,
+        copy: str,
+        changed: list[str],
+        setup_isolation: object,
+        runtime_evidence: Callable[[], dict[str, Any]],
+    ) -> VerdictResult | None:
+        """Refuse a non-pytest command loudly, else install the judge-owned canary.
+
+        Returns a terminal ``VerdictResult`` when the flag is set on a non-pytest
+        command (a requested security control must never silently no-op); ``None``
+        to proceed. The canary is written into the prepared copy *before* the
+        continuity baseline, so it is part of the judged tree (and, under docker's
+        read-only mount, untamperable at runtime).
+        """
+
+        if not self.require_assert_liveness:
+            return None
+        base_command = self._base_command(problem)
+        if not assert_liveness.command_is_pytest(base_command):
+            return VerdictResult(
+                passed=False,
+                score=0.0,
+                diagnostics=(
+                    "--require-assert-liveness needs a pytest test command "
+                    "(the assertion-liveness canary is a pytest file); the "
+                    f"configured command is not pytest: {base_command}"
+                ),
+                artifact={
+                    "files_changed": changed,
+                    "outcome": "assert_liveness_unavailable",
+                    "setup_isolation": setup_isolation,
+                    **runtime_evidence(),
+                },
+            )
+        assert_liveness.install_into(copy)
+        return None
+
+    def _suite_env_with_liveness(
+        self, env: dict[str, str], copy: str
+    ) -> dict[str, str]:
+        """Prepend the judge-owned ``.evoguard/`` dir to ``PYTHONPATH`` when required.
+
+        Only that directory is added, so the canary plugin loads via ``-p`` under
+        any pytest invocation form without shadowing a repository or stdlib module.
+        A no-op when the flag is off.
+        """
+
+        if not self.require_assert_liveness:
+            return env
+        return assert_liveness.prepend_pythonpath(
+            env, os.path.join(copy, assert_liveness.CANARY_DIRNAME)
+        )
+
+    def _assert_liveness_tamper(
+        self,
+        *,
+        report_path: str,
+        changed: list[str],
+        setup_isolation: object,
+        runtime_evidence: Callable[[], dict[str, Any]],
+    ) -> VerdictResult | None:
+        """Grade TAMPERED when the judge-owned canary node itself failed.
+
+        A canary failure means candidate-imported code neutered the assertion
+        machinery, so the report's *passes* cannot be trusted — this is tamper,
+        not a plain ``tests_failed``. Returns ``None`` to fold back into the
+        ordinary grading path.
+        """
+
+        if not self.require_assert_liveness:
+            return None
+        if not canary_case_failed(
+            _read_text_or_none(report_path) or "",
+            assert_liveness.CANARY_TESTID,
+        ):
+            return None
+        return VerdictResult(
+            passed=False,
+            score=0.0,
+            diagnostics=(
+                "the assertion-liveness canary "
+                f"({assert_liveness.CANARY_TESTID}) failed: candidate-"
+                "imported code neutered the test framework's assertion "
+                "methods, so the suite's reported passes are not trustworthy"
+            ),
+            artifact={
+                "files_changed": changed,
+                "outcome": "assertion_liveness_failed",
+                "tamper": True,
+                "setup_isolation": setup_isolation,
+                **runtime_evidence(),
+            },
+        )
+
+    # ------------------------------------------------------------------ #
+    def _verify_after_suite_continuity(
+        self,
+        *,
+        runtime_continuity: RepoRuntimeContinuity,
+        changed: list[str],
+        setup_isolation: object,
+        runtime_evidence: Callable[[], dict[str, Any]],
+        pack_sha256: str | None,
+        pack_manifest: dict[str, Any] | None,
+    ) -> VerdictResult | None:
+        """Re-verify the judged tree's identity after the suite.
+
+        Returns a terminal ``TAMPERED`` ``VerdictResult`` when the runtime tree
+        drifted during the run (a mid-run rewrite of a judged path or a
+        verification error), ``None`` when the tree is intact or no baseline was
+        captured. Behaviour-preserving extraction of the after-suite continuity
+        boundary from ``_verify``.
+        """
+
+        if runtime_continuity.baseline is None:
+            return None
+        runtime_failure = runtime_continuity.verify_after_suite()
+        if runtime_failure is None:
+            return None
+        if runtime_failure.kind == "verification_error":
+            return VerdictResult(
+                passed=False,
+                score=0.0,
+                diagnostics=runtime_failure.diagnostics,
+                artifact={
+                    "files_changed": changed,
+                    "outcome": "candidate_tree_changed",
+                    "tamper": True,
+                    "setup_isolation": setup_isolation,
+                    **runtime_evidence(),
+                },
+            )
+        assert runtime_failure.kind == "suite_drift"
+        return VerdictResult(
+            passed=False,
+            score=0.0,
+            diagnostics=runtime_failure.diagnostics,
+            artifact={
+                "files_changed": changed,
+                "outcome": "candidate_tree_changed",
+                "tamper": True,
+                "candidate_fidelity_changes": list(runtime_failure.changes),
+                "verifier_pack_sha256": pack_sha256,
+                "verifier_pack_manifest": pack_manifest,
+                "setup_isolation": setup_isolation,
+                **runtime_evidence(),
+            },
+        )
+
     def _verify(
         self,
         hypothesis: str,
@@ -1492,32 +1650,18 @@ class RepoVerifier:
                     ),
                 )
 
-            # Assertion-liveness (catalog row 11b): append the judge-owned canary to
-            # the pytest command so a candidate that neuters unittest assertions is
-            # caught instead of yielding a false PASS. Refuse loudly on a non-pytest
-            # command rather than silently skip a requested security control. The
-            # canary is written into the prepared copy *before* the continuity
-            # baseline below, so it is part of the judged tree (and, under docker's
-            # read-only mount, untamperable at runtime).
-            if self.require_assert_liveness:
-                base_command = self._base_command(problem)
-                if not assert_liveness.command_is_pytest(base_command):
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=(
-                            "--require-assert-liveness needs a pytest test command "
-                            "(the assertion-liveness canary is a pytest file); the "
-                            f"configured command is not pytest: {base_command}"
-                        ),
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "assert_liveness_unavailable",
-                            "setup_isolation": setup_isolation,
-                            **runtime_evidence(),
-                        },
-                    )
-                assert_liveness.install_into(copy)
+            # Assertion-liveness (catalog row 11b): refuse a non-pytest command and
+            # install the judge-owned canary into the prepared copy *before* the
+            # continuity baseline below. See ``_assert_liveness_preflight``.
+            liveness_refusal = self._assert_liveness_preflight(
+                problem=problem,
+                copy=copy,
+                changed=changed,
+                setup_isolation=setup_isolation,
+                runtime_evidence=runtime_evidence,
+            )
+            if liveness_refusal is not None:
+                return liveness_refusal
 
             if runtime_continuity.required:
                 capture_failure = runtime_continuity.capture_baseline()
@@ -1535,17 +1679,12 @@ class RepoVerifier:
                     )
 
             # Execute the repository suite first, but preserve runtime identity
-            # verification below before any JUnit report is interpreted.
-            suite_env = create_judge_phase_environment(workdir, "repo-suite")
-            if self.require_assert_liveness:
-                # Put the judge-owned .evoguard/ directory on PYTHONPATH so the
-                # canary plugin loads via ``-p`` under any pytest invocation form
-                # (the console script does not put the working directory on the
-                # path the way ``python -m pytest`` does). Only that directory is
-                # added, so no repository or stdlib module can be shadowed.
-                suite_env = assert_liveness.prepend_pythonpath(
-                    suite_env, os.path.join(copy, assert_liveness.CANARY_DIRNAME)
-                )
+            # verification below before any JUnit report is interpreted. When
+            # assertion-liveness is required, the suite environment carries the
+            # judge-owned canary directory on PYTHONPATH (see ``_suite_env_with_liveness``).
+            suite_env = self._suite_env_with_liveness(
+                create_judge_phase_environment(workdir, "repo-suite"), copy
+            )
             suite_execution = execute_repo_suite(
                 RepoSuiteExecutionRequest(
                     candidate_copy=copy,
@@ -1605,75 +1744,33 @@ class RepoVerifier:
             )
             assert suite_isolation_evidence is not None
 
-            if runtime_continuity.baseline is not None:
-                runtime_failure = runtime_continuity.verify_after_suite()
-                if (
-                    runtime_failure is not None
-                    and runtime_failure.kind == "verification_error"
-                ):
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=runtime_failure.diagnostics,
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "candidate_tree_changed",
-                            "tamper": True,
-                            "setup_isolation": setup_isolation,
-                            **runtime_evidence(),
-                        },
-                    )
-                if runtime_failure is not None:
-                    assert runtime_failure.kind == "suite_drift"
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=runtime_failure.diagnostics,
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "candidate_tree_changed",
-                            "tamper": True,
-                            "candidate_fidelity_changes": list(
-                                runtime_failure.changes
-                            ),
-                            "verifier_pack_sha256": pack_sha256,
-                            "verifier_pack_manifest": pack_manifest,
-                            "setup_isolation": setup_isolation,
-                            **runtime_evidence(),
-                        },
-                    )
+            continuity_drift = self._verify_after_suite_continuity(
+                runtime_continuity=runtime_continuity,
+                changed=changed,
+                setup_isolation=setup_isolation,
+                runtime_evidence=runtime_evidence,
+                pack_sha256=pack_sha256,
+                pack_manifest=pack_manifest,
+            )
+            if continuity_drift is not None:
+                return continuity_drift
             # With no verifier pack, a clean after-suite check is the terminal
             # continuity boundary (an opt-in require_suite_continuity run). This
             # is a no-op when a pack is configured — the pack path owns delivery.
             runtime_continuity.finalize_suite_only()
 
-            # Assertion-liveness (catalog row 11b): when the flag is set the
-            # judge-owned canary was appended to the suite. If its own node failed
-            # in the judge-owned report, candidate-imported code neutered the
-            # assertion machinery, so the report's *passes* cannot be trusted — this
-            # is tamper, not a plain test failure. Grade TAMPERED with a distinct
-            # reason rather than letting it fold into ``tests_failed``.
-            if self.require_assert_liveness and canary_case_failed(
-                _read_text_or_none(completed_suite.report_path) or "",
-                assert_liveness.CANARY_TESTID,
-            ):
-                return VerdictResult(
-                    passed=False,
-                    score=0.0,
-                    diagnostics=(
-                        "the assertion-liveness canary "
-                        f"({assert_liveness.CANARY_TESTID}) failed: candidate-"
-                        "imported code neutered the test framework's assertion "
-                        "methods, so the suite's reported passes are not trustworthy"
-                    ),
-                    artifact={
-                        "files_changed": changed,
-                        "outcome": "assertion_liveness_failed",
-                        "tamper": True,
-                        "setup_isolation": setup_isolation,
-                        **runtime_evidence(),
-                    },
-                )
+            # Assertion-liveness (catalog row 11b): if the judge-owned canary node
+            # failed, the assertion machinery was neutered — grade TAMPERED with a
+            # distinct reason rather than folding into ``tests_failed``. See
+            # ``_assert_liveness_tamper``.
+            liveness_tamper = self._assert_liveness_tamper(
+                report_path=completed_suite.report_path,
+                changed=changed,
+                setup_isolation=setup_isolation,
+                runtime_evidence=runtime_evidence,
+            )
+            if liveness_tamper is not None:
+                return liveness_tamper
 
             repo_phase = interpret_repo_suite(
                 RepoSuiteInterpretationRequest(
