@@ -132,6 +132,7 @@ def test_success_serializes_and_forwards_every_historical_input(
         "require_demonstrated_fix",
         "strict_harness",
         "require_suite_continuity",
+        "require_assert_liveness",
         "file_blocks",
     ]
     assert call["kwargs"] == {
@@ -164,6 +165,7 @@ def test_success_serializes_and_forwards_every_historical_input(
         "require_demonstrated_fix": True,
         "strict_harness": True,
         "require_suite_continuity": True,
+        "require_assert_liveness": True,
         "file_blocks": {"app.py": "VALUE = 2\n"},
         "test_command_identity": True,
         "setup_command_identity": True,

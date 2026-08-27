@@ -88,6 +88,7 @@ class _GuardCall(Protocol[_ResultCo]):
         operating_profile: str | None = ...,
         harness_inputs: tuple[str, ...] = ...,
         require_suite_continuity: bool = ...,
+        require_assert_liveness: bool = ...,
     ) -> _ResultCo: ...
 
 
@@ -129,6 +130,7 @@ class _GuardFromDiffCall(Protocol[_ResultCo]):
         operating_profile: str | None = ...,
         harness_inputs: tuple[str, ...] = ...,
         require_suite_continuity: bool = ...,
+        require_assert_liveness: bool = ...,
     ) -> tuple[_ResultCo, list[str]]: ...
 
 
@@ -384,6 +386,9 @@ def execute_guard_command(
     # straight from the flag rather than through the verified base policy.
     require_suite_continuity = bool(
         getattr(args, "require_suite_continuity", False)
+    )
+    require_assert_liveness = bool(
+        getattr(args, "require_assert_liveness", False)
     )
 
     if blackbox_only and not blackbox:
@@ -702,6 +707,7 @@ def execute_guard_command(
             require_demonstrated_fix=require_demonstrated_fix,
             strict_harness=strict_harness,
             require_suite_continuity=require_suite_continuity,
+            require_assert_liveness=require_assert_liveness,
             **profile_options,
             **harness_input_options,
         )
@@ -768,6 +774,7 @@ def execute_guard_command(
                     require_demonstrated_fix=require_demonstrated_fix,
                     strict_harness=strict_harness,
                     require_suite_continuity=require_suite_continuity,
+                    require_assert_liveness=require_assert_liveness,
                     **profile_options,
                     **harness_input_options,
                 )
@@ -810,6 +817,7 @@ def execute_guard_command(
             require_demonstrated_fix=require_demonstrated_fix,
             strict_harness=strict_harness,
             require_suite_continuity=require_suite_continuity,
+            require_assert_liveness=require_assert_liveness,
             **profile_options,
             **harness_input_options,
         )

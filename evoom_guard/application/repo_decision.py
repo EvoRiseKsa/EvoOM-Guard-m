@@ -53,6 +53,10 @@ OUTCOME_REASON_POLICY: Mapping[str, tuple[str, str]] = MappingProxyType(
         "setup_failed": (ERROR, REASON_SETUP_FAILED),
         "runtime_containment_error": (ERROR, REASON_RUNTIME_CLEANUP_FAILED),
         "isolation_unavailable": (ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET),
+        "assert_liveness_unavailable": (
+            ERROR,
+            REASON_ASSURANCE_REQUIREMENT_NOT_MET,
+        ),
         "runtime_identity_unavailable": (
             ERROR,
             REASON_ASSURANCE_REQUIREMENT_NOT_MET,

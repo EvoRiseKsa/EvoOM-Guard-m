@@ -266,6 +266,39 @@ git diff main...HEAD | evo-guard guard --diff - --no-config \
 This is not a policy field: like `--sign-key`, it is a trusted-local control and
 is never taken from candidate-controlled workflow input on a pull request.
 
+### Assertion liveness: `--require-assert-liveness` (opt-in, pytest)
+
+Candidate-imported source can monkeypatch the test framework's assertion methods
+(`unittest.TestCase.assertEqual → no-op`) at import time, so a genuinely broken
+suite *honestly* reports all-pass — nothing for the report/exit tamper check to
+catch (reward-hacking catalog row 11b / threat-model class D).
+
+`--require-assert-liveness` closes this for a **pytest** run. The gate installs a
+judge-owned pytest plugin and an assertion-liveness canary into a `.evoguard/`
+directory inside the prepared copy, puts that directory on `PYTHONPATH`, and loads
+the plugin with `-p assert_liveness_plugin`. The plugin **adds** the canary to
+whatever the command already collects — it never replaces the repository's own
+`testpaths`, so the real suite still runs — and the canary runs in the same
+session, the only place the monkeypatch is active. The canary probes the neutable
+assertion methods and enforces with a bare `assert` (a statement the candidate
+cannot rebind), so a neutered run is a `FAIL` instead of a false `PASS`.
+
+```bash
+git diff main...HEAD | evo-guard guard --diff - --no-config \
+  --require-assert-liveness \
+  --test-command "python -m pytest -q"
+```
+
+- **pytest-only.** A non-pytest test command with the flag set is refused
+  (`ERROR`) before any suite runs — a requested security control never silently
+  no-ops.
+- **Tamper-resistance.** Under `--isolation docker` the copy mounts read-only, so
+  the plugin and canary cannot be rewritten or deleted at runtime; the default
+  same-process profile catches the demonstrated naive neuter but is not immune to a
+  canary-aware in-process rewrite (the same in-process boundary as report forgery).
+- Like `--require-suite-continuity`, this is a trusted-local control, not a policy
+  field, and is never taken from candidate-controlled workflow input.
+
 ### `--diff` safety (for untrusted PRs)
 
 `--diff` has only the candidate checkout available, so it deliberately refuses

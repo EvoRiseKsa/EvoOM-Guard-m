@@ -185,6 +185,7 @@ from evoom_guard.runtime_identity import (
     capture_runtime_identity,
     verify_runtime_identity,
 )
+from evoom_guard.verifiers import assert_liveness
 from evoom_guard.verifiers.diagnostics import distill_diagnostics
 from evoom_guard.verifiers.fidelity import (
     _DEFAULT_SETUP_OUTPUT_DIRS as _DEFAULT_SETUP_OUTPUT_DIRS,
@@ -742,6 +743,7 @@ class RepoVerifier:
         strict_harness: bool = False,
         harness_inputs: tuple[str, ...] = (),
         require_suite_continuity: bool = False,
+        require_assert_liveness: bool = False,
     ) -> None:
         validate_isolation_mode(isolation)
         self.timeout = timeout
@@ -785,6 +787,12 @@ class RepoVerifier:
         # pack is configured. Default off, so the ordinary subprocess path is
         # unchanged; intended for trusted suites that never write into the tree.
         self.require_suite_continuity = require_suite_continuity
+        # Opt-in trusted-repository control: auto-inject the judge-owned
+        # assertion-liveness canary (catalog row 11b) into the pytest command so a
+        # candidate that neuters unittest assertions is caught instead of yielding a
+        # false PASS. Default off; pytest-only (a non-pytest command with this set is
+        # refused before any suite runs). See evoom_guard/verifiers/assert_liveness.py.
+        self.require_assert_liveness = require_assert_liveness
         # Command wrappers and explicitly declared helper files are judge-owned
         # and cannot be waived through the ordinary adopter allowlist.
         self.harness_inputs = normalize_harness_inputs(harness_inputs)
@@ -814,7 +822,7 @@ class RepoVerifier:
         )
 
     # ------------------------------------------------------------------ #
-    def _command(self, problem: RepoProblem | dict) -> list[str]:
+    def _base_command(self, problem: RepoProblem | dict) -> list[str]:
         cmd = self.test_command or problem.get("test_command")
         if isinstance(cmd, str):
             return cmd.split()
@@ -822,6 +830,19 @@ class RepoVerifier:
             return list(cmd)
         python = "python" if self.isolation in ("docker", "gvisor") else sys.executable
         return [python, "-m", "pytest", "-q", "--color=no", "-p", "no:cacheprovider"]
+
+    # ------------------------------------------------------------------ #
+    def _command(self, problem: RepoProblem | dict) -> list[str]:
+        base = self._base_command(problem)
+        # When assertion-liveness is required, load the judge-owned canary plugin
+        # (``-p assert_liveness_plugin``) rather than a positional test path: a
+        # positional path would suppress the repository's own testpaths collection
+        # and skip the real suite, whereas the plugin appends the canary to whatever
+        # is already collected. The non-pytest case is refused earlier in ``verify``
+        # before any suite runs; the guard here keeps a non-pytest command untouched.
+        if self.require_assert_liveness and assert_liveness.command_is_pytest(base):
+            return [*base, *assert_liveness.plugin_command_args()]
+        return base
 
     # ------------------------------------------------------------------ #
     def _docker_command(
@@ -854,6 +875,11 @@ class RepoVerifier:
             docker += ["-v", f"{outdir}:/out:rw"]
         if pack_dir is not None:
             docker += ["-v", f"{pack_dir}:/verifier-pack:ro"]
+        if self.require_assert_liveness:
+            # The copy mounts read-only at /work, so the judge-owned canary plugin
+            # in /work/.evoguard is untamperable; put that directory on PYTHONPATH
+            # so ``-p assert_liveness_plugin`` loads inside the container.
+            docker += ["-e", f"PYTHONPATH=/work/{assert_liveness.CANARY_DIRNAME}"]
         getuid = getattr(os, "getuid", None)
         getgid = getattr(os, "getgid", None)
         if callable(getuid) and callable(getgid):
@@ -1463,6 +1489,33 @@ class RepoVerifier:
                     ),
                 )
 
+            # Assertion-liveness (catalog row 11b): append the judge-owned canary to
+            # the pytest command so a candidate that neuters unittest assertions is
+            # caught instead of yielding a false PASS. Refuse loudly on a non-pytest
+            # command rather than silently skip a requested security control. The
+            # canary is written into the prepared copy *before* the continuity
+            # baseline below, so it is part of the judged tree (and, under docker's
+            # read-only mount, untamperable at runtime).
+            if self.require_assert_liveness:
+                base_command = self._base_command(problem)
+                if not assert_liveness.command_is_pytest(base_command):
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=(
+                            "--require-assert-liveness needs a pytest test command "
+                            "(the assertion-liveness canary is a pytest file); the "
+                            f"configured command is not pytest: {base_command}"
+                        ),
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "assert_liveness_unavailable",
+                            "setup_isolation": setup_isolation,
+                            **runtime_evidence(),
+                        },
+                    )
+                assert_liveness.install_into(copy)
+
             if runtime_continuity.required:
                 capture_failure = runtime_continuity.capture_baseline()
                 if capture_failure is not None:
@@ -1481,6 +1534,15 @@ class RepoVerifier:
             # Execute the repository suite first, but preserve runtime identity
             # verification below before any JUnit report is interpreted.
             suite_env = create_judge_phase_environment(workdir, "repo-suite")
+            if self.require_assert_liveness:
+                # Put the judge-owned .evoguard/ directory on PYTHONPATH so the
+                # canary plugin loads via ``-p`` under any pytest invocation form
+                # (the console script does not put the working directory on the
+                # path the way ``python -m pytest`` does). Only that directory is
+                # added, so no repository or stdlib module can be shadowed.
+                suite_env = assert_liveness.prepend_pythonpath(
+                    suite_env, os.path.join(copy, assert_liveness.CANARY_DIRNAME)
+                )
             suite_execution = execute_repo_suite(
                 RepoSuiteExecutionRequest(
                     candidate_copy=copy,

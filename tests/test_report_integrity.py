@@ -27,7 +27,7 @@ import os
 import tempfile
 import unittest
 
-from evoom_guard.guard import FAIL, PASS, TAMPERED, guard
+from evoom_guard.guard import ERROR, FAIL, PASS, TAMPERED, guard
 
 
 def _write(root: str, rel: str, content: str) -> None:
@@ -196,6 +196,64 @@ class InProcessForgeryIsTheKnownBoundary(unittest.TestCase):
                 test_command=["python", "-m", "pytest", "tests/test_m.py", "-q", _CANARY],
             )
             self.assertEqual(r.verdict, PASS, r.reason)
+
+
+class RequireAssertLivenessClosesNeutering(unittest.TestCase):
+    """``guard --require-assert-liveness`` auto-injects the canary (catalog 11b)."""
+
+    def test_the_flag_turns_a_neuter_false_pass_into_a_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            # Without the flag the neuter is the documented false PASS (boundary).
+            boundary = guard(repo, _block("pkg/m.py", _ASSERT_NEUTER))
+            self.assertEqual(boundary.verdict, PASS)
+            # With the flag the auto-injected canary fails, so the run FAILs.
+            r = guard(
+                repo,
+                _block("pkg/m.py", _ASSERT_NEUTER),
+                require_assert_liveness=True,
+            )
+            self.assertEqual(r.verdict, FAIL, r.reason)
+
+    def test_the_flag_keeps_an_honest_suite_passing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            r = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1  # benign\n"),
+                require_assert_liveness=True,
+            )
+            self.assertEqual(r.verdict, PASS, r.reason)
+
+    def test_the_flag_does_not_suppress_the_repository_suite(self) -> None:
+        # A genuine break (no neuter) with the flag must still FAIL: the plugin adds
+        # the canary to the collected suite, it does not replace collection, so the
+        # real tests still run alongside it.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            r = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 2\n"),
+                require_assert_liveness=True,
+            )
+            self.assertEqual(r.verdict, FAIL, r.reason)
+            # the repository test AND the canary were both collected
+            self.assertIsNotNone(r.tests_total)
+            assert r.tests_total is not None
+            self.assertGreaterEqual(r.tests_total, 2)
+
+    def test_the_flag_refuses_a_non_pytest_command(self) -> None:
+        # A requested security control must fail loud, never silently no-op, when it
+        # cannot be applied to the configured runner.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            r = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1\n"),
+                test_command=["bash", "-c", "true"],
+                require_assert_liveness=True,
+            )
+            self.assertEqual(r.verdict, ERROR, r.reason)
 
 
 class SuiteContinuityClosesMidRunRewrite(unittest.TestCase):

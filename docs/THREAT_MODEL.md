@@ -101,16 +101,31 @@ monkeypatch runs inside whatever process executes the candidate-imported suite. 
 independent of candidate-imported modules: a pack that asserts with bare `assert`
 statements cannot be neutered by monkeypatching `unittest`/`pytest` assertion
 methods, because `assert` is a language statement, not a callable the candidate can
-rebind. A repo-native **assertion-liveness canary** now ships for this: append the
-judge-owned `benchmarks/self_proof/assert_liveness_canary.py` to the test command
-and it runs in the *same* pytest session as the suite, so the process-wide
-monkeypatch is active — it probes the neutable `unittest.TestCase` assertion methods
-and enforces the verdict with a bare `assert`, so a neutered run fails instead of
-yielding a false `PASS`. Verified end-to-end through the real gate by
+rebind. A repo-native **assertion-liveness canary** ships for this, two ways:
+
+- **Auto-injected** with `guard --require-assert-liveness` (pytest-only). The gate
+  installs a judge-owned pytest plugin and the canary into a `.evoguard/` directory
+  inside the prepared copy, puts it on `PYTHONPATH`, and loads it with
+  `-p assert_liveness_plugin`. The plugin *adds* the canary to whatever the command
+  already collects (it never replaces `testpaths`, so the repository suite still
+  runs), and the canary runs in the same session — the only place the monkeypatch is
+  active. Under `--isolation docker` the copy mounts read-only, so the plugin and
+  canary are untamperable at runtime; the default subprocess profile catches the
+  demonstrated naive neuter but is not immune to a canary-aware in-process rewrite. A
+  non-pytest command with the flag set is refused (`ERROR`) before any suite runs,
+  rather than silently skipping the control.
+- **Manually**, by appending the judge-owned
+  [`benchmarks/self_proof/assert_liveness_canary.py`](../benchmarks/self_proof/assert_liveness_canary.py)
+  to your own pytest command (useful outside the gate).
+
+The canary probes the neutable `unittest.TestCase` assertion methods and enforces
+with a bare `assert`, so a neutered run fails instead of yielding a false `PASS`.
+Verified end-to-end through the real gate by
 [`benchmarks/self_proof/assert_liveness.py`](../benchmarks/self_proof/assert_liveness.py)
-(neuter without the canary → false `PASS`; with the canary appended → `FAIL`); an
-honest suite with the canary appended still passes. Auto-injection of the canary
-behind a `--require-assert-liveness` flag is a tracked follow-up. See catalog row 11b.
+(neuter without the canary → false `PASS`; with it → `FAIL`) and by
+`tests/test_report_integrity.py` (the flag turns the neuter into a `FAIL`, keeps an
+honest suite passing, does not suppress the repository suite, and refuses a
+non-pytest command). See catalog row 11b.
 
 ### E. Mid-run mutation of a protected judging file — boundary by default, closed by continuity
 
@@ -135,7 +150,7 @@ the verifier-pack path keeps the strict exact-tree identity.)
 | A. Judging-file tamper | ✅ rejected pre-execution | ✅ rejected pre-execution |
 | B. Verdict-channel forgery | ✅ `FAIL`/`TAMPERED` | ✅ `FAIL`/`TAMPERED` |
 | C. Report+exit co-forgery | ⚠️ boundary (`known_gap`) | ✅ external report, isolated |
-| D. Assertion-neutering | ⚠️ boundary; ✅ with the shipped canary appended | ✅ judge-owned pack (bare `assert`) or canary |
+| D. Assertion-neutering | ⚠️ boundary; ✅ with `--require-assert-liveness` (auto-injected canary) | ✅ judge-owned pack (bare `assert`) or `--require-assert-liveness` under docker |
 | E. Mid-run protected-file rewrite | ⚠️ boundary (continuity off) | ✅ `suite_drift` / continuity |
 
 A default `PASS` therefore carries `report_integrity:

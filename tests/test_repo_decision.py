@@ -113,6 +113,10 @@ def test_outcome_policy_tables_are_exact_and_immutable() -> None:
         "setup_failed": (ERROR, REASON_SETUP_FAILED),
         "runtime_containment_error": (ERROR, REASON_RUNTIME_CLEANUP_FAILED),
         "isolation_unavailable": (ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET),
+        "assert_liveness_unavailable": (
+            ERROR,
+            REASON_ASSURANCE_REQUIREMENT_NOT_MET,
+        ),
         "runtime_identity_unavailable": (
             ERROR,
             REASON_ASSURANCE_REQUIREMENT_NOT_MET,

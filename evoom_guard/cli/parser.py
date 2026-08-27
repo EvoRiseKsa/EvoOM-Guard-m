@@ -288,6 +288,17 @@ def build_parser(
         "write into the judged tree, since ordinary writes (caches, coverage "
         "files) would be reported as tampering",
     )
+    g_p.add_argument(
+        "--require-assert-liveness",
+        dest="require_assert_liveness",
+        action="store_true",
+        default=False,
+        help="trusted-repository opt-in: auto-inject the judge-owned "
+        "assertion-liveness canary into the pytest command so a candidate that "
+        "neuters unittest assertions (catalog row 11b) is caught instead of "
+        "yielding a false PASS. pytest-only (a non-pytest test command is "
+        "refused); fully tamper-resistant under --isolation docker",
+    )
     g_p.add_argument("--json", dest="json_out", default=None, help="write the JSON verdict to this path")
     g_p.add_argument(
         "--sarif", default=None,
