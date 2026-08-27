@@ -76,6 +76,13 @@ def _block(path: str, content: str) -> str:
     return f"<<<FILE: {path}>>>\n{content}<<<END FILE>>>\n"
 
 
+# The shipped judge-owned assertion-liveness canary (row 11b defense-by-append).
+_CANARY = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "benchmarks", "self_proof", "assert_liveness_canary.py",
+)
+
+
 class StdoutForgeryStaysBlocked(unittest.TestCase):
     def test_printing_a_fake_pass_summary_does_not_move_the_verdict(self) -> None:
         # A failing test that also prints a convincing fake pytest summary.
@@ -155,6 +162,40 @@ class InProcessForgeryIsTheKnownBoundary(unittest.TestCase):
             )
             r = guard(repo, _block("pkg/m.py", _ASSERT_NEUTER), verifier_pack=pack)
             self.assertEqual(r.verdict, FAIL, r.reason)
+
+    def test_the_shipped_canary_appended_closes_assertion_neutering(self) -> None:
+        # The lighter-weight shipped defense for row 11b: append the judge-owned
+        # canary (benchmarks/self_proof/assert_liveness_canary.py) to the test
+        # command. It runs in the SAME session as the suite, so the process-wide
+        # monkeypatch is active; it probes the neutable methods, then a bare
+        # ``assert`` (a statement the candidate cannot rebind) enforces the verdict.
+        self.assertTrue(os.path.exists(_CANARY), _CANARY)
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            base = ["python", "-m", "pytest", "tests/test_m.py", "-q"]
+            # Control: WITHOUT the canary the neuter is a false PASS (the boundary).
+            control = guard(repo, _block("pkg/m.py", _ASSERT_NEUTER), test_command=base)
+            self.assertEqual(control.verdict, PASS, control.reason)
+            # WITH the canary appended it becomes a FAIL — the class is closed.
+            r = guard(
+                repo,
+                _block("pkg/m.py", _ASSERT_NEUTER),
+                test_command=[*base, _CANARY],
+            )
+            self.assertEqual(r.verdict, FAIL, r.reason)
+
+    def test_the_shipped_canary_is_silent_on_an_honest_suite(self) -> None:
+        # The canary must not manufacture failures when assertions are live — a
+        # benign change with the canary appended still passes.
+        self.assertTrue(os.path.exists(_CANARY), _CANARY)
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            r = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1  # benign\n"),
+                test_command=["python", "-m", "pytest", "tests/test_m.py", "-q", _CANARY],
+            )
+            self.assertEqual(r.verdict, PASS, r.reason)
 
 
 class SuiteContinuityClosesMidRunRewrite(unittest.TestCase):

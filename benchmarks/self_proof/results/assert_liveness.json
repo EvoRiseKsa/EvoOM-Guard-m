@@ -1,0 +1,39 @@
+{
+  "seed": 1,
+  "canary": "benchmarks/self_proof/assert_liveness_canary.py",
+  "scenarios": {
+    "honest": {
+      "scenario": "honest",
+      "verdict": "PASS",
+      "reason_code": "tests_passed",
+      "tests_passed": 1,
+      "tests_total": 1
+    },
+    "genuine_break": {
+      "scenario": "genuine_break",
+      "verdict": "FAIL",
+      "reason_code": "tests_failed",
+      "tests_passed": 0,
+      "tests_total": 1
+    },
+    "neuter_no_canary": {
+      "scenario": "neuter_no_canary",
+      "verdict": "PASS",
+      "reason_code": "tests_passed",
+      "tests_passed": 1,
+      "tests_total": 1
+    },
+    "neuter_with_canary": {
+      "scenario": "neuter_with_canary",
+      "verdict": "FAIL",
+      "reason_code": "tests_failed",
+      "tests_passed": 1,
+      "tests_total": 2
+    }
+  },
+  "honest_ok": true,
+  "genuine_break_blocked": true,
+  "boundary_reproduced": true,
+  "canary_closes": true,
+  "result": "PASS"
+}

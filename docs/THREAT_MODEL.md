@@ -101,9 +101,16 @@ monkeypatch runs inside whatever process executes the candidate-imported suite. 
 independent of candidate-imported modules: a pack that asserts with bare `assert`
 statements cannot be neutered by monkeypatching `unittest`/`pytest` assertion
 methods, because `assert` is a language statement, not a callable the candidate can
-rebind. A repo-native **assertion-liveness probe** (a judge-injected must-fail
-canary that flags tamper if it does not fail) is a *planned* enhancement, tracked
-in the issue tracker; it is not yet shipped. See catalog row 11b.
+rebind. A repo-native **assertion-liveness canary** now ships for this: append the
+judge-owned `benchmarks/self_proof/assert_liveness_canary.py` to the test command
+and it runs in the *same* pytest session as the suite, so the process-wide
+monkeypatch is active — it probes the neutable `unittest.TestCase` assertion methods
+and enforces the verdict with a bare `assert`, so a neutered run fails instead of
+yielding a false `PASS`. Verified end-to-end through the real gate by
+[`benchmarks/self_proof/assert_liveness.py`](../benchmarks/self_proof/assert_liveness.py)
+(neuter without the canary → false `PASS`; with the canary appended → `FAIL`); an
+honest suite with the canary appended still passes. Auto-injection of the canary
+behind a `--require-assert-liveness` flag is a tracked follow-up. See catalog row 11b.
 
 ### E. Mid-run mutation of a protected judging file — boundary by default, closed by continuity
 
@@ -128,7 +135,7 @@ the verifier-pack path keeps the strict exact-tree identity.)
 | A. Judging-file tamper | ✅ rejected pre-execution | ✅ rejected pre-execution |
 | B. Verdict-channel forgery | ✅ `FAIL`/`TAMPERED` | ✅ `FAIL`/`TAMPERED` |
 | C. Report+exit co-forgery | ⚠️ boundary (`known_gap`) | ✅ external report, isolated |
-| D. Assertion-neutering | ⚠️ boundary (repo-native suite) | ✅ judge-owned pack (bare `assert`) |
+| D. Assertion-neutering | ⚠️ boundary; ✅ with the shipped canary appended | ✅ judge-owned pack (bare `assert`) or canary |
 | E. Mid-run protected-file rewrite | ⚠️ boundary (continuity off) | ✅ `suite_drift` / continuity |
 
 A default `PASS` therefore carries `report_integrity:

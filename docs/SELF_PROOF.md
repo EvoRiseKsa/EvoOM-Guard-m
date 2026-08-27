@@ -57,6 +57,18 @@ unprotected source edits the gate agrees with a trivial honest-suite reference
 oracle.
 **Measured (80 bases):** 80/80 invariant, 80/80 agreement.
 
+### A defense closes the assertion-neutering boundary
+
+Assertion-neutering (catalog row 11b) is a documented boundary of the default
+profile: candidate-imported source monkeypatches the framework's assertion methods
+to no-ops, so a broken suite honestly reports all-pass. The shipped judge-owned
+**assertion-liveness canary** closes it — appended to the test command it runs in
+the same session, probes the neutable methods, and enforces with a bare `assert`.
+Proven end-to-end through the real gate by `benchmarks/self_proof/assert_liveness.py`.
+**Measured:** neuter without the canary → false `PASS` (the boundary reproduces);
+with the canary appended → `FAIL`; an honest suite with the canary appended still
+passes.
+
 ## Non-blocking external validation (optional, additive)
 
 Two more forms of assurance accrue **without blocking** on appointed reviewers:
@@ -70,8 +82,10 @@ Two more forms of assurance accrue **without blocking** on appointed reviewers:
 
 ## Honest limits
 
-* These cover **non-forgery** candidates. In-process report/assertion forgery is a
-  documented boundary of the default profile — see
+* The fuzzing and efficacy corpora cover **non-forgery** candidates. In-process
+  report forgery (row 11a) remains a documented boundary of the default profile;
+  assertion-neutering (row 11b) is a boundary of the *pack-less, canary-less*
+  default profile and is closed by appending the shipped canary (proven above). See
   [`THREAT_MODEL.md`](THREAT_MODEL.md) and the reward-hacking catalog
   ([`REWARD_HACKING_CATALOG.md`](REWARD_HACKING_CATALOG.md)).
 * They establish invariants and efficacy on a *mechanically* labeled corpus. They
