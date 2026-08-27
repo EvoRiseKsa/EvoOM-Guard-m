@@ -157,6 +157,16 @@ jobs:
         # broken ancestry chain so registry/evidence drift is caught automatically.
         run: python -I tools/evaluation/failure_registry.py
 
+      - name: Self-contained proof smoke (Python 3.12)
+        if: matrix.python-version == '3.12'
+        # Fast subset of the seeded, mechanically-labeled self-proof harnesses so
+        # the zero-bypass invariants and the gate's separation cannot silently rot.
+        # The full runs and their numbers live in benchmarks/self_proof/README.md.
+        run: |
+          python benchmarks/self_proof/invariant_fuzz.py --cases 200 --seed 1 --workers 4
+          python benchmarks/self_proof/efficacy_eval.py --per-category 20 --seed 1 --workers 4
+          python benchmarks/self_proof/metamorphic_diff.py --bases 20 --perturbations 4 --seed 1 --workers 4
+
   e2e-runners:
     # Exercise the structured-verdict oracle END-TO-END against real runners (not
     # just the adapter wiring): vitest + node --test, producing junit+exit verdicts

@@ -1,0 +1,16 @@
+{
+  "tool": "tools/ci/run_security_mutation_gate.py",
+  "reviewed_security_mutants": 827,
+  "local_sample": {
+    "sampled": 50,
+    "killed": 50,
+    "selection": "every 16th mutant name, diverse across the security core",
+    "note": "demonstrated first-hand; tree restored clean after the run"
+  },
+  "full_run": {
+    "killed": 827,
+    "of": 827,
+    "where": "PR #359 CI, job 'Security mutation gate (Python 3.12)', green"
+  },
+  "environment_caveat": "a full local run in this container hits a pytest INTERNALERROR (cannot instantiate WindowsPath) from one mutant's associated test; this is an environment artifact, not a surviving mutant. Individual mutants and the 50-mutant sample run clean locally."
+}

@@ -12,7 +12,9 @@ and what it does not** — the attacker model, the reward-hack technique classes
 which operating profile closes each class. It is the consolidated view behind the
 technique-by-technique [reward-hacking catalog](REWARD_HACKING_CATALOG.md), the
 [assurance](ASSURANCE.md) trust boundaries, and the [operating
-profiles](OPERATING_PROFILES.md).
+profiles](OPERATING_PROFILES.md). For the self-contained, reproducible proofs of
+the invariants below — fuzzing, mechanical efficacy, mutation, metamorphic, none
+of which need an external reviewer — see [self-contained proof](SELF_PROOF.md).
 
 ## The narrow question
 
