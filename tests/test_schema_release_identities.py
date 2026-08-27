@@ -43,7 +43,7 @@ LEGACY_CHANGE_ATTEMPT_ID = (
     "evoom_guard/schemas/change-attempt-observation-1.schema.json"
 )
 LEGACY_CHANGE_ATTEMPT_SHA256 = (
-    "f0cedd1e960ef4d1fdb8fbdab089902af4388ed97faacd5ec30b93f51f7eafb5"
+    "8b501a5cb69dd881797f9a16dd6663fe40cb4f3ec795402c55c1c50e69832b01"
 )
 
 
