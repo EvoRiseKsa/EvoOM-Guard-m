@@ -50,15 +50,15 @@
   "benchmark_id": "live-labelled-corpus-global-phases-contained-worker-v5",
   "claims": {
     "authenticated": false,
-    "content_identity": "source-and-results-git-commits-plus-content-digests",
-    "evidence_commit_bound": true,
+    "content_identity": "source-git-commit-plus-content-digests",
+    "evidence_commit_bound": false,
     "evidence_status": "self_consistent_unattributed",
     "execution_authenticity_claim": false,
     "execution_source_snapshot_bound": true,
     "final_manifest_in_evidence_commit": false,
     "general_performance_claim": false,
     "installed_environment_matches_lock": false,
-    "source_and_results_commit_bound": true,
+    "source_and_results_commit_bound": false,
     "source_commit_bound": true,
     "source_snapshot_matches_worktree_at_manifest_build": true
   },
@@ -99,7 +99,7 @@
   },
   "engine_version": "4.7.0.dev0",
   "environment": {
-    "captured_at_utc": "2026-08-27T14:37:12.440042Z",
+    "captured_at_utc": "2026-08-27T15:08:22.094173Z",
     "case_interpreter": {
       "build": [
         "main",
@@ -265,7 +265,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "d084eba551f786b87d6d99b5f912f0c5769d66f1",
+    "head": "e65b4b7a4cf7e4daf2ea962582315f9e824aa5b6",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -313,22 +313,12 @@
     "tp": 10
   },
   "provenance": {
-    "evidence_commit": {
-      "binding": "git-commit",
-      "bound": true,
-      "commit": "38c236a5ede65fe663ff11b5c01d7a6b36c8d7d3",
-      "final_manifest_in_commit": false,
-      "observation_point": "after results commit and before final manifest publication",
-      "reason": "source_and_results_match_commit_final_manifest_excluded",
-      "results_match_commit": true,
-      "source_inventory_matches_commit": true,
-      "source_paths_match_commit": true
-    },
+    "evidence_commit": null,
     "final_manifest_in_evidence_commit": false,
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "d084eba551f786b87d6d99b5f912f0c5769d66f1",
+      "commit": "e65b4b7a4cf7e4daf2ea962582315f9e824aa5b6",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -340,13 +330,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14819,
+    "bytes": 14816,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "a605efce53a344455037db8d49a2450e48f8974ef38da21eb365d4279684f375"
+    "sha256": "9aab092b7b10d97b6526a8fb7b89602ceba901ba36d418865405ad0233f2115a"
   },
-  "run_id": "41a5d2c6-bf9d-4400-bf12-3f79e8f8f13e",
+  "run_id": "9b4f6f87-1407-4bc0-9745-d35b6c9a30bb",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -1228,9 +1218,9 @@
         "sha256": "8ddc83e15e8a82daf4fdb79aab5a5830fb488bb2eb00aea1a3e4c968a7ce7c0a"
       },
       {
-        "bytes": 6544,
+        "bytes": 6622,
         "path": "evoom_guard/verdict_contract_v1_11.py",
-        "sha256": "e9f5cb45a694bb8d4c06a6922314b64fe18e70d09dc430ab4f9ddadc3c8e8eeb"
+        "sha256": "674fd5acaa5f82ca5a765ba5cd9913d75b281c848d46953bc98378bbcd54a63f"
       },
       {
         "bytes": 1989,
@@ -1462,14 +1452,14 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "4619c2243ced5bdf9a9306e6b7c165d29035691fee141a4354133e6de162e1e3",
-    "total_bytes": 3077971
+    "sha256": "e83f6efac5945fa6c2a7f7b250ffc4f4644199ba1e408127ddf08fc032b475ad",
+    "total_bytes": 3078049
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.277,
-    "guard_full_run_median_s": 0.291,
-    "guard_full_run_p95_s": 0.312,
-    "pre_gate_only_median_s": 0.004,
+    "controlled_direct_pytest_median_s": 0.268,
+    "guard_full_run_median_s": 0.313,
+    "guard_full_run_p95_s": 0.352,
+    "pre_gate_only_median_s": 0.003,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }
 }
