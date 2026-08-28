@@ -134,6 +134,29 @@ def _validate(active: ActiveFreeze, *, now: datetime | None = None) -> dict[str,
     )
 
 
+def _assert_frozen_declaration_invariants(record: dict[str, object]) -> None:
+    """Static invariants every activated (``FROZEN``) declaration must satisfy.
+
+    The raw-Git bindings and the server-time anchor are enforced separately by
+    ``validate_active`` and the anchor validators at promotion time.
+    """
+
+    declaration = record["declaration"]
+    assert isinstance(declaration, dict)
+    assert freeze.PLACEHOLDER not in set(declaration.values())
+    sha = re.compile(r"[0-9a-f]{40}\Z")
+    assert sha.fullmatch(declaration["frozen_parent_commit_sha"])
+    assert sha.fullmatch(declaration["frozen_parent_tree_sha"])
+    started_at = datetime.strptime(
+        declaration["started_at"], "%Y-%m-%dT%H:%M:%SZ"
+    ).replace(tzinfo=timezone.utc)
+    not_before = datetime.strptime(
+        declaration["not_before"], "%Y-%m-%dT%H:%M:%SZ"
+    ).replace(tzinfo=timezone.utc)
+    assert not_before == started_at + timedelta(seconds=freeze.STABILIZATION_SECONDS)
+    assert declaration["stabilization_seconds"] == freeze.STABILIZATION_SECONDS
+
+
 def test_checked_in_template_is_schema_valid_and_semantically_inert() -> None:
     """The checked-in record is valid for its exact lifecycle state.
 
@@ -152,22 +175,7 @@ def test_checked_in_template_is_schema_valid_and_semantically_inert() -> None:
     Draft202012Validator(schema).validate(record)
 
     if record["state"] == "FROZEN":
-        declaration = record["declaration"]
-        assert isinstance(declaration, dict)
-        assert freeze.PLACEHOLDER not in set(declaration.values())
-        sha = re.compile(r"[0-9a-f]{40}\Z")
-        assert sha.fullmatch(declaration["frozen_parent_commit_sha"])
-        assert sha.fullmatch(declaration["frozen_parent_tree_sha"])
-        started_at = datetime.strptime(
-            declaration["started_at"], "%Y-%m-%dT%H:%M:%SZ"
-        ).replace(tzinfo=timezone.utc)
-        not_before = datetime.strptime(
-            declaration["not_before"], "%Y-%m-%dT%H:%M:%SZ"
-        ).replace(tzinfo=timezone.utc)
-        assert not_before == started_at + timedelta(
-            seconds=freeze.STABILIZATION_SECONDS
-        )
-        assert declaration["stabilization_seconds"] == freeze.STABILIZATION_SECONDS
+        _assert_frozen_declaration_invariants(record)
         return
 
     freeze.validate_template(ROOT)
@@ -177,6 +185,39 @@ def test_checked_in_template_is_schema_valid_and_semantically_inert() -> None:
         freeze.PLACEHOLDER,
         freeze.STABILIZATION_SECONDS,
     }
+
+
+def test_next_declaration_activation_dry_run_passes_the_frozen_gate() -> None:
+    """Activating the checked-in template exactly as the declaration dance
+    does must satisfy the schema and the FROZEN-state gate above.
+
+    This is the standing pre-flight for the next real declaration commit: if
+    the schema, the validator constants, or the FROZEN-state invariants ever
+    drift apart, this fails here first instead of on a live activation
+    attempt (the ordering gap observed on the first v4.7.0 attempt).
+    """
+
+    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+    record = json.loads(TEMPLATE.read_text(encoding="utf-8"))
+    if record["state"] == "FROZEN":
+        pytest.skip("the checked-in record is already an active declaration")
+
+    record["state"] = "FROZEN"
+    declaration = record["declaration"]
+    assert isinstance(declaration, dict)
+    started_at = DECLARATION_TIME
+    not_before = started_at + timedelta(seconds=freeze.STABILIZATION_SECONDS)
+    declaration.update(
+        {
+            "frozen_parent_commit_sha": "0" * 40,
+            "frozen_parent_tree_sha": "0" * 40,
+            "started_at": started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "not_before": not_before.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+
+    Draft202012Validator(schema).validate(record)
+    _assert_frozen_declaration_invariants(record)
 
 
 def test_active_one_parent_record_only_freeze_passes_at_exact_fourteen_day_boundary(
