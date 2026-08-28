@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -134,11 +135,41 @@ def _validate(active: ActiveFreeze, *, now: datetime | None = None) -> dict[str,
 
 
 def test_checked_in_template_is_schema_valid_and_semantically_inert() -> None:
+    """The checked-in record is valid for its exact lifecycle state.
+
+    Before activation the record must be the inert template. Once the
+    release-record-only declaration commit sets ``state`` to ``FROZEN``, the
+    checked-in record is legitimately active, so this gate then enforces the
+    full static declaration invariants instead (the raw-Git bindings and the
+    server-time anchor are enforced separately by ``validate_active`` and the
+    anchor validators at promotion time).
+    """
+
     schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
     record = json.loads(TEMPLATE.read_text(encoding="utf-8"))
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(record)
+
+    if record["state"] == "FROZEN":
+        declaration = record["declaration"]
+        assert isinstance(declaration, dict)
+        assert freeze.PLACEHOLDER not in set(declaration.values())
+        sha = re.compile(r"[0-9a-f]{40}\Z")
+        assert sha.fullmatch(declaration["frozen_parent_commit_sha"])
+        assert sha.fullmatch(declaration["frozen_parent_tree_sha"])
+        started_at = datetime.strptime(
+            declaration["started_at"], "%Y-%m-%dT%H:%M:%SZ"
+        ).replace(tzinfo=timezone.utc)
+        not_before = datetime.strptime(
+            declaration["not_before"], "%Y-%m-%dT%H:%M:%SZ"
+        ).replace(tzinfo=timezone.utc)
+        assert not_before == started_at + timedelta(
+            seconds=freeze.STABILIZATION_SECONDS
+        )
+        assert declaration["stabilization_seconds"] == freeze.STABILIZATION_SECONDS
+        return
+
     freeze.validate_template(ROOT)
 
     assert record["state"] == "POST_MERGE_DECLARATION_REQUIRED"
@@ -287,9 +318,31 @@ def test_template_rejects_partial_activation(tmp_path: Path) -> None:
         freeze.validate_template(tmp_path)
 
 
+def _inert_template_raw() -> str:
+    """Reconstruct the inert template text from the checked-in record.
+
+    The duplicate-key fixtures splice exact placeholder lines, so they must
+    start from the inert form even after the checked-in record has been
+    activated to ``FROZEN`` by the release-record declaration commit.
+    """
+
+    record = json.loads(TEMPLATE.read_text(encoding="utf-8"))
+    record["state"] = "POST_MERGE_DECLARATION_REQUIRED"
+    declaration = record["declaration"]
+    assert isinstance(declaration, dict)
+    for key in (
+        "frozen_parent_commit_sha",
+        "frozen_parent_tree_sha",
+        "started_at",
+        "not_before",
+    ):
+        declaration[key] = freeze.PLACEHOLDER
+    return json.dumps(record, indent=2) + "\n"
+
+
 @pytest.mark.parametrize("nested", [False, True])
 def test_freeze_record_rejects_duplicate_keys(tmp_path: Path, nested: bool) -> None:
-    raw = TEMPLATE.read_text(encoding="utf-8")
+    raw = _inert_template_raw()
     if nested:
         raw = raw.replace(
             '    "started_at": "POST_MERGE_REQUIRED",',
