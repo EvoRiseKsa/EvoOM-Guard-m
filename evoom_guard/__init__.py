@@ -25,7 +25,7 @@ from evoom_guard.contracts import Problem, VerdictResult, Verifier
 
 __all__ = ["Problem", "VerdictResult", "Verifier"]
 
-__version__ = "4.7.0.dev0"
+__version__ = "4.7.0"
 
 # These schemas retain their v3.8.0 identities until their contracts change.
 # A schema identity denotes its stable shape, not the runtime version carrying it.

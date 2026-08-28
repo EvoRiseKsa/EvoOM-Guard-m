@@ -32,7 +32,7 @@
       "cli_handler_extraction": "complete",
       "overall_refactor_program": "in-progress"
     },
-    "lifecycle": "unreleased-development",
+    "lifecycle": "release-candidate",
     "relation_to_latest_release": "descendant"
   }
 }
