@@ -244,7 +244,10 @@ Until all gates close, release notes must use **release candidate**, **beta**, o
 5. **Production:** enable only the profile whose complete evidence is retained.
    Other profiles remain clearly advisory or beta.
 
-Feature expansion stops whenever a production gate is open. In particular, ML
-risk scoring, automatic healing, deployment authorization, and new provider
-surfaces do not outrank authority separation, conformance, or independent
-evidence.
+Authority-expanding production features and stronger assurance claims do not
+proceed ahead of their open gates. In particular, ML risk scoring, automatic
+healing, deployment authorization, and new provider surfaces do not outrank
+authority separation, conformance, or independent evidence. Adoption,
+usability, distribution, compatibility, and other product work that does not
+expand the authority boundary or the claimed assurance continues while gates
+remain open, under the ordering policy in [ROADMAP.md](../ROADMAP.md).
