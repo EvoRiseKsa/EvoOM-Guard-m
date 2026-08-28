@@ -50,6 +50,82 @@ retained evidence say so.
   actual JSON/Markdown evidence, requires both files to be non-empty before the
   job can succeed, and limits non-blocking behavior to a completed Guard verdict so
   no verdict is relabelled as `PASS`.
+- Added a judge-owned **assertion-liveness canary** probe closing the
+  assertion-neutering boundary of the canary-less default (reward-hacking
+  catalog 11b): the demonstrated false `PASS` produced by neutered assertions
+  becomes `FAIL` with the canary appended to the suite, while honest suites
+  still pass. The canary is referenced by absolute judge-owned path, so the
+  candidate tree cannot shadow it.
+- Added the seeded, byte-reproducible **self-contained proof harnesses** under
+  `benchmarks/self_proof/` with stored results and exact reproduction
+  commands: invariant fuzzing (2,000 cases, 0 violations of the four gate
+  invariants), a 400-case mechanically-labeled efficacy corpus (gate catch
+  rate 1.0, 95% CI 0.987–1.0, zero false accepts; a fair naive exit-code
+  baseline false-accepts 17.1% of must-block cases), metamorphic/differential
+  verification (80/80 verdict-invariant, 80/80 reference agreement), and the
+  assertion-liveness demonstration. The mechanical-vs-judgment trust model is
+  documented in `docs/SELF_PROOF.md`, and CI runs a fast smoke subset so the
+  zero-bypass invariants cannot silently rot.
+- Surfaced `report_integrity` in the human-facing verdict report, so a default
+  same-process `PASS` visibly carries its
+  `same_process_candidate_writable` assurance boundary instead of implying a
+  tamper-proof result.
+- Made `--require-suite-continuity` usable in practice through a bounded
+  benign-write allowlist, keeping after-suite tree-continuity fail-closed for
+  meaningful drift.
+- Added professional threat-model and security-profile documentation
+  (`docs/THREAT_MODEL.md` and companions) describing attacker capabilities,
+  the closed judging-file tamper class, and the in-process boundary of the
+  default profile.
+- Wired the reward-hack proof and the failure-registry provenance-ancestry
+  gate into CI, so registry or evidence drift fails the build automatically.
+- **Open-core licensing**: added the Apache-2.0 core license
+  (`LICENSE-APACHE`), the authoritative path→license map (`LICENSING.md`),
+  and the dual-structure `NOTICE`. The reward-hack-resistant gate core is
+  Apache-2.0 — free to use, including as a required CI/merge gate, in
+  commercial and non-commercial settings — while the multi-key trust platform
+  remains under the EvoRise Source-Available License 1.0.
+- Added the enforced **license import boundary**
+  (`tests/architecture/test_license_boundaries.py`, zero ceiling): an
+  Apache-core module may never import an EvoRise platform module at module
+  scope, the dispatch facade is the only sanctioned call-time crossing, and
+  every module must be classified on one side of the map.
+- Added `cli/evidence_sealing_commands.py`, the platform-owned home of the
+  `bundle-evidence`/`finalize-record` handlers, extracted verbatim so
+  `cli/record_commands.py` holds only the Apache-core
+  `verify-verdict`/`verify-record`/`verify-bundle` family.
+
+### Changed
+
+- **ROADMAP direction**: lifted the evidence-gated feature freeze and
+  reclassified independent third-party evaluation from a blocking release
+  gate to a valued but optional, additive credibility milestone. Near-term
+  external assurance comes from run-it-yourself reproduction of the seeded
+  proofs and an open "make the gate lie" red-team.
+- Migrated every core source header to `SPDX-License-Identifier: Apache-2.0`
+  (121 files plus `action.yml`; the two formerly mixed `cli/` files followed
+  after the physical split), while platform files keep their EvoRise
+  Source-Available headers. `LICENSING.md` remains authoritative.
+- **Packaging**: removed the `Private :: Do Not Upload` classifier so the
+  `evoom-guard` distribution can be installed once it is deliberately
+  published, and bundled every governing document (`LICENSE`,
+  `LICENSE-APACHE`, `LICENSING.md`, `NOTICE`) with the wheel/sdist. The
+  package metadata deliberately keeps the more restrictive umbrella
+  classifier so automated scanners never read the whole distribution as
+  Apache. Publishing itself remains a separate, explicitly authorized step.
+- Rewrote `README.md` as an open-core front door: a problem-first
+  introduction (why exit-code gates accept judging-file tampering),
+  install-and-run as the first section, a "Prove it yourself" section
+  surfacing the seeded proof harnesses with their measured numbers, and an
+  accurate open-core License section — with every machine-rendered status
+  block, accountability record, and non-claim preserved.
+- The `evo-guard` dispatch facade now imports its platform command owners
+  **lazily** (function-locally). A core-only installation with no platform
+  code present imports cleanly, runs the gate end-to-end, and refuses
+  platform subcommands with a clear fail-closed message
+  (`unavailable: … requires EvoOM trust-platform components …`, exit 2) —
+  never a traceback and never anything that could read as a verdict. In a
+  full installation every subcommand behaves exactly as before.
 
 ### Fixed
 

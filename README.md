@@ -248,7 +248,7 @@ git clone https://github.com/EvoRiseKsa/EvoOM-Guard-m.git
 cd EvoOM-Guard-m
 git checkout <reviewed-40-hex-SHA>
 python -m pip install .
-evo-guard version  # expect 4.7.0.dev0 on this source line
+evo-guard version  # expect 4.7.0 on this source line (release candidate)
 evo-guard preflight . --strict --json
 evo-guard init --ref <immutable-release-tag-or-40-hex-SHA> --preset advisory \
   --path <workflow-path> --policy-path <trusted-policy-path>
