@@ -59,19 +59,22 @@ and import only core code: `__init__.py`, `contracts.py`, `strict_json.py`,
 `verdict_contract_v1_12.py`.
 
 **Core `cli/` files (Apache-2.0).** The dispatch/argparse layer plus the
-core-command owners: `cli/__init__.py` is the exception — see below —; `cli/__main__.py`,
+core-command owners: `cli/__init__.py`, `cli/__main__.py`,
 `cli/parser.py`, `cli/guard_command.py`, `cli/init_command.py`,
 `cli/preflight_commands.py`, `cli/diagnostic_commands.py` (doctor/version/pack-doctor),
-and `cli/signing_commands.py` (keygen).
+`cli/signing_commands.py` (keygen), and `cli/record_commands.py`
+(`verify-verdict`/`verify-record`/`verify-bundle`).
 
-**Two `cli/` files are deferred to the packaging change** and remain EvoRise
-Source-Available until then, because each currently mixes core and platform code
-and must be split first: `cli/record_commands.py` (holds the core `verify-verdict`/
-`verify-record`/`verify-bundle` handlers *and* the platform `bundle-evidence`/
-`finalize-record` handlers) and `cli/__init__.py` (the dispatch also inlines the
-platform command thunks and eagerly imports the platform command owners). Splitting
-those, and making the platform command imports lazy, is the packaging prerequisite
-after which both become core.
+**The split is complete.** The formerly mixed files were separated: the
+platform `bundle-evidence`/`finalize-record` handlers now live in
+`cli/evidence_sealing_commands.py` (EvoRise Source-Available, listed under
+Platform below), and `cli/__init__.py` imports every platform command owner
+*lazily* (function-local), so the Apache core imports cleanly with no platform
+code present. This boundary is enforced mechanically by
+`tests/architecture/test_license_boundaries.py`: an Apache module may never
+import an EvoRise module at module scope, the only sanctioned call-time
+crossing is the dispatch facade, and every module must be classified on one
+side of the map.
 
 ## Platform — EvoRise Source-Available License 1.0 (`LICENSE`)
 
@@ -83,6 +86,7 @@ agreement.
 |---|---|
 | `evoom_guard/finalizer/` | Trusted Finalizer deployment kit + static inspection |
 | `evoom_guard/admission/` | Sealed ALLOW/DENY admission contracts (artifact / release-source / agent-change) |
+| `evoom_guard/cli/evidence_sealing_commands.py` | The `bundle-evidence` / `finalize-record` operator sealing handlers |
 | **Platform CLI subcommands** | The finalizer, admission, release-source, release-artifact, and GitHub-attestation `seal-*` / `verify-*` / `derive-*` / `reverify-*` families (the operator/auditor commands beyond the core set above) |
 | `.github/workflows/evoguard-*.yml` | The protected release pipeline (reverify, seal, admit, promote, publish) |
 | `tools/ci/assemble_release_ledger_v2.py`, `tools/ci/validate_release_ledger_v2.py` | Release-ledger assembly/validation |
@@ -98,9 +102,9 @@ license.
 
 ## Scope and status
 
-This map records the open-core boundary. Core source files carry
-`SPDX-License-Identifier: Apache-2.0` headers (except the two `cli/` files noted
-above); platform files keep their EvoRise Source-Available headers.
+This map records the open-core boundary. Every core source file carries an
+`SPDX-License-Identifier: Apache-2.0` header; platform files keep their EvoRise
+Source-Available headers.
 
 **Packaging.** The project ships as a single distribution named `evoom-guard`,
 dual-licensed by path per this map. Its metadata declares the more restrictive
@@ -112,16 +116,14 @@ file, and every governing document — `LICENSE`, `LICENSE-APACHE`, this map, an
 installed once it is published; publishing itself remains a deliberate,
 separately authorized step.
 
-**Deferred: a physically separate core.** Splitting the two mixed `cli/` files
-(`record_commands.py`, `cli/__init__.py`) and making the platform command
-imports lazy — so a truly platform-free `evoom-guard` core wheel can be built
-and installed with zero source-available code present — is a planned follow-up.
-Both files touch the security mutation gate and the architecture import-boundary
-baseline, so that split is tracked as its own change rather than folded into
-this packaging step. Until then both files remain EvoRise Source-Available, and
-the core `verify-verdict` / `verify-record` / `verify-bundle` handlers they
-contain are Apache-2.0 in intent but distributed under the umbrella license
-until the split lands.
+**Physical separation.** The formerly mixed `cli/` files have been split and
+the platform command imports are lazy, so the Apache core is now physically
+separable: a core-only build that omits every platform path in the table above
+imports cleanly, runs the gate end-to-end, and refuses platform subcommands
+with a clear message instead of a traceback. The boundary is enforced by
+`tests/architecture/test_license_boundaries.py`. Publishing a separate
+core-only wheel remains a distribution decision layered on top of this map,
+not a licensing question.
 
 This map remains the authoritative statement of which license applies to which
 path.
