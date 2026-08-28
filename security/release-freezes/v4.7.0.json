@@ -1,13 +1,13 @@
 {
   "format": "EVOGUARD_MINOR_RELEASE_FREEZE_V1",
-  "state": "POST_MERGE_DECLARATION_REQUIRED",
+  "state": "FROZEN",
   "version": "4.7.0",
   "source_version": "4.7.0.dev0",
   "declaration": {
-    "frozen_parent_commit_sha": "POST_MERGE_REQUIRED",
-    "frozen_parent_tree_sha": "POST_MERGE_REQUIRED",
-    "started_at": "POST_MERGE_REQUIRED",
-    "not_before": "POST_MERGE_REQUIRED",
+    "frozen_parent_commit_sha": "6435ade978b9be4d88c892a253e06d8d49834549",
+    "frozen_parent_tree_sha": "3eea2607b7406947a07d474c68ba3e46e816787d",
+    "started_at": "2026-08-28T19:31:08Z",
+    "not_before": "2026-09-11T19:31:08Z",
     "stabilization_seconds": 1209600
   },
   "scope": {
