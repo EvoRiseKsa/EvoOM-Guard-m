@@ -44,7 +44,7 @@ immutable artifact ID emitted by the upload step, not a mutable name lookup,
 and digest mismatch is fatal. The publication job receives only the artifact
 ID approved by the clean job. Artifact attestation
 is not itself a reason to create a release. Follow the
-[release-channel policy](../README.md#release-channel): make a new release only
+[release-channel policy](../README.md#release-channel-and-accountability): make a new release only
 for an intentional versioned product change, after its version and consumer
 pins are updated and the protected release validation succeeds.
 
