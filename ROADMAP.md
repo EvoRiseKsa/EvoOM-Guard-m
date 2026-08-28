@@ -245,7 +245,7 @@ release asset and its provenance. Canonical ledger:
 - Networked-service (HTTP) targets need a judge↔candidate channel the hardened
   `--network none` container does not yet provide.
 
-## Next work is gated by evidence
+## Direction and priorities
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:ROADMAP_CURRENT_PIPELINE -->
 The protected A-H release pipeline is implemented in source and **disabled by default**.
@@ -257,14 +257,22 @@ assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:ROADMAP_CURRENT_PIPELINE -->
 
 Future work is driven by verified adoption, real threat cases, and observed user
-needs — not feature accumulation. The order matters:
+needs — not feature accumulation. The ordering below is a statement of priority,
+not a freeze: the gate continues to grow, scoped honestly.
 
-For this evidence cycle, feature and protocol growth is frozen. Until the
-independent-evidence gates below are closed, repository work is limited to
-security fixes, release/support maintenance, compatibility corrections, and
-evidence or evaluation tooling that does not widen the product authority
-boundary. A proposed exception must be documented and reviewed before it is
-implemented; an issue or prototype alone does not lift the freeze.
+The near-term priority is adoption and distribution of the core gate. The
+self-contained, mechanically-provable assurance already established — invariant
+fuzzing, mechanical-corpus efficacy, the security mutation gate, and metamorphic
+agreement (see [`SELF_PROOF.md`](docs/SELF_PROOF.md)) — needs no external reviewer
+and is sufficient to ship and to be useful today, provided every claim stays
+within the recorded scope and the standing non-claims below. Independent
+third-party evaluation is a **valued but optional, additive** credibility
+milestone — not a precondition for release, adoption, or any affirmative claim
+this project already makes within scope. Near-term external assurance is pursued
+through reproducible run-it-yourself evidence and an open "make the gate lie"
+red-team, neither of which waits on appointed reviewers. The independent round
+described below is run when a concrete need calls for it, not as a gate on
+everything else.
 
 1. **Current artifact boundary.** The `v4.6.0` signed ledger records a bounded,
    completed protected A-H operation over the actual zipapp, SPDX SBOM,
@@ -299,8 +307,10 @@ implemented; an issue or prototype alone does not lift the freeze.
    converting abstentions into decision errors. That round measures protocol,
    compatibility, and onboarding behavior; it is not by itself a production
    or population-accuracy proof. Same-owner cross-account review remains
-   operational separation, not independence; only externally independent
-   organizational control closes the independent-evidence gate.
+   operational separation, not independence; genuine independence would require
+   externally independent organizational control. When pursued, this round is an
+   optional, additive validation milestone that strengthens the
+   independent-evidence claim — it gates neither release nor use.
 3. **Only after adoption evidence.** Stronger fork/VM boundaries, organization
    policy enforcement, and an adapter/pack SDK require evidence from real
    adopters and onboarding failures. They are not assumed product needs.
