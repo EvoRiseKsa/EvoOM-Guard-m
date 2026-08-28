@@ -32,6 +32,14 @@ retained evidence say so.
 
 ### Added
 
+- Added `tools/ci/reseal.py`, a one-command wrapper for the benchmark re-seal
+  ritual (re-measure → commit results → finalize manifest → re-bind failure
+  registry → validate). It produces the identical three distinct,
+  linearly-ancestral commits the provenance and signed-release Gate A already
+  require, changing nothing about the trust model — it removes only the manual
+  toil. Because reviewed dispositions are pinned to the source digest so a source
+  change forces re-review, it stops when the digest changes and re-pins only with
+  an explicit `--repin`; a `--dry-run` prints the plan.
 - Added a non-executing `evo-guard preflight` command with typed JSON findings
   for trusted-policy, launcher, shell-portability, Python isolated-mode,
   pytest-cache, container-client, and common project-output risks. It never

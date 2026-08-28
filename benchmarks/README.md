@@ -226,6 +226,21 @@ rebase-and-merge both rewrite or discard the recorded commit IDs and invalidate
 verification in a clean clone. Merge benchmark-evidence changes with a merge
 commit that retains the three branch commits unchanged.
 
+`tools/ci/reseal.py` runs this exact ritual as a single command — it re-measures,
+commits `results.jsonl`, finalizes the manifest, re-binds the failure registry,
+and validates, producing the identical three distinct, linearly-ancestral commits
+this section requires. It changes nothing about the trust model; it only removes
+the manual toil. Because reviewed dispositions are pinned to the source digest by
+design (a source change expires them to `unresolved` for re-review), it stops when
+the digest changes and re-pins only with an explicit `--repin` confirmation:
+
+```bash
+# after committing your source change (HEAD is the bound source commit):
+python -I tools/ci/reseal.py "my change summary"
+python -I tools/ci/reseal.py "my change summary" --repin   # if the source digest changed
+python -I tools/ci/reseal.py "my change summary" --dry-run  # print the plan only
+```
+
 The exact observed classification failures from the current finalized pair are
 indexed separately in the versioned
 [`synthetic failure-observation registry`](../evidence/failure-registry/README.md).
