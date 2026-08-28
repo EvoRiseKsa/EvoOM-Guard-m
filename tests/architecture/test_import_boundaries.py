@@ -2125,12 +2125,14 @@ def test_cli_release_artifact_admission_has_bounded_online_and_offline_owners() 
     }
     assert seal_imports == {
         "evoom_guard.admission.release_artifact",
+        "evoom_guard.cli",
         "evoom_guard.finalizer_derivation",
         "evoom_guard.github_attestation",
         "evoom_guard.signing",
     }
     assert verify_imports == {
         "evoom_guard.admission.release_artifact",
+        "evoom_guard.cli",
         "evoom_guard.signing",
     }
 
@@ -2349,7 +2351,10 @@ def test_cli_producer_receipts_have_one_stdlib_nonadmitting_owner() -> None:
             node.module
             for node in ast.walk(facade)
             if isinstance(node, ast.ImportFrom)
-        } == {"evoom_guard.release_source_producer_receipt"}
+        } == {
+            "evoom_guard.cli",
+            "evoom_guard.release_source_producer_receipt",
+        }
 
 
 def test_cli_release_source_admissions_have_two_bounded_state_machines() -> None:
@@ -2621,6 +2626,7 @@ def test_cli_release_source_admissions_have_two_bounded_state_machines() -> None
     }
     assert verify_imports == {
         "evoom_guard.admission.release_source",
+        "evoom_guard.cli",
         "evoom_guard.signing",
     }
 
@@ -2818,7 +2824,7 @@ def test_cli_trusted_finalizer_commands_have_one_stdlib_owner_and_public_facades
 
 
 def test_cli_record_commands_have_one_stdlib_owner_and_public_facades() -> None:
-    """The five record adapters keep effects and lookup timing in the facade."""
+    """The three core record adapters keep effects and lookup timing in the facade."""
 
     modules, _ = _discover_modules(PACKAGE_ROOT)
     analysis = analyze_package(PACKAGE_ROOT)
@@ -2843,11 +2849,79 @@ def test_cli_record_commands_have_one_stdlib_owner_and_public_facades() -> None:
         node.name for node in owner_tree.body if isinstance(node, ast.FunctionDef)
     }
     assert {
-        "execute_bundle_evidence",
-        "execute_finalize_record",
         "execute_verify_bundle",
         "execute_verify_record",
         "execute_verify_verdict",
+    } <= owner_functions
+    assert owner_functions.isdisjoint(
+        {"execute_bundle_evidence", "execute_finalize_record"}
+    ), "platform sealing handlers must not return to the Apache-core record owner"
+    import_roots = {
+        alias.name.partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        (node.module or "").partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert import_roots <= {
+        "__future__",
+        "argparse",
+        "collections",
+        "dataclasses",
+        "typing",
+    }
+    owner_classes = {
+        node.name for node in owner_tree.body if isinstance(node, ast.ClassDef)
+    }
+    assert {
+        "VerifyBundleServices",
+        "VerifyRecordServices",
+        "VerifyVerdictServices",
+    } <= owner_classes
+
+    facade_tree = ast.parse(facade_path.read_text(encoding="utf-8"))
+    facade_functions = {
+        node.name for node in facade_tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert {
+        "cmd_bundle_evidence",
+        "cmd_finalize_record",
+        "cmd_verify_bundle",
+        "cmd_verify_record",
+        "cmd_verify_verdict",
+    } <= facade_functions
+
+
+def test_cli_evidence_sealing_commands_have_one_stdlib_owner_and_public_facades() -> None:
+    """The two platform sealing adapters keep effects and lookup timing in the facade."""
+
+    modules, _ = _discover_modules(PACKAGE_ROOT)
+    analysis = analyze_package(PACKAGE_ROOT)
+    facade_module = "evoom_guard.cli"
+    owner_module = "evoom_guard.cli.evidence_sealing_commands"
+    owner_path = PACKAGE_ROOT / "cli" / "evidence_sealing_commands.py"
+
+    assert modules[owner_module] == owner_path
+    assert owner_module not in analysis.violations["unclassified_modules"]
+    assert (facade_module, owner_module) in analysis.internal_edges
+    assert {
+        fact.target
+        for fact in analysis.facts
+        if fact.source == owner_module
+        and fact.target is not None
+        and not fact.type_checking
+    } == set()
+
+    owner_tree = ast.parse(owner_path.read_text(encoding="utf-8"))
+    owner_functions = {
+        node.name for node in owner_tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert {
+        "execute_bundle_evidence",
+        "execute_finalize_record",
     } <= owner_functions
     import_roots = {
         alias.name.partition(".")[0]
@@ -2872,22 +2946,7 @@ def test_cli_record_commands_have_one_stdlib_owner_and_public_facades() -> None:
     assert {
         "BundleEvidenceServices",
         "FinalizeRecordServices",
-        "VerifyBundleServices",
-        "VerifyRecordServices",
-        "VerifyVerdictServices",
     } <= owner_classes
-
-    facade_tree = ast.parse(facade_path.read_text(encoding="utf-8"))
-    facade_functions = {
-        node.name for node in facade_tree.body if isinstance(node, ast.FunctionDef)
-    }
-    assert {
-        "cmd_bundle_evidence",
-        "cmd_finalize_record",
-        "cmd_verify_bundle",
-        "cmd_verify_record",
-        "cmd_verify_verdict",
-    } <= facade_functions
 
 
 def test_effective_policy_contracts_follow_public_layer_boundaries() -> None:

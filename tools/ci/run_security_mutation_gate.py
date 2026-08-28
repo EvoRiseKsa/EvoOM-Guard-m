@@ -10970,7 +10970,7 @@ MUTATIONS = (
         name="cli-record-bundle-live-reader-snapshot",
         path="evoom_guard/cli/__init__.py",
         before=(
-            "        services=_record_command_owner.BundleEvidenceServices(\n"
+            "        services=_evidence_sealing_command_owner.BundleEvidenceServices(\n"
             "            read_bounded_bytes=lambda path, *, limit, label: "
             "_read_bounded_bytes(\n"
             "                path,\n"
@@ -10979,7 +10979,7 @@ MUTATIONS = (
             "            ),\n"
         ),
         after=(
-            "        services=_record_command_owner.BundleEvidenceServices(\n"
+            "        services=_evidence_sealing_command_owner.BundleEvidenceServices(\n"
             "            read_bounded_bytes=_read_bounded_bytes,\n"
         ),
         test=(
@@ -11012,7 +11012,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="cli-record-bundle-semantic-gate-bypass",
-        path="evoom_guard/cli/record_commands.py",
+        path="evoom_guard/cli/evidence_sealing_commands.py",
         before="    if not record_is_valid:\n",
         after="    if False and not record_is_valid:\n",
         test=(
@@ -11022,7 +11022,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="cli-record-finalize-stdin-gate-bypass",
-        path="evoom_guard/cli/record_commands.py",
+        path="evoom_guard/cli/evidence_sealing_commands.py",
         before='    if args.verdict == "-":\n',
         after='    if False and args.verdict == "-":\n',
         test=(
@@ -11032,7 +11032,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="cli-record-finalize-semantic-gate-bypass",
-        path="evoom_guard/cli/record_commands.py",
+        path="evoom_guard/cli/evidence_sealing_commands.py",
         before="    if not record_is_semantic:\n",
         after="    if False and not record_is_semantic:\n",
         test=(
@@ -11042,7 +11042,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="cli-record-finalize-require-pass-bypass",
-        path="evoom_guard/cli/record_commands.py",
+        path="evoom_guard/cli/evidence_sealing_commands.py",
         before="    return 0 if allowed or not args.require_pass else 1\n",
         after="    return 0\n",
         test=(
@@ -11092,7 +11092,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="cli-record-bundle-sign-key-forwarding-bypass",
-        path="evoom_guard/cli/record_commands.py",
+        path="evoom_guard/cli/evidence_sealing_commands.py",
         before=(
             "        manifest = services.create_evidence_bundle(\n"
             "            args.verdict,\n"
@@ -11114,7 +11114,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="cli-record-finalize-sign-key-forwarding-bypass",
-        path="evoom_guard/cli/record_commands.py",
+        path="evoom_guard/cli/evidence_sealing_commands.py",
         before=(
             "        finalized = services.finalize_evidence_bundle(\n"
             "            args.verdict,\n"
@@ -11146,7 +11146,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="cli-record-bundle-context-object-gate-bypass",
-        path="evoom_guard/cli/record_commands.py",
+        path="evoom_guard/cli/evidence_sealing_commands.py",
         before=(
             "    if not isinstance(context, dict):\n"
             "        services.machine_report(\n"
@@ -11170,7 +11170,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="cli-record-material-shape-gate-bypass",
-        path="evoom_guard/cli/record_commands.py",
+        path="evoom_guard/cli/evidence_sealing_commands.py",
         before="        if not separator or not role or not path:\n",
         after="        if False and (not separator or not role or not path):\n",
         test=(
@@ -11180,7 +11180,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="cli-record-finalize-verdict-object-gate-bypass",
-        path="evoom_guard/cli/record_commands.py",
+        path="evoom_guard/cli/evidence_sealing_commands.py",
         before=(
             "    if not isinstance(verdict, dict):\n"
             "        services.machine_report(\n"
@@ -11206,7 +11206,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="cli-record-finalize-context-object-gate-bypass",
-        path="evoom_guard/cli/record_commands.py",
+        path="evoom_guard/cli/evidence_sealing_commands.py",
         before=(
             "    if not isinstance(expected_context, dict):\n"
             "        services.machine_report(\n"
@@ -11292,7 +11292,7 @@ MUTATIONS = (
         name="cli-record-finalize-live-reader-snapshot",
         path="evoom_guard/cli/__init__.py",
         before=(
-            "        services=_record_command_owner.FinalizeRecordServices(\n"
+            "        services=_evidence_sealing_command_owner.FinalizeRecordServices(\n"
             "            read_bounded_bytes=lambda path, *, limit, label: "
             "_read_bounded_bytes(\n"
             "                path,\n"
@@ -11301,7 +11301,7 @@ MUTATIONS = (
             "            ),\n"
         ),
         after=(
-            "        services=_record_command_owner.FinalizeRecordServices(\n"
+            "        services=_evidence_sealing_command_owner.FinalizeRecordServices(\n"
             "            read_bounded_bytes=_read_bounded_bytes,\n"
         ),
         test=(

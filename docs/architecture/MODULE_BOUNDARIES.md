@@ -715,8 +715,11 @@ classification, and exit status. This slice does not move parser dispatch or
 any Release Source command.
 
 The third command-family slice adds the stdlib-only
-`cli.record_commands` owner for `verify-verdict`, `verify-record`,
-`bundle-evidence`, `finalize-record`, and `verify-bundle`. The owner fixes the
+`cli.record_commands` owner for `verify-verdict`, `verify-record`, and
+`verify-bundle`; the platform sealing pair (`bundle-evidence`,
+`finalize-record`) was later extracted verbatim into the stdlib-only
+`cli.evidence_sealing_commands` owner so the open-core license boundary is
+also a module boundary. Each owner fixes the
 ordered application pipeline—bounded read, parse/semantic validation,
 authentication or sealing, then machine-report projection—without importing a
 record, evidence, signing, or filesystem implementation. The `cli` facade keeps

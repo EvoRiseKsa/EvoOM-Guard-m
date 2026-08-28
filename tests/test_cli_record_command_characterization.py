@@ -22,13 +22,20 @@ from evoom_guard import signing as signing_module
 ROOT = Path(__file__).resolve().parents[1]
 FACADE = ROOT / "evoom_guard" / "cli" / "__init__.py"
 OWNER = ROOT / "evoom_guard" / "cli" / "record_commands.py"
-COMMANDS = (
+SEALING_OWNER = ROOT / "evoom_guard" / "cli" / "evidence_sealing_commands.py"
+# Each command family delegates to exactly one extracted owner module: the
+# Apache-core record-verification family stays in ``record_commands`` while the
+# platform sealing family lives in ``evidence_sealing_commands``.
+RECORD_COMMANDS = (
     "cmd_verify_verdict",
     "cmd_verify_record",
-    "cmd_bundle_evidence",
-    "cmd_finalize_record",
     "cmd_verify_bundle",
 )
+SEALING_COMMANDS = (
+    "cmd_bundle_evidence",
+    "cmd_finalize_record",
+)
+COMMANDS = RECORD_COMMANDS + SEALING_COMMANDS
 HISTORICAL_DOCSTRINGS = {
     "cmd_verify_verdict": (
         "Execute ``evo-guard verify-verdict`` — signature + CONTEXT check (exit 0/1).\n"
@@ -75,33 +82,38 @@ def test_record_command_owner_exists_and_facades_are_thin() -> None:
     """The compatibility facade must delegate; orchestration belongs to one owner."""
 
     assert OWNER.is_file(), "record command owner has not been extracted"
+    assert SEALING_OWNER.is_file(), "sealing command owner has not been extracted"
     facade_tree = ast.parse(FACADE.read_text(encoding="utf-8"))
-    owner_tree = ast.parse(OWNER.read_text(encoding="utf-8"))
     facade_functions = {
         node.name: node
         for node in facade_tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
-    owner_functions = {
-        node.name
-        for node in owner_tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
-
-    for command in COMMANDS:
-        function = facade_functions[command]
-        owner_name = "execute_" + command.removeprefix("cmd_")
-        assert owner_name in owner_functions
-        calls = [
-            node
-            for node in ast.walk(function)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "_record_command_owner"
-            and node.func.attr == owner_name
-        ]
-        assert len(calls) == 1, f"{command} is not a thin owner facade"
+    families = (
+        (RECORD_COMMANDS, OWNER, "_record_command_owner"),
+        (SEALING_COMMANDS, SEALING_OWNER, "_evidence_sealing_command_owner"),
+    )
+    for commands, owner_path, owner_alias in families:
+        owner_tree = ast.parse(owner_path.read_text(encoding="utf-8"))
+        owner_functions = {
+            node.name
+            for node in owner_tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        for command in commands:
+            function = facade_functions[command]
+            owner_name = "execute_" + command.removeprefix("cmd_")
+            assert owner_name in owner_functions
+            calls = [
+                node
+                for node in ast.walk(function)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == owner_alias
+                and node.func.attr == owner_name
+            ]
+            assert len(calls) == 1, f"{command} is not a thin owner facade"
 
 
 def test_public_record_command_signatures_are_frozen() -> None:
