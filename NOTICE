@@ -2,9 +2,21 @@ Copyright © 2026 EvoRise Tech. All rights reserved.
 Author / original creator: Mana Alharbi.
 Licensor: EvoRise Tech.
 
-Unless a file states otherwise, first-party material in this repository is
-source-available under the EvoRise Source-Available License 1.0
-(LicenseRef-EvoRise-Source-Available-1.0). It is not open-source software.
+This repository is open-core and dual-licensed by path (see LICENSING.md, which
+is authoritative):
 
-No trademark license is granted. Third-party material remains subject to its
-own notices and licenses. See LICENSE and THIRD_PARTY.md.
+- The core gate is licensed under the Apache License 2.0 (Apache-2.0); see
+  LICENSE-APACHE. It is open-source software, free to use including as a required
+  CI/merge gate.
+- The trust platform (multi-key signing, admission, finalizer, and release
+  machinery) is source-available under the EvoRise Source-Available License 1.0
+  (LicenseRef-EvoRise-Source-Available-1.0); see LICENSE. It is not open-source,
+  and production/commercial use requires a separate agreement.
+
+Unless a file's header states otherwise, first-party material follows the path
+map in LICENSING.md; where that map does not assign a path, the EvoRise
+Source-Available License 1.0 applies.
+
+No trademark license is granted by either license. Third-party material remains
+subject to its own notices and licenses. See LICENSE, LICENSE-APACHE,
+LICENSING.md, and THIRD_PARTY.md.
