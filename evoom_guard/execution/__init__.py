@@ -1,3 +1,9 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Copyright © 2026 EvoRise Tech.
+# Author / original creator: Mana Alharbi.
+# SPDX-License-Identifier: Apache-2.0
+# Licensed under the Apache License, Version 2.0; see LICENSE-APACHE.
+# ─────────────────────────────────────────────────────────────────────────────
 """Public contracts for EvoOM Guard's internal execution kernel.
 
 The package is intentionally small and stdlib-only.  Callers depend on these

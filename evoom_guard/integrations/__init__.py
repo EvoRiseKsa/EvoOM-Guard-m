@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
-# Copyright © 2026 EvoRise Tech. All rights reserved.
+# Copyright © 2026 EvoRise Tech.
 # Author / original creator: Mana Alharbi.
-# Licensor: EvoRise Tech.
-# Source-available — see LICENSE for permitted use.
+# SPDX-License-Identifier: Apache-2.0
+# Licensed under the Apache License, Version 2.0; see LICENSE-APACHE.
 # -----------------------------------------------------------------------------
 """External-facing output and platform adapters."""

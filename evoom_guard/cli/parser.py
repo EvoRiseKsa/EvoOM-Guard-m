@@ -1,3 +1,9 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Copyright © 2026 EvoRise Tech.
+# Author / original creator: Mana Alharbi.
+# SPDX-License-Identifier: Apache-2.0
+# Licensed under the Apache License, Version 2.0; see LICENSE-APACHE.
+# ─────────────────────────────────────────────────────────────────────────────
 """Declarative construction of the public ``evo-guard`` argument parser.
 
 This module owns parser shape only.  Command handlers and compatibility seams

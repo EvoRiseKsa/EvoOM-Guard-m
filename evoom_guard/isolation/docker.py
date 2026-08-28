@@ -1,3 +1,9 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Copyright © 2026 EvoRise Tech.
+# Author / original creator: Mana Alharbi.
+# SPDX-License-Identifier: Apache-2.0
+# Licensed under the Apache License, Version 2.0; see LICENSE-APACHE.
+# ─────────────────────────────────────────────────────────────────────────────
 """Typed Docker control, identity, and cleanup contracts.
 
 This module deliberately contains no verdict or assurance policy.  It records

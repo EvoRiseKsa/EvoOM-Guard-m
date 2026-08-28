@@ -1,9 +1,9 @@
-# -----------------------------------------------------------------------------
-# Copyright (c) 2026 EvoRise Tech. All rights reserved.
+# ─────────────────────────────────────────────────────────────────────────────
+# Copyright © 2026 EvoRise Tech.
 # Author / original creator: Mana Alharbi.
-# Licensor: EvoRise Tech.
-# Source-available - see LICENSE for permitted use.
-# -----------------------------------------------------------------------------
+# SPDX-License-Identifier: Apache-2.0
+# Licensed under the Apache License, Version 2.0; see LICENSE-APACHE.
+# ─────────────────────────────────────────────────────────────────────────────
 """Canonical, materialized-change Blast Radius V2 contracts.
 
 V2 deliberately does not parse a textual Git diff.  Rename, copy, binary, and

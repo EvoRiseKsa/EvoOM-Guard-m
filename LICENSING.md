@@ -50,6 +50,29 @@ The `evoom_guard/cli/` dispatch layer is core (Apache-2.0). It can *invoke* the
 platform subsystems below when they are installed, but those subsystems and the
 subcommands that drive them are licensed as platform.
 
+**Core top-level modules (Apache-2.0).** Beyond `guard.py` and `signing.py`, these
+flat `evoom_guard/*.py` modules are part of the gate / verdict-emit-verify core
+and import only core code: `__init__.py`, `contracts.py`, `strict_json.py`,
+`adapters.py`, `patchmin.py`, `patch_applier.py`, `pack_manifest.py`,
+`runtime_identity.py`, `candidate_runner.py`, `blackbox.py`, `evidence.py`,
+`evidence_bundle.py`, `record_verifier.py`, `verdict_contract_v1_11.py`,
+`verdict_contract_v1_12.py`.
+
+**Core `cli/` files (Apache-2.0).** The dispatch/argparse layer plus the
+core-command owners: `cli/__init__.py` is the exception — see below —; `cli/__main__.py`,
+`cli/parser.py`, `cli/guard_command.py`, `cli/init_command.py`,
+`cli/preflight_commands.py`, `cli/diagnostic_commands.py` (doctor/version/pack-doctor),
+and `cli/signing_commands.py` (keygen).
+
+**Two `cli/` files are deferred to the packaging change** and remain EvoRise
+Source-Available until then, because each currently mixes core and platform code
+and must be split first: `cli/record_commands.py` (holds the core `verify-verdict`/
+`verify-record`/`verify-bundle` handlers *and* the platform `bundle-evidence`/
+`finalize-record` handlers) and `cli/__init__.py` (the dispatch also inlines the
+platform command thunks and eagerly imports the platform command owners). Splitting
+those, and making the platform command imports lazy, is the packaging prerequisite
+after which both become core.
+
 ## Platform — EvoRise Source-Available License 1.0 (`LICENSE`)
 
 The multi-key trust, admission, finalizer, and release machinery. Not included in
@@ -75,7 +98,9 @@ license.
 
 ## Scope and status
 
-This map records the open-core boundary. Per-file SPDX headers are being migrated
-to match it, and the core is being prepared as a separately installable
-distribution; until those land, this map is the authoritative statement of which
+This map records the open-core boundary. Core source files now carry
+`SPDX-License-Identifier: Apache-2.0` headers (except the two `cli/` files noted
+above, deferred to the packaging change); platform files keep their EvoRise
+Source-Available headers. The core is still being prepared as a separately
+installable distribution. This map remains the authoritative statement of which
 license applies to which path.

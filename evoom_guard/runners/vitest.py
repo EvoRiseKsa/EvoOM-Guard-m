@@ -1,5 +1,9 @@
-# Copyright © 2026 EvoRise Tech. All rights reserved.
-# Source-available — see LICENSE for permitted use.
+# ─────────────────────────────────────────────────────────────────────────────
+# Copyright © 2026 EvoRise Tech.
+# Author / original creator: Mana Alharbi.
+# SPDX-License-Identifier: Apache-2.0
+# Licensed under the Apache License, Version 2.0; see LICENSE-APACHE.
+# ─────────────────────────────────────────────────────────────────────────────
 """Vitest JUnit report adapter."""
 
 from __future__ import annotations
