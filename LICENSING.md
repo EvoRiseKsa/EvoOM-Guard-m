@@ -98,9 +98,30 @@ license.
 
 ## Scope and status
 
-This map records the open-core boundary. Core source files now carry
+This map records the open-core boundary. Core source files carry
 `SPDX-License-Identifier: Apache-2.0` headers (except the two `cli/` files noted
-above, deferred to the packaging change); platform files keep their EvoRise
-Source-Available headers. The core is still being prepared as a separately
-installable distribution. This map remains the authoritative statement of which
-license applies to which path.
+above); platform files keep their EvoRise Source-Available headers.
+
+**Packaging.** The project ships as a single distribution named `evoom-guard`,
+dual-licensed by path per this map. Its metadata declares the more restrictive
+source-available umbrella so an automated license scan never reads the whole
+package as Apache; the Apache-2.0 grant on the core paths is carried by this
+file, and every governing document — `LICENSE`, `LICENSE-APACHE`, this map, and
+`NOTICE` — is bundled with the distribution. The historical
+`Private :: Do Not Upload` guard has been removed so the package can be
+installed once it is published; publishing itself remains a deliberate,
+separately authorized step.
+
+**Deferred: a physically separate core.** Splitting the two mixed `cli/` files
+(`record_commands.py`, `cli/__init__.py`) and making the platform command
+imports lazy — so a truly platform-free `evoom-guard` core wheel can be built
+and installed with zero source-available code present — is a planned follow-up.
+Both files touch the security mutation gate and the architecture import-boundary
+baseline, so that split is tracked as its own change rather than folded into
+this packaging step. Until then both files remain EvoRise Source-Available, and
+the core `verify-verdict` / `verify-record` / `verify-bundle` handlers they
+contain are Apache-2.0 in intent but distributed under the umbrella license
+until the split lands.
+
+This map remains the authoritative statement of which license applies to which
+path.

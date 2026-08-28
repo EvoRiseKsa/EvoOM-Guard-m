@@ -17,6 +17,12 @@ authors = [{ name = "Mana Alharbi (مانع الحربي)" }]
 maintainers = [{ name = "Mana Alharbi (مانع الحربي)" }]
 keywords = ["ai", "agents", "ci", "testing", "reward-hacking", "patch", "verification"]
 license = { file = "LICENSE" }
+# Open-core, dual-licensed by path (see LICENSING.md): the reward-hack-resistant
+# gate core is Apache-2.0 (LICENSE-APACHE); the trust platform stays EvoRise
+# Source-Available (LICENSE). The package-level classifier is deliberately the
+# more restrictive umbrella so an automated license scan never reads the whole
+# distribution as Apache; the Apache grant on the core paths is stated by
+# LICENSING.md, which ships with the distribution.
 classifiers = [
     "License :: Other/Proprietary License",
     "Programming Language :: Python :: 3",
@@ -25,8 +31,6 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Testing",
     "Topic :: Software Development :: Quality Assurance",
-    # Source-available (no redistribution): never publish to a public index.
-    "Private :: Do Not Upload",
 ]
 # The whole gate is stdlib-only — nothing to install beyond Python and git/patch.
 dependencies = []
@@ -54,7 +58,11 @@ dev = [
 ]
 
 [tool.setuptools]
-license-files = ["LICENSE"]
+# Ship every governing license/notice with the distribution so the open-core
+# boundary travels with the package: the source-available umbrella (LICENSE),
+# the Apache-2.0 core license (LICENSE-APACHE), the authoritative path->license
+# map (LICENSING.md), and the attribution/notice file (NOTICE).
+license-files = ["LICENSE", "LICENSE-APACHE", "LICENSING.md", "NOTICE"]
 
 [tool.setuptools.package-data]
 evoom_guard = ["schemas/*.json", "templates/**/*.json", "templates/**/*.yml"]
