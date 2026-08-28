@@ -1,8 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Copyright © 2026 EvoRise Tech. All rights reserved.
+# Copyright © 2026 EvoRise Tech.
 # Author / original creator: Mana Alharbi.
-# Licensor: EvoRise Tech.
-# Source-available — see LICENSE for permitted use.
+# SPDX-License-Identifier: Apache-2.0
+# Licensed under the Apache License, Version 2.0; see LICENSE-APACHE.
 # ─────────────────────────────────────────────────────────────────────────────
 """The ``evo-guard`` command line for evidence-bound change verification.
 
@@ -73,43 +73,13 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from evoom_guard import __version__
-from evoom_guard.cli import agent_change_commands as _agent_change_command_owner
-from evoom_guard.cli import artifact_admission_commands as _artifact_admission_command_owner
-from evoom_guard.cli import (
-    artifact_digest_admission_commands as _artifact_digest_admission_command_owner,
-)
-from evoom_guard.cli import (
-    change_attempt_observation_commands as _change_attempt_observation_command_owner,
-)
 from evoom_guard.cli import diagnostic_commands as _diagnostic_command_owner
-from evoom_guard.cli import (
-    finalizer_deployment_commands as _finalizer_deployment_command_owner,
-)
-from evoom_guard.cli import (
-    github_attestation_admission_commands as _github_attestation_admission_command_owner,
-)
-from evoom_guard.cli import (
-    github_attestation_receipt_commands as _github_attestation_receipt_command_owner,
-)
 from evoom_guard.cli import guard_command as _guard_command_owner
 from evoom_guard.cli import init_command as _init_command_owner
 from evoom_guard.cli import parser as _parser_owner
 from evoom_guard.cli import preflight_commands as _preflight_command_owner
 from evoom_guard.cli import record_commands as _record_command_owner
-from evoom_guard.cli import (
-    release_artifact_admission_commands as _release_artifact_admission_command_owner,
-)
-from evoom_guard.cli import (
-    release_source_admission_commands as _release_source_admission_command_owner,
-)
-from evoom_guard.cli import (
-    release_source_finalizer_commands as _release_source_finalizer_command_owner,
-)
-from evoom_guard.cli import (
-    release_source_producer_receipt_commands as _producer_receipt_command_owner,
-)
 from evoom_guard.cli import signing_commands as _signing_command_owner
-from evoom_guard.cli import trusted_finalizer_commands as _trusted_finalizer_command_owner
 from evoom_guard.domain import (
     is_verifier_pack_sha256,
     operating_profile_violations,
@@ -688,6 +658,7 @@ def cmd_finalizer_init(
 ) -> int:
     """Install the deterministic, no-clobber Trusted Finalizer deployment kit."""
 
+    from evoom_guard.cli import finalizer_deployment_commands as _finalizer_deployment_command_owner
     from evoom_guard.finalizer.deployment import (
         FinalizerDeploymentError,
         install_finalizer_deployment,
@@ -707,6 +678,7 @@ def cmd_finalizer_doctor(
 ) -> int:
     """Inspect static finalizer inputs without claiming live GitHub readiness."""
 
+    from evoom_guard.cli import finalizer_deployment_commands as _finalizer_deployment_command_owner
     from evoom_guard.finalizer.deployment import inspect_finalizer_deployment
 
     return _finalizer_deployment_command_owner.execute_finalizer_doctor(
@@ -893,6 +865,7 @@ def cmd_bundle_evidence(
 ) -> int:
     """Create a signed envelope only after semantic record validation succeeds."""
 
+    from evoom_guard.cli import evidence_sealing_commands as _evidence_sealing_command_owner
     from evoom_guard.evidence_bundle import (
         EvidenceBundleError,
         EvidenceMaterial,
@@ -901,9 +874,9 @@ def cmd_bundle_evidence(
     from evoom_guard.record_verifier import strict_json_loads, verify_record
     from evoom_guard.signing import SigningUnavailableError
 
-    return _record_command_owner.execute_bundle_evidence(
+    return _evidence_sealing_command_owner.execute_bundle_evidence(
         args,
-        services=_record_command_owner.BundleEvidenceServices(
+        services=_evidence_sealing_command_owner.BundleEvidenceServices(
             read_bounded_bytes=lambda path, *, limit, label: _read_bounded_bytes(
                 path,
                 limit=limit,
@@ -951,6 +924,7 @@ def cmd_finalize_record(
     observation by itself.
     """
 
+    from evoom_guard.cli import evidence_sealing_commands as _evidence_sealing_command_owner
     from evoom_guard.evidence_bundle import (
         EvidenceBundleError,
         EvidenceMaterial,
@@ -959,9 +933,9 @@ def cmd_finalize_record(
     from evoom_guard.record_verifier import strict_json_loads, verify_record
     from evoom_guard.signing import SigningUnavailableError
 
-    return _record_command_owner.execute_finalize_record(
+    return _evidence_sealing_command_owner.execute_finalize_record(
         args,
-        services=_record_command_owner.FinalizeRecordServices(
+        services=_evidence_sealing_command_owner.FinalizeRecordServices(
             read_bounded_bytes=lambda path, *, limit, label: _read_bounded_bytes(
                 path,
                 limit=limit,
@@ -1041,6 +1015,7 @@ def cmd_derive_finalizer_bindings(
 ) -> int:
     """Derive trusted-finalizer values from raw Git objects without a checkout."""
 
+    from evoom_guard.cli import trusted_finalizer_commands as _trusted_finalizer_command_owner
     from evoom_guard.finalizer_derivation import (
         FINALIZER_DERIVATION_FORMAT,
         FinalizerDerivationError,
@@ -1080,6 +1055,7 @@ def cmd_validate_agent_change_proposal(
         AgentChangeAdmissionError,
         inspect_agent_change_proposal,
     )
+    from evoom_guard.cli import agent_change_commands as _agent_change_command_owner
 
     return _agent_change_command_owner.execute_validate_agent_change_proposal(
         args,
@@ -1110,6 +1086,7 @@ def cmd_derive_agent_change_bindings(
     *,
     out: Callable[[str], None] = print,
 ) -> int:
+    from evoom_guard.cli import agent_change_commands as _agent_change_command_owner
     from evoom_guard.finalizer_derivation import (
         AGENT_CHANGE_GIT_BINDINGS_FORMAT,
         AGENT_CHANGE_GIT_BINDINGS_FORMAT_V2,
@@ -1160,6 +1137,7 @@ def cmd_seal_agent_change_authorization(
         AgentChangeAdmissionError,
         seal_agent_change_authorization,
     )
+    from evoom_guard.cli import agent_change_commands as _agent_change_command_owner
 
     return _agent_change_command_owner.execute_seal_agent_change_authorization(
         args,
@@ -1196,6 +1174,7 @@ def cmd_seal_agent_change_finalized(
         AgentChangeAdmissionError,
         seal_agent_change_finalizer_bundle,
     )
+    from evoom_guard.cli import agent_change_commands as _agent_change_command_owner
     from evoom_guard.finalizer_derivation import (
         FinalizerDerivationError,
         git_executable_pin,
@@ -1243,6 +1222,7 @@ def cmd_verify_agent_change_finalized(
         AgentChangeAdmissionError,
         verify_agent_change_finalized_bundle,
     )
+    from evoom_guard.cli import agent_change_commands as _agent_change_command_owner
     from evoom_guard.finalizer_derivation import (
         FinalizerDerivationError,
         read_agent_change_bindings,
@@ -1280,6 +1260,7 @@ def cmd_verify_agent_change_finalized(
 def _read_semantic_finalizer_record(path: str) -> dict[str, Any]:
     """Read and validate one untrusted verdict before using its digest fields."""
 
+    from evoom_guard.cli import trusted_finalizer_commands as _trusted_finalizer_command_owner
     from evoom_guard.evidence_bundle import (
         MAX_VERDICT_BYTES,
         snapshot_evidence_primitives,
@@ -1306,6 +1287,7 @@ def cmd_verify_finalizer_bindings(
 ) -> int:
     """Compare a semantic record to independently derived raw-Git bindings."""
 
+    from evoom_guard.cli import trusted_finalizer_commands as _trusted_finalizer_command_owner
     from evoom_guard.finalizer_derivation import (
         FINALIZER_DERIVATION_FORMAT,
         FinalizerDerivationError,
@@ -1346,6 +1328,7 @@ def cmd_finalizer_handoff(
 ) -> int:
     """Bind a semantic re-verification record to explicit trusted metadata."""
 
+    from evoom_guard.cli import trusted_finalizer_commands as _trusted_finalizer_command_owner
     from evoom_guard.evidence_bundle import EvidenceBundleError
     from evoom_guard.trusted_finalizer import (
         FinalizerHandoffError,
@@ -1379,6 +1362,7 @@ def cmd_seal_finalizer(
 ) -> int:
     """Seal only a handoff that matches externally re-derived metadata."""
 
+    from evoom_guard.cli import trusted_finalizer_commands as _trusted_finalizer_command_owner
     from evoom_guard.evidence_bundle import EvidenceBundleError
     from evoom_guard.finalizer_derivation import read_finalizer_bindings
     from evoom_guard.signing import SigningUnavailableError
@@ -1412,6 +1396,7 @@ def cmd_verify_finalized(
 ) -> int:
     """Verify a signed finalizer bundle and all external anti-replay bindings."""
 
+    from evoom_guard.cli import trusted_finalizer_commands as _trusted_finalizer_command_owner
     from evoom_guard.signing import SigningUnavailableError
     from evoom_guard.trusted_finalizer import (
         FinalizerHandoffError,
@@ -1448,6 +1433,9 @@ def cmd_project_change_attempt_observation(
         ChangeAttemptObservationError,
         produce_change_attempt_observation,
     )
+    from evoom_guard.cli import (
+        change_attempt_observation_commands as _change_attempt_observation_command_owner,
+    )
     from evoom_guard.signing import SigningUnavailableError
 
     return (
@@ -1481,6 +1469,9 @@ def cmd_release_source_handoff(
 ) -> int:
     """Write an unsigned handoff for the separate protected-main contract."""
 
+    from evoom_guard.cli import (
+        release_source_finalizer_commands as _release_source_finalizer_command_owner,
+    )
     from evoom_guard.release_source_finalizer import (
         RELEASE_SOURCE_HANDOFF_FORMAT,
         ReleaseSourceFinalizerError,
@@ -1512,6 +1503,9 @@ def cmd_seal_release_source_finalizer(
 ) -> int:
     """Seal a protected-main handoff only after external source matching."""
 
+    from evoom_guard.cli import (
+        release_source_finalizer_commands as _release_source_finalizer_command_owner,
+    )
     from evoom_guard.release_source_finalizer import (
         RELEASE_SOURCE_EVIDENCE_FORMAT,
         ReleaseSourceFinalizerError,
@@ -1544,6 +1538,9 @@ def cmd_verify_release_source_finalized(
 ) -> int:
     """Verify a separate release-source envelope and external bindings."""
 
+    from evoom_guard.cli import (
+        release_source_finalizer_commands as _release_source_finalizer_command_owner,
+    )
     from evoom_guard.release_source_finalizer import (
         RELEASE_SOURCE_EVIDENCE_FORMAT,
         ReleaseSourceFinalizerError,
@@ -1576,6 +1573,9 @@ def cmd_derive_release_source_controls(
 ) -> int:
     """Re-derive source/context from raw Git without making an admission claim."""
 
+    from evoom_guard.cli import (
+        release_source_finalizer_commands as _release_source_finalizer_command_owner,
+    )
     from evoom_guard.evidence_bundle import snapshot_evidence_primitives
     from evoom_guard.release_source_finalizer import (
         RELEASE_SOURCE_CONTEXT_FORMAT,
@@ -1622,6 +1622,9 @@ def cmd_create_release_source_producer_receipt(
 ) -> int:
     """Create an unsigned canonical claim; it is never an admission decision."""
 
+    from evoom_guard.cli import (
+        release_source_producer_receipt_commands as _producer_receipt_command_owner,
+    )
     from evoom_guard.release_source_producer_receipt import (
         RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
         ReleaseSourceProducerReceiptError,
@@ -1659,6 +1662,9 @@ def cmd_verify_release_source_producer_receipt(
 ) -> int:
     """Verify local/raw-Git producer binding without treating it as provider proof."""
 
+    from evoom_guard.cli import (
+        release_source_producer_receipt_commands as _producer_receipt_command_owner,
+    )
     from evoom_guard.release_source_producer_receipt import (
         RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
         ReleaseSourceProducerReceiptError,
@@ -1685,6 +1691,9 @@ def cmd_reverify_attested_release_source_producer_receipt(
 ) -> int:
     """Make a fresh GitHub provider check after local/raw-Git verification."""
 
+    from evoom_guard.cli import (
+        release_source_producer_receipt_commands as _producer_receipt_command_owner,
+    )
     from evoom_guard.release_source_producer_receipt import (
         RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
         ReleaseSourceProducerReceiptError,
@@ -1785,6 +1794,9 @@ def cmd_seal_release_source_admission(
         ReleaseSourceAdmissionError,
         seal_release_source_admission,
     )
+    from evoom_guard.cli import (
+        release_source_admission_commands as _release_source_admission_command_owner,
+    )
     from evoom_guard.finalizer_derivation import (
         FinalizerDerivationError,
         git_executable_pin,
@@ -1857,6 +1869,9 @@ def cmd_verify_release_source_admission(
         RELEASE_SOURCE_ADMISSION_FORMAT,
         ReleaseSourceAdmissionError,
         verify_release_source_admission,
+    )
+    from evoom_guard.cli import (
+        release_source_admission_commands as _release_source_admission_command_owner,
     )
     from evoom_guard.signing import SigningUnavailableError
 
@@ -2006,6 +2021,9 @@ def cmd_seal_github_release_artifact_admission(
         bind_release_artifact_admitter_runtime,
         seal_release_artifact_admission,
     )
+    from evoom_guard.cli import (
+        release_artifact_admission_commands as _release_artifact_admission_command_owner,
+    )
     from evoom_guard.finalizer_derivation import (
         FinalizerDerivationError,
         git_executable_pin,
@@ -2054,6 +2072,9 @@ def cmd_verify_github_release_artifact_admission(
         ReleaseArtifactAdmissionError,
         verify_release_artifact_admission,
     )
+    from evoom_guard.cli import (
+        release_artifact_admission_commands as _release_artifact_admission_command_owner,
+    )
     from evoom_guard.signing import SigningUnavailableError
 
     return _release_artifact_admission_command_owner.execute_verify_github_release_artifact_admission(
@@ -2086,6 +2107,7 @@ def cmd_seal_artifact_admission(
         ArtifactAdmissionError,
         seal_artifact_admission,
     )
+    from evoom_guard.cli import artifact_admission_commands as _artifact_admission_command_owner
     from evoom_guard.signing import SigningUnavailableError
 
     return _artifact_admission_command_owner.execute_seal_artifact_admission(
@@ -2114,6 +2136,7 @@ def cmd_verify_artifact_admission(
         ArtifactAdmissionError,
         verify_artifact_admission,
     )
+    from evoom_guard.cli import artifact_admission_commands as _artifact_admission_command_owner
     from evoom_guard.signing import SigningUnavailableError
 
     return _artifact_admission_command_owner.execute_verify_artifact_admission(
@@ -2141,6 +2164,9 @@ def cmd_seal_artifact_digest_admission(
         ARTIFACT_DIGEST_BINDING_FORMAT,
         ArtifactDigestAdmissionError,
         seal_artifact_digest_admission,
+    )
+    from evoom_guard.cli import (
+        artifact_digest_admission_commands as _artifact_digest_admission_command_owner,
     )
     from evoom_guard.signing import SigningUnavailableError
 
@@ -2173,6 +2199,9 @@ def cmd_verify_artifact_digest_admission(
         ARTIFACT_DIGEST_BINDING_FORMAT,
         ArtifactDigestAdmissionError,
         verify_artifact_digest_admission,
+    )
+    from evoom_guard.cli import (
+        artifact_digest_admission_commands as _artifact_digest_admission_command_owner,
     )
     from evoom_guard.signing import SigningUnavailableError
 
@@ -2245,6 +2274,9 @@ def cmd_github_attestation_receipt(
 ) -> int:
     """Run the narrow provider verifier and retain its exact bounded evidence."""
 
+    from evoom_guard.cli import (
+        github_attestation_receipt_commands as _github_attestation_receipt_command_owner,
+    )
     from evoom_guard.github_attestation import (
         GITHUB_ATTESTATION_RECEIPT_FORMAT,
         GitHubAttestationError,
@@ -2280,6 +2312,9 @@ def cmd_verify_github_attestation_receipt(
 ) -> int:
     """Check retained evidence continuity without making a live provider call."""
 
+    from evoom_guard.cli import (
+        github_attestation_receipt_commands as _github_attestation_receipt_command_owner,
+    )
     from evoom_guard.github_attestation import (
         GITHUB_ATTESTATION_RECEIPT_FORMAT,
         GitHubAttestationError,
@@ -2312,6 +2347,9 @@ def cmd_reverify_github_attestation_receipt(
 ) -> int:
     """Make a fresh constrained GitHub CLI verification for a retained receipt."""
 
+    from evoom_guard.cli import (
+        github_attestation_receipt_commands as _github_attestation_receipt_command_owner,
+    )
     from evoom_guard.github_attestation import (
         GITHUB_ATTESTATION_RECEIPT_FORMAT,
         GitHubAttestationError,
@@ -2354,6 +2392,9 @@ def cmd_seal_github_attestation_admission(
     """
 
     from evoom_guard.artifact_digest_admission import ARTIFACT_DIGEST_BINDING_FORMAT
+    from evoom_guard.cli import (
+        github_attestation_admission_commands as _github_attestation_admission_command_owner,
+    )
     from evoom_guard.github_attestation import (
         GitHubAttestationError,
         seal_github_attestation_admission,
@@ -2396,6 +2437,9 @@ def cmd_verify_github_attestation_admission(
     """Verify retained provider bytes and their V2 finalizer-bound relation."""
 
     from evoom_guard.artifact_digest_admission import ARTIFACT_DIGEST_BINDING_FORMAT
+    from evoom_guard.cli import (
+        github_attestation_admission_commands as _github_attestation_admission_command_owner,
+    )
     from evoom_guard.github_attestation import (
         GitHubAttestationError,
         verify_github_attestation_admission,
@@ -2567,7 +2611,26 @@ def main(argv: list[str] | None = None) -> int:
         "version": cmd_version,
     }
     handler = handlers.get(args.command)
-    return handler(args) if handler is not None else 2
+    if handler is None:
+        return 2
+    try:
+        return handler(args)
+    except ImportError as exc:
+        # A core-only distribution ships the gate without the trust-platform
+        # subsystems. Absence must read as a clear refusal, not a traceback,
+        # and must never look like a verdict. A missing top-level module
+        # raises ModuleNotFoundError with the dotted name; a missing submodule
+        # of the already-imported ``evoom_guard.cli`` package surfaces as a
+        # plain ImportError naming only the attribute, so both are matched.
+        missing = exc.name or ""
+        if missing.startswith("evoom_guard") or "evoom_guard" in str(exc):
+            print(
+                f"unavailable: '{args.command}' requires EvoOM trust-platform "
+                f"components not included in this installation ({missing or exc}); "
+                "install the full distribution to use platform commands"
+            )
+            return 2
+        raise
 
 
 if __name__ == "__main__":
