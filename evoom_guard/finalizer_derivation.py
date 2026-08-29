@@ -1,3 +1,9 @@
+# -----------------------------------------------------------------------------
+# Copyright © 2026 EvoRise Tech. All rights reserved.
+# Author / original creator: Mana Alharbi.
+# Licensor: EvoRise Tech.
+# Source-available — see LICENSE for permitted use.
+# -----------------------------------------------------------------------------
 """Raw-Git bindings for the Trusted Finalizer.
 
 The finalizer cannot treat a verdict produced by candidate execution as the
