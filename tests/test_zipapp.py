@@ -624,16 +624,22 @@ def test_pyz_build_is_byte_reproducible(tmp_path):
             "evoom_guard/schemas/release-source-producer-receipt-1.schema.json",
             "evoom_guard/schemas/release-source-producer-receipt-2.schema.json",
             "LICENSE",
+            "LICENSE-APACHE",
+            "LICENSING.md",
+            "NOTICE",
             "evoom_guard/schemas/evidence-context-1.schema.json",
             "evoom_guard/schemas/evidence-manifest-1.schema.json",
             "evoom_guard/schemas/verdict-record-1.11.schema.json",
             "evoom_guard/schemas/verdict-record-1.12.schema.json",
         } <= names
-        assert archive.read("LICENSE") == (
-            Path(__file__).parents[1].joinpath("LICENSE").read_bytes()
-            .replace(b"\r\n", b"\n")
-            .replace(b"\r", b"\n")
-        )
+        # Every governing document travels inside the exact bytes users verify,
+        # so the standalone archive carries the terms that license its own core.
+        for governing in ("LICENSE", "LICENSE-APACHE", "LICENSING.md", "NOTICE"):
+            assert archive.read(governing) == (
+                Path(__file__).parents[1].joinpath(governing).read_bytes()
+                .replace(b"\r\n", b"\n")
+                .replace(b"\r", b"\n")
+            )
 
 
 def test_pyz_build_is_identical_from_lf_and_crlf_source_trees(tmp_path):

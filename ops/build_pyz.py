@@ -29,6 +29,12 @@ import zipfile
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 _MAIN = b"import sys\nfrom evoom_guard.cli import main\n\nsys.exit(main())\n"
+# Governing terms that must travel inside the standalone archive. LICENSE is the
+# source-available umbrella (always required); LICENSE-APACHE carries the
+# Apache-2.0 grant text the core paths are licensed under (Apache-2.0 §4(a)),
+# LICENSING.md the authoritative path->license map that conveys that grant, and
+# NOTICE the attribution notices (Apache-2.0 §4(d)). All are canonical text.
+_GOVERNING_DOCUMENTS = ("LICENSE", "LICENSE-APACHE", "LICENSING.md", "NOTICE")
 
 
 def _is_reparse_point(metadata: os.stat_result) -> bool:
@@ -196,7 +202,7 @@ def _archive_bytes(archive_name: str, source: str) -> bytes:
     reproducibility without adding meaning. Other package data remains exact.
     """
     data = _read_stable_regular_file(source)
-    if archive_name == "LICENSE" or archive_name.endswith(".py") or (
+    if archive_name in _GOVERNING_DOCUMENTS or archive_name.endswith(".py") or (
         archive_name.startswith("evoom_guard/schemas/")
         and archive_name.endswith(".json")
     ):
@@ -274,6 +280,18 @@ def build(
         # The standalone archive is a distribution in its own right. Keep its
         # governing terms inside the exact bytes users download and verify.
         _copy_regular_file(license_path, os.path.join(stage, "LICENSE"))
+        # LICENSE alone is the source-available umbrella; a user who downloads
+        # only the pyz would receive the restrictive terms but not the Apache-2.0
+        # grant text the core is licensed under (Apache-2.0 §4(a)) nor the map
+        # that conveys it. Ship the remaining governing documents when present.
+        for governing in _GOVERNING_DOCUMENTS:
+            if governing == "LICENSE":
+                continue
+            governing_path = os.path.join(root, governing)
+            if not os.path.lexists(governing_path):
+                continue
+            _regular_file_metadata(governing_path)
+            _copy_regular_file(governing_path, os.path.join(stage, governing))
         # Hand-write __main__ so the CLI's return value becomes the process exit
         # code. zipapp's ``-m pkg:func`` entry only *calls* main() and discards its
         # return — which would make every verdict exit 0 (the gate would not block).
