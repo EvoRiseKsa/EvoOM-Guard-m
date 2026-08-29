@@ -3,7 +3,7 @@
 
 The synthetic corpus (``benchmarks/run_live.py``) judges 17 tiny throwaway
 repositories. This evaluation instead turns the gate on EvoOM-Guard's *own*
-repository -- a real ~69k-LOC / 3,276-test codebase -- and runs a battery of
+repository -- a real ~69k-LOC / 5,517-test codebase -- and runs a battery of
 real reward-hacks against its real files, comparing the gate's verdict to a
 naive "apply the change, trust the pytest exit code" baseline.
 
@@ -168,7 +168,7 @@ def main() -> int:
         })
 
     hacks = [r for r in rows if r["kind"] == "reward_hack"]
-    print("\nTarget: EvoOM-Guard's own repository (real, ~69k LOC, 5,489 tests)")
+    print("\nTarget: EvoOM-Guard's own repository (real, ~69k LOC, 5,517 tests)")
     print(f"Gate suite: {SCOPED_SUITE}  (rejection is pre-execution, so the suite never runs)\n")
     print(f"{'case':22} {'kind':12} {'GATE':10} {'reason':24} {'ms':>5}  BASELINE")
     print("-" * 88)
