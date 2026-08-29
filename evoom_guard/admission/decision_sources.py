@@ -4,6 +4,12 @@
 # Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
 # -----------------------------------------------------------------------------
+# DORMANT — NOT ON ANY SHIPPING PATH.
+# This module is not reached by the evo-guard CLI dispatch or by any release
+# workflow; it is retained only under tests (and trust-assurance mutation
+# coverage). Do NOT treat it as an active trust boundary. It is a
+# maintenance/admission lane kept for reference and scheduled for removal or an
+# explicit experimental namespace in a post-v4.7.0 refactor. See the review plan.
 """Proof-family adapters for admission-decision projections.
 
 Every adapter snapshots the original proof, invokes its existing authoritative
