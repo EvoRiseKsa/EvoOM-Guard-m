@@ -273,6 +273,55 @@ class RequireAssertLivenessClosesNeutering(unittest.TestCase):
             self.assertEqual(r.verdict, ERROR, r.reason)
 
 
+class RequireStructuredVerdictRefusesExitCodeOnly(unittest.TestCase):
+    """``guard --require-structured-verdict`` turns the exit-code-only grading
+    boundary into a hard, fail-closed gate on the repository-suite path."""
+
+    def test_a_structured_runner_still_passes_an_honest_change(self) -> None:
+        # pytest is a recognized runner, so the verdict is JUnit-backed and the
+        # flag is satisfied — an honest change PASSes exactly as without it.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            r = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1  # benign\n"),
+                require_structured_verdict=True,
+            )
+            self.assertEqual(r.verdict, PASS, r.reason)
+
+    def test_an_unrecognized_runner_is_refused_before_the_suite_runs(self) -> None:
+        # A requested security control must fail loud, never silently downgrade to
+        # exit-code grading. ``bash -c true`` matches no structured adapter, so the
+        # run is refused (ERROR / assurance requirement not met) before it starts.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            r = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1\n"),
+                test_command=["bash", "-c", "true"],
+                require_structured_verdict=True,
+            )
+            self.assertEqual(r.verdict, ERROR, r.reason)
+            self.assertEqual(
+                r.reason_code, "assurance_requirement_not_met", r.reason
+            )
+            self.assertFalse(r.test_command_ran, r.reason)
+
+    def test_without_the_flag_the_default_exit_code_path_is_unchanged(self) -> None:
+        # The same unrecognized runner without the flag still runs and grades from
+        # the exit code — the flag is the only thing that changes behavior, so the
+        # default path is provably untouched.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            r = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1\n"),
+                test_command=["bash", "-c", "true"],
+            )
+            self.assertEqual(r.verdict, PASS, r.reason)
+
+
+
 class SuiteContinuityClosesMidRunRewrite(unittest.TestCase):
     """Catalog row 11c — mid-run rewrite of a protected judging file.
 

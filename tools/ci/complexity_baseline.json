@@ -420,7 +420,7 @@
     {
       "path": "evoom_guard/verifiers/repo_verifier.py",
       "symbol": "_verify",
-      "max_complexity": 40
+      "max_complexity": 41
     },
     {
       "path": "evoom_guard/workspace/__init__.py",

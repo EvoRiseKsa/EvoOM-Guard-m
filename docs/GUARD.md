@@ -306,6 +306,35 @@ git diff main...HEAD | evo-guard guard --diff - --no-config \
 - Like `--require-suite-continuity`, this is a trusted-local control, not a policy
   field, and is never taken from candidate-controlled workflow input.
 
+### Structured verdict: `--require-structured-verdict` (opt-in)
+
+When the repository test command is one a structured runner adapter recognizes
+(pytest, `node --test`, vitest, jest, mocha, gotestsum, rspec, maven — directly
+or behind a supported launcher), the gate instruments it with a judge-owned JUnit
+reporter and grades the verdict from that report, cross-checked against the exit
+code so a forged exit code or a forged report is caught. When the command matches
+no adapter, the gate falls back to grading from the process **exit code alone** —
+no judge-owned JUnit evidence and no exit/report tamper cross-check, so reward-hack
+resistance is reduced. `evo-guard preflight` reports which case applies
+(`test_command.structured_verdict` vs `test_command.exit_code_only_verdict`).
+
+`--require-structured-verdict` turns that preflight warning into a hard gate: a
+command with no structured adapter is **refused (`ERROR`,
+`assurance_requirement_not_met`) before any suite runs**, so a trusted repository
+that means to require JUnit-backed grading can never silently downgrade to
+exit-code grading. A recognized runner is unaffected.
+
+```bash
+git diff main...HEAD | evo-guard guard --diff - --no-config \
+  --require-structured-verdict \
+  --test-command "python -m pytest -q"
+```
+
+- **Repository-suite scope.** A no-op under `--blackbox-only`, where the repository
+  suite is not a verdict source (the verifier pack is).
+- Like `--require-assert-liveness`, this is a trusted-local control, not a policy
+  field, and is never taken from candidate-controlled workflow input.
+
 ### `--diff` safety (for untrusted PRs)
 
 `--diff` has only the candidate checkout available, so it deliberately refuses

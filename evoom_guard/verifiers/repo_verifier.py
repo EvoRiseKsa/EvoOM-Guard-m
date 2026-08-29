@@ -748,6 +748,7 @@ class RepoVerifier:
         harness_inputs: tuple[str, ...] = (),
         require_suite_continuity: bool = False,
         require_assert_liveness: bool = False,
+        require_structured_verdict: bool = False,
     ) -> None:
         validate_isolation_mode(isolation)
         self.timeout = timeout
@@ -797,6 +798,13 @@ class RepoVerifier:
         # false PASS. Default off; pytest-only (a non-pytest command with this set is
         # refused before any suite runs). See evoom_guard/verifiers/assert_liveness.py.
         self.require_assert_liveness = require_assert_liveness
+        # Opt-in trusted-repository control: refuse (ERROR) rather than run when the
+        # repository test command has no structured runner adapter, i.e. the verdict
+        # would be graded from the process exit code alone with no judge-owned JUnit
+        # evidence and no exit/report tamper cross-check. Default off; a requested
+        # security control must never silently downgrade, so the refusal is terminal
+        # and fires before any suite runs. See _structured_verdict_preflight.
+        self.require_structured_verdict = require_structured_verdict
         # Command wrappers and explicitly declared helper files are judge-owned
         # and cannot be waived through the ordinary adopter allowlist.
         self.harness_inputs = normalize_harness_inputs(harness_inputs)
@@ -1034,6 +1042,55 @@ class RepoVerifier:
     # ``_verify`` so the main flow stays readable: a pre-suite preflight, a
     # suite-environment tweak, and an after-suite tamper check. Each is a no-op
     # when ``--require-assert-liveness`` is off, so the default path is unchanged.
+    def _structured_verdict_preflight(
+        self,
+        *,
+        problem: RepoProblem | dict,
+        changed: list[str],
+        setup_isolation: object,
+        runtime_evidence: Callable[[], dict[str, Any]],
+    ) -> VerdictResult | None:
+        """Refuse an exit-code-only repository suite loudly when required.
+
+        When ``--require-structured-verdict`` is set, a test command that no
+        structured runner adapter recognizes would have its verdict graded from
+        the process exit code alone — no judge-owned JUnit evidence and no
+        exit/report tamper cross-check. A requested security control must never
+        silently downgrade, so this returns a terminal ``VerdictResult`` before
+        any suite runs. Instrumentation is a pure argv transform (nothing runs);
+        the check uses the same live registry execution uses. A no-op when the
+        flag is off. Only reached on the repository-suite path, so an
+        ``--blackbox-only`` run — where the repository suite is not a verdict
+        source — never triggers it.
+        """
+
+        if not self.require_structured_verdict:
+            return None
+        base_command = self._base_command(problem)
+        _, report_expected, _ = instrument_command(
+            [str(token) for token in base_command], "/out/judge-result.xml"
+        )
+        if report_expected:
+            return None
+        return VerdictResult(
+            passed=False,
+            score=0.0,
+            diagnostics=(
+                "--require-structured-verdict needs a test command a structured "
+                "runner adapter recognizes (pytest, node --test, vitest, jest, "
+                "mocha, gotestsum, rspec, maven), directly or behind a supported "
+                "launcher; the configured command has none, so its verdict would "
+                "be graded from the process exit code alone with no judge-owned "
+                f"JUnit evidence and no tamper cross-check: {base_command}"
+            ),
+            artifact={
+                "files_changed": changed,
+                "outcome": "structured_verdict_unavailable",
+                "setup_isolation": setup_isolation,
+                **runtime_evidence(),
+            },
+        )
+
     def _assert_liveness_preflight(
         self,
         *,
@@ -1649,6 +1706,18 @@ class RepoVerifier:
                         runtime_continuity.evidence()
                     ),
                 )
+
+            # Structured-verdict requirement: refuse an exit-code-only repository
+            # suite before anything runs, so a requested control never silently
+            # downgrades to exit-code grading. See ``_structured_verdict_preflight``.
+            structured_refusal = self._structured_verdict_preflight(
+                problem=problem,
+                changed=changed,
+                setup_isolation=setup_isolation,
+                runtime_evidence=runtime_evidence,
+            )
+            if structured_refusal is not None:
+                return structured_refusal
 
             # Assertion-liveness (catalog row 11b): refuse a non-pytest command and
             # install the judge-owned canary into the prepared copy *before* the

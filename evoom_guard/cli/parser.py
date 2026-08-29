@@ -305,6 +305,18 @@ def build_parser(
         "yielding a false PASS. pytest-only (a non-pytest test command is "
         "refused); fully tamper-resistant under --isolation docker",
     )
+    g_p.add_argument(
+        "--require-structured-verdict",
+        dest="require_structured_verdict",
+        action="store_true",
+        default=False,
+        help="trusted-repository opt-in: refuse (ERROR) rather than run when the "
+        "repository test command has no structured runner adapter, i.e. the "
+        "verdict would be graded from the process exit code alone with no "
+        "judge-owned JUnit evidence and no exit/report tamper cross-check. Turns "
+        "the `preflight` exit-code-only warning into a hard gate; a no-op under "
+        "--blackbox-only, where the repository suite is not a verdict source",
+    )
     g_p.add_argument("--json", dest="json_out", default=None, help="write the JSON verdict to this path")
     g_p.add_argument(
         "--sarif", default=None,

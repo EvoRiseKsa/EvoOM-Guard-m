@@ -89,6 +89,7 @@ class _GuardCall(Protocol[_ResultCo]):
         harness_inputs: tuple[str, ...] = ...,
         require_suite_continuity: bool = ...,
         require_assert_liveness: bool = ...,
+        require_structured_verdict: bool = ...,
     ) -> _ResultCo: ...
 
 
@@ -131,6 +132,7 @@ class _GuardFromDiffCall(Protocol[_ResultCo]):
         harness_inputs: tuple[str, ...] = ...,
         require_suite_continuity: bool = ...,
         require_assert_liveness: bool = ...,
+        require_structured_verdict: bool = ...,
     ) -> tuple[_ResultCo, list[str]]: ...
 
 
@@ -389,6 +391,9 @@ def execute_guard_command(
     )
     require_assert_liveness = bool(
         getattr(args, "require_assert_liveness", False)
+    )
+    require_structured_verdict = bool(
+        getattr(args, "require_structured_verdict", False)
     )
 
     if blackbox_only and not blackbox:
@@ -708,6 +713,7 @@ def execute_guard_command(
             strict_harness=strict_harness,
             require_suite_continuity=require_suite_continuity,
             require_assert_liveness=require_assert_liveness,
+            require_structured_verdict=require_structured_verdict,
             **profile_options,
             **harness_input_options,
         )
@@ -775,6 +781,7 @@ def execute_guard_command(
                     strict_harness=strict_harness,
                     require_suite_continuity=require_suite_continuity,
                     require_assert_liveness=require_assert_liveness,
+                    require_structured_verdict=require_structured_verdict,
                     **profile_options,
                     **harness_input_options,
                 )
@@ -818,6 +825,7 @@ def execute_guard_command(
             strict_harness=strict_harness,
             require_suite_continuity=require_suite_continuity,
             require_assert_liveness=require_assert_liveness,
+            require_structured_verdict=require_structured_verdict,
             **profile_options,
             **harness_input_options,
         )

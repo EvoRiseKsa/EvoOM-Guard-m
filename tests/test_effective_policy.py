@@ -425,6 +425,7 @@ def test_guard_callable_surface_is_frozen_during_internal_extraction() -> None:
         "harness_inputs",
         "require_suite_continuity",
         "require_assert_liveness",
+        "require_structured_verdict",
     )
     assert signature.parameters["repo_path"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert signature.parameters["candidate"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
