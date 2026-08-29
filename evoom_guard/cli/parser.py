@@ -276,9 +276,7 @@ def build_parser(
         "--strict-harness", dest="strict_harness", action="store_const",
         const=True, default=None,
         help="opt-in strict profile: make dependency/compiler/project manifests "
-        "immutable and require a non-empty structured JUnit test verdict (post-run). "
-        "For the structured-verdict floor alone, without the manifest-immutability, "
-        "use --require-structured-verdict (a preflight, fail-fast refusal)",
+        "immutable and require a non-empty structured JUnit test verdict",
     )
     strict_harness_group.add_argument(
         "--no-strict-harness", dest="strict_harness", action="store_const",
@@ -317,10 +315,7 @@ def build_parser(
         "verdict would be graded from the process exit code alone with no "
         "judge-owned JUnit evidence and no exit/report tamper cross-check. Turns "
         "the `preflight` exit-code-only warning into a hard gate; a no-op under "
-        "--blackbox-only, where the repository suite is not a verdict source. "
-        "This is the narrow, preflight-only floor: --strict-harness also enforces a "
-        "structured verdict (post-run) but as part of a broader profile that additionally "
-        "makes project manifests immutable",
+        "--blackbox-only, where the repository suite is not a verdict source",
     )
     g_p.add_argument("--json", dest="json_out", default=None, help="write the JSON verdict to this path")
     g_p.add_argument(
