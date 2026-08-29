@@ -73,7 +73,7 @@ stdlib-only, so no clone and no install are needed.
 
 Guard's resistance is not tuned to a benchmark. Run
 [`benchmarks/real_repo_eval.py`](benchmarks/real_repo_eval.py): it turns the gate
-on this repository's own real ~69k-LOC / 5,517-test codebase, then runs a battery
+on this repository's own real ~69k-LOC / ~5.5k-test codebase, then runs a battery
 of real reward-hacks against its real files, comparing Guard to a naive "apply the
 change, trust the exit code" gate.
 
