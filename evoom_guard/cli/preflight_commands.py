@@ -16,6 +16,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from evoom_guard.policy.preflight import PreflightCheck, PreflightReport
+from evoom_guard.runners.registry import instrument_command as _instrument_command
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,7 +252,8 @@ def execute_preflight(
             pack_path,
             expected_pack_sha256,
             services=services,
-        ),
+        )
+        + _structured_verdict_checks(command, blackbox_only=blackbox_only),
     )
 
     if args.preflight_json:
@@ -294,6 +296,62 @@ def _resolve_pack_path(
         return services.absolute_path(value)
     base = os.path.dirname(config_path) if config_path else repository
     return services.absolute_path(services.join_path(base, value))
+
+
+
+
+def _structured_verdict_checks(
+    command: Sequence[str],
+    *,
+    blackbox_only: bool,
+    instrument: Callable[
+        [list[str], str], tuple[list[str], bool, dict[str, str]]
+    ] = _instrument_command,
+) -> tuple[PreflightCheck, ...]:
+    """Report whether the repo-suite verdict would be JUnit-backed.
+
+    Probes the same live runner registry execution uses (instrumentation is a
+    pure argv/env transform; nothing runs).  Skipped under ``--blackbox-only``,
+    where the repository suite is not a verdict source at all, and for an empty
+    command, which ``test_command.nonempty`` already reports as an error.
+    """
+
+    if blackbox_only or not command:
+        return ()
+    _, report_expected, _ = instrument(
+        [str(token) for token in command], "judge-result.xml"
+    )
+    if report_expected:
+        return (
+            PreflightCheck(
+                code="test_command.structured_verdict",
+                status="pass",
+                message=(
+                    "a structured runner adapter instruments this command: the "
+                    "repo-suite verdict is JUnit-backed and exit/report "
+                    "tamper-cross-checked"
+                ),
+                remediation=None,
+            ),
+        )
+    return (
+        PreflightCheck(
+            code="test_command.exit_code_only_verdict",
+            status="warning",
+            message=(
+                "no structured runner adapter matches this command: the "
+                "repo-suite verdict would be graded from the process exit code "
+                "alone, with no judge-owned JUnit evidence and no exit/report "
+                "tamper cross-check (reward-hack resistance is reduced)"
+            ),
+            remediation=(
+                "invoke a recognized runner (pytest, node --test, vitest, jest, "
+                "mocha, gotestsum, rspec, maven) directly or behind a supported "
+                "launcher, or wrap your runner so it is one of those forms; "
+                "verify with `evo-guard preflight` until this check passes"
+            ),
+        ),
+    )
 
 
 def _pack_checks(

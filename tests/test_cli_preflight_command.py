@@ -376,3 +376,49 @@ def test_strict_digest_pinned_container_can_be_green(tmp_path: Path) -> None:
     )
 
     assert result == 0
+
+
+def _statuses_by_code(payload: dict[str, object]) -> dict[str, str]:
+    checks = payload["checks"]
+    assert isinstance(checks, list)
+    return {check["code"]: check["status"] for check in checks}
+
+
+def test_structured_runner_reports_junit_backed_verdict(tmp_path: Path) -> None:
+    output: list[str] = []
+    result = execute_preflight(
+        _args(tmp_path, preflight_json=True),
+        services=_services({"test_command": ["python", "-m", "pytest", "-q"]}),
+        out=output.append,
+    )
+
+    assert result == 0
+    statuses = _statuses_by_code(json.loads(output[0]))
+    assert statuses["test_command.structured_verdict"] == "pass"
+    assert "test_command.exit_code_only_verdict" not in statuses
+
+
+def test_unknown_runner_warns_exit_code_only_verdict(tmp_path: Path) -> None:
+    output: list[str] = []
+    execute_preflight(
+        _args(tmp_path, preflight_json=True),
+        services=_services({"test_command": ["./run-tests.sh"]}),
+        out=output.append,
+    )
+
+    statuses = _statuses_by_code(json.loads(output[0]))
+    assert statuses["test_command.exit_code_only_verdict"] == "warning"
+    assert "test_command.structured_verdict" not in statuses
+
+
+def test_blackbox_only_skips_structured_verdict_check(tmp_path: Path) -> None:
+    output: list[str] = []
+    execute_preflight(
+        _args(tmp_path, preflight_json=True, blackbox=True, blackbox_only=True),
+        services=_services({"test_command": ["./run-tests.sh"]}),
+        out=output.append,
+    )
+
+    statuses = _statuses_by_code(json.loads(output[0]))
+    assert "test_command.structured_verdict" not in statuses
+    assert "test_command.exit_code_only_verdict" not in statuses
