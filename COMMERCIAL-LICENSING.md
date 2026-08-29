@@ -12,14 +12,24 @@ EvoOM Guard is source-available under the
 inspection, non-commercial study and research, good-faith security research,
 and a limited internal non-production evaluation.
 
-The following uses require a separate commercial agreement:
+**The Apache-2.0 core gate is exempt from this page.** EvoOM Guard is open-core:
+the verification gate itself (the paths mapped Apache-2.0 in
+[LICENSING.md](LICENSING.md) — policy, candidate apply, the judge/verifiers,
+runners, execution/isolation, and the CLI dispatch) is licensed under the
+Apache License 2.0 and may be used freely for any purpose, **including as a
+required CI/CD, merge, or release gate**. The requirements below govern the
+EvoRise **source-available platform** (`admission/`, `finalizer/`, and the
+seal/verify/derive release-trust command families) — not the core gate.
+
+The following uses of the source-available platform require a separate
+commercial agreement:
 
 | Use | Commercial agreement required |
 | --- | --- |
-| Production or commercial use | Yes |
-| Required CI/CD, merge, release, deployment, security, audit, or compliance gate | Yes |
-| Redistribution, white-labeling, or embedding in another product | Yes |
-| SaaS, hosted, or managed service | Yes |
+| Production or commercial use of the platform | Yes |
+| Using a **platform** feature as a required CI/CD, merge, release, deployment, security, audit, or compliance gate (the Apache-2.0 core gate is free) | Yes |
+| Redistribution, white-labeling, or embedding the platform in another product | Yes |
+| SaaS, hosted, or managed service built on the platform | Yes |
 | Enterprise deployment, support, or service levels | Yes |
 
 ## Contact
