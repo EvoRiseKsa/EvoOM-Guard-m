@@ -44,6 +44,8 @@ PLATFORM_FLAT_MODULES = frozenset(
         "evoom_guard.release_source_finalizer_v2",
         "evoom_guard.release_source_producer_receipt",
         "evoom_guard.release_source_producer_receipt_v2",
+        "evoom_guard.remote_signer_client",
+        "evoom_guard.round_ledger_client",
         "evoom_guard.trusted_finalizer",
     }
 )

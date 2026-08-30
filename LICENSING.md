@@ -86,6 +86,8 @@ agreement.
 |---|---|
 | `evoom_guard/finalizer/` | Trusted Finalizer deployment kit + static inspection |
 | `evoom_guard/admission/` | Sealed ALLOW/DENY admission contracts (artifact / release-source / agent-change) |
+| `evoom_guard/remote_signer_client.py` | Thin client for the frozen Remote Signer v1 wire contract (dormant by default) |
+| `evoom_guard/round_ledger_client.py` | Thin client for the frozen field-ledger v1 wire contract (dormant by default) |
 | `evoom_guard/cli/evidence_sealing_commands.py` | The `bundle-evidence` / `finalize-record` operator sealing handlers |
 | **Platform CLI subcommands** | The finalizer, admission, release-source, release-artifact, and GitHub-attestation `seal-*` / `verify-*` / `derive-*` / `reverify-*` families (the operator/auditor commands beyond the core set above) |
 | `.github/workflows/evoguard-*.yml` | The protected release pipeline (reverify, seal, admit, promote, publish) |

@@ -97,6 +97,11 @@ FLAT_MODULE_LAYERS = {
     "evoom_guard.release_source_finalizer": "finalizer",
     "evoom_guard.release_source_finalizer_v2": "finalizer",
     "evoom_guard.release_source_producer_receipt_v2": "finalizer",
+    # Stdlib-only thin clients for the frozen remote-signer / field-ledger
+    # wire contracts: leaf modules importing nothing from the package, driven
+    # only by external platform tooling, so they sit with the integrations.
+    "evoom_guard.remote_signer_client": "integrations",
+    "evoom_guard.round_ledger_client": "integrations",
     "evoom_guard.signing": "evidence",
     "evoom_guard.verdict_contract_v1_11": "domain",
     "evoom_guard.verdict_contract_v1_12": "domain",
