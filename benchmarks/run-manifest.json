@@ -99,7 +99,7 @@
   },
   "engine_version": "4.7.0.dev0",
   "environment": {
-    "captured_at_utc": "2026-08-30T02:33:14.187898Z",
+    "captured_at_utc": "2026-08-30T03:53:46.277476Z",
     "case_interpreter": {
       "build": [
         "main",
@@ -265,7 +265,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "6f2527eef03bb2e634fda66f009c4b75a2867cbd",
+    "head": "ac409c08a4477fbe3f76c9e826b587dfabaf915f",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -316,7 +316,7 @@
     "evidence_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "a3d3233e2991d141c18f9aaaf136300e5a725e14",
+      "commit": "a785dadfe28fa1135378809e171d49545e405521",
       "final_manifest_in_commit": false,
       "observation_point": "after results commit and before final manifest publication",
       "reason": "source_and_results_match_commit_final_manifest_excluded",
@@ -328,7 +328,7 @@
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "6f2527eef03bb2e634fda66f009c4b75a2867cbd",
+      "commit": "ac409c08a4477fbe3f76c9e826b587dfabaf915f",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -340,13 +340,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14816,
+    "bytes": 14819,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "23061ab04b634465447330d5f2f22ae891daf3897ccbd99c25781ca865c0c843"
+    "sha256": "880b5ee4dd4a5087a54f51c3e57c0a9a09e8630dc0af382e07372ff6116d8964"
   },
-  "run_id": "bef50997-0241-4ebc-b095-858e154cdcc0",
+  "run_id": "d9681c23-c597-4562-850f-091737385df8",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -893,9 +893,9 @@
         "sha256": "430dcf2ebd0326e12648f3535e24e1474a20cf7beafa9f34a60cc168120bbdd1"
       },
       {
-        "bytes": 20787,
+        "bytes": 22829,
         "path": "evoom_guard/isolation/candidate.py",
-        "sha256": "763d72a7997736969feeaa5feec9a3cc4a3b118171a6b2427d8f50dc5c2bb984"
+        "sha256": "2171f8cc6fabd1c41898ab2a63c4e76ebd4b5981eb69b6b99bc4ee0cdbb1ff87"
       },
       {
         "bytes": 30848,
@@ -978,14 +978,14 @@
         "sha256": "cd99a66872656b04a4de1b67d9e9fe09fe4327a43046f3bedb72648c909f40bf"
       },
       {
-        "bytes": 45890,
+        "bytes": 46580,
         "path": "evoom_guard/remote_signer_client.py",
-        "sha256": "2776d76e8eb9af849f53c67974b5381cf6a83facd5ae808d3bc32ec65be2ad46"
+        "sha256": "745000b15c71c73fd089db0c33ea1de8d5406326db256fe6842a6c649353933e"
       },
       {
-        "bytes": 36663,
+        "bytes": 37896,
         "path": "evoom_guard/round_ledger_client.py",
-        "sha256": "029ff5f823fc89313315515b221e0e4c2ee022dfff014ec640905edb832f8544"
+        "sha256": "e43714abbcdf0dc231d715c522fc723f225c51867ea157ebc91d2a39307bab04"
       },
       {
         "bytes": 1586,
@@ -1477,13 +1477,13 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "2b2a53486bba5381ea12879a0f31bb0cc317c8664cdc34d118e75b87f427df81",
-    "total_bytes": 3189273
+    "sha256": "ee9bccb355b539c42000821e1e0d5506065f5a5d4c650fa688b166f2d4091c2d",
+    "total_bytes": 3193238
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.218,
-    "guard_full_run_median_s": 0.254,
-    "guard_full_run_p95_s": 0.403,
+    "controlled_direct_pytest_median_s": 0.215,
+    "guard_full_run_median_s": 0.243,
+    "guard_full_run_p95_s": 0.264,
     "pre_gate_only_median_s": 0.003,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }
