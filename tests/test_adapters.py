@@ -438,3 +438,26 @@ def test_registry_has_all_runners():
         "pytest", "node --test", "vitest", "jest",
         "gotestsum", "rspec", "mocha", "maven", "sh -c",
     }
+
+
+def test_pytest_append_wins_over_candidate_supplied_junitxml():
+    # pytest honors the LAST --junitxml, so the judge-owned path must be
+    # appended AFTER any candidate-supplied reporter and grading must stay
+    # structured. Guarding with "reporter present -> None" here would downgrade
+    # to exit-code-only — the reward-hack-friendly direction.
+    base = ["pytest", "--junitxml=/attacker/own.xml", "-q"]
+    cmd, exp, env = instrument_command(base, "/judge/report.xml")
+    assert exp is True and env == {}
+    junit_flags = [item for item in cmd if item.startswith("--junitxml=")]
+    assert junit_flags[-1] == "--junitxml=/judge/report.xml"
+    assert cmd.index("--junitxml=/judge/report.xml") > cmd.index(
+        "--junitxml=/attacker/own.xml"
+    )
+
+
+def test_pytest_module_form_append_wins_over_candidate_junitxml():
+    base = ["python", "-m", "pytest", "--junitxml=own.xml"]
+    cmd, exp, env = instrument_command(base, "/judge/report.xml")
+    assert exp is True and env == {}
+    junit_flags = [item for item in cmd if item.startswith("--junitxml=")]
+    assert junit_flags[-1] == "--junitxml=/judge/report.xml"

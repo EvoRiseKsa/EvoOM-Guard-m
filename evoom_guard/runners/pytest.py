@@ -22,6 +22,11 @@ class PytestAdapter:
         return _command._invokes_python_module(cmd, "pytest")
 
     def instrument(self, cmd: list[str], report_path: str) -> list[str] | None:
+        # Deliberately no "already instrumented" guard here: pytest honors the
+        # LAST --junitxml flag, so appending keeps the judge-owned report path
+        # authoritative even when the candidate command supplies its own.
+        # Returning None instead (as reporter-conflicting runners must) would
+        # downgrade grading to exit-code-only — strictly weaker.
         return [*cmd, f"--junitxml={report_path}", "-o", "junit_family=xunit2"]
 
 

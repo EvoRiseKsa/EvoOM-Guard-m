@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+import pytest
+
 import evoom_guard.candidate_runner as legacy
 import evoom_guard.isolation as isolation
 import evoom_guard.isolation.candidate as implementation
@@ -166,3 +168,97 @@ def test_core_candidate_runner_matches_legacy_for_all_boundaries(
             isolation_mode,
         )
         assert core_plan == legacy_plan
+
+
+def _subprocess_plan(
+    tmp_path: Path, mem_limit_mb: int
+) -> tuple[str, dict[str, Any], implementation.IsolationEvidence]:
+    workdir = tmp_path / "workdir"
+    target = tmp_path / "target"
+    workdir.mkdir()
+    target.mkdir()
+    runner = implementation.CandidateRunner(
+        isolation="subprocess", mem_limit_mb=mem_limit_mb
+    )
+    launcher, env, evidence = runner.prepare(str(workdir), str(target))
+    config = json.loads(Path(launcher + ".json").read_text(encoding="utf-8"))
+    return launcher, config, evidence
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX launcher contract")
+def test_subprocess_mem_limit_threads_rlimit_into_launcher_config(
+    tmp_path: Path,
+) -> None:
+    _launcher, config, evidence = _subprocess_plan(tmp_path, mem_limit_mb=64)
+    assert config["mem_limit_bytes"] == 64 * 1024 * 1024
+    assert "RLIMIT_AS cap of 64 MiB" in evidence.note
+    assert "fail-closed" in evidence.note
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX launcher contract")
+def test_subprocess_without_mem_limit_keeps_launcher_config_unchanged(
+    tmp_path: Path,
+) -> None:
+    _launcher, config, evidence = _subprocess_plan(tmp_path, mem_limit_mb=0)
+    assert "mem_limit_bytes" not in config
+    assert "RLIMIT_AS" not in evidence.note
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX launcher contract")
+def test_subprocess_launcher_applies_rlimit_as_to_the_candidate(
+    tmp_path: Path,
+) -> None:
+    launcher, config, _evidence = _subprocess_plan(tmp_path, mem_limit_mb=512)
+    completed = subprocess.run(
+        [
+            launcher,
+            sys.executable,
+            "-c",
+            "import resource; print(resource.getrlimit(resource.RLIMIT_AS)[0])",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert completed.stdout.strip() == str(config["mem_limit_bytes"])
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX launcher contract")
+def test_subprocess_launcher_fails_closed_on_unappliable_mem_limit(
+    tmp_path: Path,
+) -> None:
+    workdir = tmp_path / "workdir"
+    target = tmp_path / "target"
+    workdir.mkdir()
+    target.mkdir()
+    launcher = implementation.CandidateRunner._write_launcher(
+        str(workdir),
+        {
+            "mode": "subprocess",
+            "target": str(target),
+            "mem_limit_bytes": 64 * 1024 * 1024,
+        },
+    )
+    # Shadow the stdlib resource module so setrlimit raises, simulating a
+    # platform where the configured cap cannot be applied.
+    shadow = tmp_path / "shadow"
+    shadow.mkdir()
+    (shadow / "resource.py").write_text(
+        "RLIMIT_AS = 9\n"
+        "def setrlimit(res, limits):\n"
+        "    raise OSError('cannot apply memory cap')\n",
+        encoding="utf-8",
+    )
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(shadow)
+    completed = subprocess.run(
+        [launcher, sys.executable, "-c", "print('ran')"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=env,
+    )
+    # An unappliable cap must abort the launch (125), never run uncapped.
+    assert completed.returncode == 125, completed.stdout + completed.stderr
+    assert "ran" not in completed.stdout

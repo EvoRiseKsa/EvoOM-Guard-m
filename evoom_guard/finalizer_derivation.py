@@ -55,7 +55,6 @@ from evoom_guard.execution import (
     process_group_popen_kwargs,
     terminate_process_tree,
 )
-from evoom_guard.guard import serialize_candidate_blocks
 from evoom_guard.pack_manifest import (
     MAX_PACK_BYTES,
     MAX_PACK_ENTRIES,
@@ -75,6 +74,11 @@ from evoom_guard.policy import (
 from evoom_guard.strict_json import strict_json_loads
 from evoom_guard.verifiers.harness_policy import is_safe_relpath
 from evoom_guard.verifiers.repo_verifier import COPY_IGNORE
+
+# Import the serializer from its owning workspace layer, not through the
+# evoom_guard.guard facade: a finalizer-layer module importing the API layer
+# would invert ADR-0001's dependency arrow.
+from evoom_guard.workspace.candidate_tree import serialize_candidate_blocks
 
 FINALIZER_DERIVATION_FORMAT = "EVOGUARD_FINALIZER_GIT_BINDINGS_V1"
 FINALIZER_DERIVATION_ROLE = "trusted-finalizer-git-bindings"

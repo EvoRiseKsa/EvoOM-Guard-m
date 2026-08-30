@@ -249,6 +249,17 @@
         "layer_violations": 0,
         "unclassified_modules": 7
       }
+    },
+    {
+      "revision": 19,
+      "ceilings": {
+        "cycle_edges": 0,
+        "cross_package_private_imports": 0,
+        "wildcard_imports": 0,
+        "unresolved_dynamic_imports": 0,
+        "layer_violations": 0,
+        "unclassified_modules": 0
+      }
     }
   ],
   "violations": {
@@ -257,14 +268,6 @@
     "wildcard_imports": [],
     "unresolved_dynamic_imports": [],
     "layer_violations": [],
-    "unclassified_modules": [
-      "evoom_guard.blackbox",
-      "evoom_guard.finalizer_derivation",
-      "evoom_guard.github_attestation",
-      "evoom_guard.guard",
-      "evoom_guard.record_verifier",
-      "evoom_guard.release_source_producer_receipt",
-      "evoom_guard.trusted_finalizer"
-    ]
+    "unclassified_modules": []
   }
 }

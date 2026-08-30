@@ -66,7 +66,20 @@ LAYER_RANK = {
 # responsibilities are separated.
 FLAT_MODULE_LAYERS = {
     "evoom_guard.adapters": "runners",
+    "evoom_guard.blackbox": "verifiers",
     "evoom_guard.contracts": "foundation",
+    "evoom_guard.finalizer_derivation": "finalizer",
+    "evoom_guard.github_attestation": "admission",
+    # guard.py is the public programmatic entry (guard()/guard_from_diff());
+    # it composes every lower layer and is reached only by the cli dispatch,
+    # so it sits in the top layer group as the library API surface.
+    "evoom_guard.guard": "api",
+    # record_verifier verifies verdict records and is imported by the
+    # evidence-layer evidence_bundle, which pins it to the evidence layer
+    # alongside signing.
+    "evoom_guard.record_verifier": "evidence",
+    "evoom_guard.release_source_producer_receipt": "finalizer",
+    "evoom_guard.trusted_finalizer": "finalizer",
     "evoom_guard.strict_json": "foundation",
     "evoom_guard.patch_applier": "candidate",
     "evoom_guard.patchmin": "candidate",
@@ -75,7 +88,9 @@ FLAT_MODULE_LAYERS = {
     "evoom_guard.pack_manifest": "verifiers",
     "evoom_guard.artifact_admission": "admission",
     "evoom_guard.artifact_digest_admission": "admission",
-    "evoom_guard.change_attempt_observation": "evidence",
+    # Builds and seals signed change-attempt observations through the trusted
+    # finalizer, so it lives beside it in the finalizer layer.
+    "evoom_guard.change_attempt_observation": "finalizer",
     "evoom_guard.evidence": "evidence",
     "evoom_guard.evidence_bundle": "evidence",
     "evoom_guard.maintenance_bindings": "finalizer",

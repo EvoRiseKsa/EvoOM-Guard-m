@@ -220,18 +220,27 @@ class CandidateRunner:
     def _prepare_subprocess(
         self, workdir: str, target: str
     ) -> tuple[str, dict[str, str], IsolationEvidence]:
-        launcher = self._write_launcher(
-            workdir,
-            self._launcher_config({"mode": "subprocess", "target": target}),
+        config: dict[str, Any] = {"mode": "subprocess", "target": target}
+        note = (
+            "candidate launcher prepared for a host subprocess: same machine, "
+            "filesystem and user as the judge. A launcher receipt is required "
+            "before assurance can claim this boundary was invoked."
         )
+        if self.mem_limit_mb > 0:
+            # Docker mode delivers mem_limit_mb via --memory; a host subprocess
+            # must deliver the same promise via RLIMIT_AS or refuse to run.
+            # Silently dropping a requested cap would be a fail-open policy gap.
+            config["mem_limit_bytes"] = self.mem_limit_mb * 1024 * 1024
+            note += (
+                f" An RLIMIT_AS cap of {self.mem_limit_mb} MiB is applied by "
+                "the launcher before exec; an unappliable cap aborts the "
+                "launch (fail-closed)."
+            )
+        launcher = self._write_launcher(workdir, self._launcher_config(config))
         evidence = IsolationEvidence(
             requested=self.isolation,
             delivered="subprocess",
-            note=(
-                "candidate launcher prepared for a host subprocess: same machine, "
-                "filesystem and user as the judge. A launcher receipt is required "
-                "before assurance can claim this boundary was invoked."
-            ),
+            note=note,
         )
         env = {
             "EVOGUARD_EXEC": launcher,
@@ -410,6 +419,16 @@ class CandidateRunner:
                 "    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as _s:\n"
                 "        _s.sendto(receipt_token.encode('ascii'), receipt_path)\n"
                 "if CFG['mode'] == 'subprocess':\n"
+                "    limit = CFG.get('mem_limit_bytes')\n"
+                "    if limit:\n"
+                "        # Fail closed: a configured memory cap that cannot be\n"
+                "        # applied must abort the launch (125, matching the\n"
+                "        # bounded-process launcher), never run uncapped.\n"
+                "        try:\n"
+                "            import resource\n"
+                "            resource.setrlimit(resource.RLIMIT_AS, (limit, limit))\n"
+                "        except (ImportError, OSError, ValueError):\n"
+                "            sys.exit(125)\n"
                 "    os.chdir(CFG['target'])\n"
                 "    os.execvp(argv[0], argv)\n"
                 "else:\n"
