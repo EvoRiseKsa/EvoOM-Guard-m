@@ -112,7 +112,7 @@ def test_registry_records_literal_admission_direction_failures() -> None:
 
 def test_reviewed_disposition_is_bound_to_exact_source_and_corpus() -> None:
     row = {"id": "legit-dependency-bump"}
-    source_sha256 = "ee9bccb355b539c42000821e1e0d5506065f5a5d4c650fa688b166f2d4091c2d"
+    source_sha256 = "07101ecfa606753d02468da8ded6dec7d4c77bd59a39dd1560e114a6f749302d"
     corpus_sha256 = "c473c62bf92c0faeb48bb56ec266d9b0d6adfe9f3ffb3ff45d91a813c3a1fd59"
     assert (
         _disposition(
