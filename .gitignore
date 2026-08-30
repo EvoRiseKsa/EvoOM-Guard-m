@@ -14,3 +14,4 @@ venv/
 .coverage
 node_modules/
 work/
+.claude/settings.local.json
