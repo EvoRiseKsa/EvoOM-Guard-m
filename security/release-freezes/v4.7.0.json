@@ -4,10 +4,10 @@
   "version": "4.7.0",
   "source_version": "4.7.0.dev0",
   "declaration": {
-    "frozen_parent_commit_sha": "31ae6061a062f07749855318c077cf39ae1de94c",
-    "frozen_parent_tree_sha": "3636f9068eb3e585cbbb980f414aea6a199de2b1",
-    "started_at": "2026-08-28T22:49:00Z",
-    "not_before": "2026-09-11T22:49:00Z",
+    "frozen_parent_commit_sha": "573b9d9b38dd5a37232662699b5199422e6d3468",
+    "frozen_parent_tree_sha": "d993e8f477ab2e770e05301cf2a88559654079b2",
+    "started_at": "2026-08-30T06:31:00Z",
+    "not_before": "2026-09-13T06:31:00Z",
     "stabilization_seconds": 1209600
   },
   "scope": {
