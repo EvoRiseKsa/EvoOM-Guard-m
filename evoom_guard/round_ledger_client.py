@@ -614,7 +614,10 @@ def validate_head_assertion(assertion: Any) -> dict[str, Any]:
         raise LedgerProtocolError("head assertion head schema is invalid")
     _sha(head["receipt_sha256"], label="head.receipt_sha256")
     _integer(head["sequence"], label="head.sequence", minimum=1, maximum=2**63 - 1)
-    if list(assertion["limitations"] or ()) != list(HEAD_ASSERTION_LIMITATIONS):
+    limitations = assertion["limitations"]
+    if not isinstance(limitations, list) or limitations != list(
+        HEAD_ASSERTION_LIMITATIONS
+    ):
         raise LedgerProtocolError("head assertion limitations are not verbatim")
     _validate_authentication(assertion["authentication"], label="head assertion")
     canonical_json_bytes(assertion)
@@ -704,6 +707,12 @@ class AppendOutcome:
 def validate_endpoint(endpoint: str) -> tuple[str, str]:
     """Validate the POST endpoint and derive (origin, recovery_root_path)."""
     parsed = urllib.parse.urlsplit(endpoint)
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise LedgerProtocolError("ledger endpoint port is invalid") from exc
+    if port == 0:
+        raise LedgerProtocolError("ledger endpoint port is invalid")
     if (
         parsed.scheme != "https"
         or not parsed.hostname
@@ -801,13 +810,33 @@ def _error_body(body: bytes) -> tuple[str, str]:
     return code, message
 
 
+def _is_definite_rejection(status: int) -> bool:
+    """4xx statuses are definite non-commits, except the retryable trio."""
+    return 400 <= status <= 499 and status not in (408, 425, 429)
+
+
+def _rejection_detail(response: HttpResponse) -> str:
+    """Best-effort code/message from a definite rejection body."""
+    try:
+        code, message = _error_body(response.body)
+    except LedgerClientError:
+        return f"http {response.status}"
+    return f"{code}: {message}"
+
+
 def append_exact_request(
     request_bytes: bytes,
     *,
     endpoint: str,
     transport: Transport,
+    pinned_key_id: str,
+    verifier: Ed25519Verifier,
 ) -> AppendOutcome:
     """POST the exact retained request bytes; classify the outcome.
+
+    A returned :class:`AppendOutcome` carries receipt bytes that passed full
+    verification against the retained request — every request-copied field,
+    the request digest, the pinned signer key, and the Ed25519 signature.
 
     Raises :class:`LedgerAmbiguousOutcome` whenever the commit state is
     unknown — the caller retries with the same bytes or recovers via
@@ -823,38 +852,43 @@ def append_exact_request(
     }
     try:
         response: HttpResponse = transport("POST", endpoint, headers, request_bytes)
-    except LedgerClientError:
-        raise
     except Exception as exc:
+        # Any transport-level failure — including this module's own
+        # oversized/mangled-response errors — happens after the request may
+        # have been delivered, so the commit state is unknown.
         raise LedgerAmbiguousOutcome(f"transport failure: {exc}") from exc
     status = response.status
-    if status not in (200, 201, 400, 409):
-        # Anything else (1xx/3xx/408/425/429/5xx) leaves the commit state
-        # unknown; classify before touching headers or body so a mangled
-        # intermediary response still reads as ambiguous, not protocol error.
-        raise LedgerAmbiguousOutcome(f"unexpected ledger response status {status}")
-    header_map = _header_map(response)
     if status in (200, 201):
+        header_map = _header_map(response)
         _require_common_headers(header_map, response.body)
         marker = header_map.get(RESULT_HEADER)
         expected_marker = "created" if status == 201 else "replayed"
         if marker != expected_marker:
             raise LedgerProtocolError("ledger result marker is inconsistent")
-        receipt = parse_canonical_receipt(response.body)
-        if receipt["idempotency_key"] != request["idempotency_key"]:
-            raise LedgerProtocolError("served receipt names a different idempotency key")
+        verify_receipt(
+            response.body,
+            request_bytes,
+            pinned_key_id=pinned_key_id,
+            verifier=verifier,
+        )
         return AppendOutcome(created=(status == 201), receipt_bytes=response.body)
-    if status == 400:
+    if status == 409:
+        header_map = _header_map(response)
         _require_common_headers(header_map, response.body)
+        if RESULT_HEADER in header_map:
+            raise LedgerProtocolError(
+                "conflict responses never carry a result marker"
+            )
         code, message = _error_body(response.body)
-        raise LedgerRejectedError(f"{code}: {message}")
-    _require_common_headers(header_map, response.body)
-    if RESULT_HEADER in header_map:
-        raise LedgerProtocolError("conflict responses never carry a result marker")
-    code, message = _error_body(response.body)
-    if code not in CONFLICT_CODES:
-        raise LedgerProtocolError(f"unknown ledger conflict code: {code}")
-    raise LedgerConflictError(code, message)
+        if code not in CONFLICT_CODES:
+            raise LedgerProtocolError(f"unknown ledger conflict code: {code}")
+        raise LedgerConflictError(code, message)
+    if _is_definite_rejection(status):
+        # Definite non-commit (400 from the service, or a 403/404/413/...
+        # from the service or an intermediary): surface it, never retry-loop.
+        raise LedgerRejectedError(_rejection_detail(response))
+    # 1xx/3xx/408/425/429/5xx leave the commit state unknown.
+    raise LedgerAmbiguousOutcome(f"unexpected ledger response status {status}")
 
 
 def _recovery_get(
@@ -868,11 +902,11 @@ def _recovery_get(
     headers = {"Accept": "application/json", "Cache-Control": "no-cache"}
     try:
         response: HttpResponse = transport("GET", url, headers, None)
-    except LedgerClientError:
-        raise
     except Exception as exc:
         raise LedgerAmbiguousOutcome(f"transport failure: {exc}") from exc
     if response.status not in (200, 404):
+        if _is_definite_rejection(response.status):
+            raise LedgerRejectedError(_rejection_detail(response))
         raise LedgerAmbiguousOutcome(
             f"unexpected ledger recovery status {response.status}"
         )

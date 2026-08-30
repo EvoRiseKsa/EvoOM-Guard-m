@@ -921,6 +921,12 @@ class SignerOutcome:
 def validate_base_url(base_url: str) -> str:
     """Validate the service origin; returns it without a trailing slash."""
     parsed = urllib.parse.urlsplit(base_url)
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise SignerProtocolError("signer base URL port is invalid") from exc
+    if port == 0:
+        raise SignerProtocolError("signer base URL port is invalid")
     if (
         parsed.scheme != "https"
         or not parsed.hostname
@@ -1003,14 +1009,25 @@ def _error_code(body: bytes) -> str:
     return code
 
 
+def _is_definite_rejection(status: int) -> bool:
+    """4xx statuses are definite non-commits, except the retryable trio."""
+    return 400 <= status <= 499 and status not in (408, 425, 429)
+
+
+def _rejection_code(response: HttpResponse) -> str:
+    """Best-effort error code from a definite rejection body."""
+    try:
+        return _error_code(response.body)
+    except SignerClientError:
+        return f"http_{response.status}"
+
+
 def _classify_error(status: int, code: str) -> SignerClientError:
     if status == 409 and code == "operation_unresolved":
         return SignerUnresolvedError(
             "operation is quarantined pending out-of-band reconciliation"
         )
-    if status == 409 and code == "operation_conflict":
-        return SignerRejectedError(code)
-    if status in (400, 401, 403, 404):
+    if _is_definite_rejection(status):
         return SignerRejectedError(code)
     return SignerAmbiguousOutcome(f"signer answered {status}: {code}")
 
@@ -1052,19 +1069,15 @@ def post_signature(
         response: HttpResponse = transport(
             "POST", origin + SIGNATURE_PATH, headers, operation_body
         )
-    except SignerClientError:
-        raise
     except Exception as exc:
+        # Any transport-level failure — including this module's own
+        # oversized/mangled-response errors — happens after the request may
+        # have been delivered, so the signing outcome is unknown.
         raise SignerAmbiguousOutcome(f"transport failure: {exc}") from exc
     status = response.status
-    if status not in (200, 201, 400, 401, 403, 404, 409):
-        # 5xx and anything unexpected leaves the signing outcome unknown;
-        # classify before touching headers or body so a mangled intermediary
-        # response still reads as ambiguous, not protocol error.
-        raise SignerAmbiguousOutcome(f"unexpected signer response status {status}")
-    header_map = _header_map(response)
-    _require_common_headers(header_map, response.body)
     if status in (200, 201):
+        header_map = _header_map(response)
+        _require_common_headers(header_map, response.body)
         marker = header_map.get(RESULT_HEADER)
         expected_marker = "created" if status == 201 else "replayed"
         if marker != expected_marker:
@@ -1079,7 +1092,12 @@ def post_signature(
         if receipt["operation_id"] != operation_id:
             raise SignerProtocolError("served receipt names a different operation")
         return SignerOutcome(created=(status == 201), receipt_bytes=response.body)
-    raise _classify_error(status, _error_code(response.body))
+    if _is_definite_rejection(status):
+        # Definite non-signing (a service 400/401/403/404/409, or a
+        # 405/413/... from an intermediary): surface it, never retry-loop.
+        raise _classify_error(status, _rejection_code(response))
+    # 1xx/3xx/408/425/429/5xx leave the signing outcome unknown.
+    raise SignerAmbiguousOutcome(f"unexpected signer response status {status}")
 
 
 def get_receipt(
@@ -1114,11 +1132,9 @@ def get_receipt(
     }
     try:
         response: HttpResponse = transport("GET", origin + path, headers, None)
-    except SignerClientError:
-        raise
     except Exception as exc:
         raise SignerAmbiguousOutcome(f"transport failure: {exc}") from exc
-    if response.status not in (200, 400, 401, 403, 404, 409):
+    if response.status != 200 and not _is_definite_rejection(response.status):
         raise SignerAmbiguousOutcome(
             f"unexpected signer response status {response.status}"
         )
@@ -1138,13 +1154,13 @@ def get_receipt(
             raise SignerProtocolError("served receipt names a different operation")
         return response.body
     if response.status == 404:
-        code = _error_code(response.body)
+        code = _rejection_code(response)
         if code == "operation_not_found":
             if header_map.get(RESULT_HEADER) != "not-found":
                 raise SignerProtocolError("signer result marker is inconsistent")
             return None
         raise _classify_error(response.status, code)
-    raise _classify_error(response.status, _error_code(response.body))
+    raise _classify_error(response.status, _rejection_code(response))
 
 
 __all__ = [

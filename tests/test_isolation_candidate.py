@@ -259,6 +259,29 @@ def test_subprocess_launcher_fails_closed_on_unappliable_mem_limit(
         timeout=60,
         env=env,
     )
-    # An unappliable cap must abort the launch (125), never run uncapped.
+    # An unappliable cap must abort the launch (125), never run uncapped,
+    # and must say so on stderr so evidence can attribute the abort to the
+    # launcher boundary rather than the candidate.
     assert completed.returncode == 125, completed.stdout + completed.stderr
     assert "ran" not in completed.stdout
+    assert "memory cap could not be applied" in completed.stderr
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX launcher contract")
+def test_prepare_refuses_a_provably_undeliverable_mem_limit(
+    tmp_path: Path,
+) -> None:
+    import resource
+
+    workdir = tmp_path / "workdir"
+    target = tmp_path / "target"
+    workdir.mkdir()
+    target.mkdir()
+    runner = implementation.CandidateRunner(isolation="subprocess", mem_limit_mb=64)
+    cap = 64 * 1024 * 1024
+    with (
+        mock.patch.object(resource, "getrlimit", return_value=(cap - 1, cap - 1)),
+        mock.patch.object(implementation.os, "geteuid", return_value=1000, create=True),
+    ):
+        with pytest.raises(implementation.IsolationUnavailable):
+            runner.prepare(str(workdir), str(target))

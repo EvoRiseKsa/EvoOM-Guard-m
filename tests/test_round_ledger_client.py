@@ -304,6 +304,8 @@ def test_append_created_and_replayed_are_classified() -> None:
         transport=_transport_returning(
             _response(201, receipt_bytes, marker="created")
         ),
+        pinned_key_id=GOLDEN_KEY_ID,
+        verifier=_golden_public_key(),
     )
     assert created.created is True
     assert created.receipt_bytes == receipt_bytes
@@ -313,6 +315,8 @@ def test_append_created_and_replayed_are_classified() -> None:
         transport=_transport_returning(
             _response(200, receipt_bytes, marker="replayed")
         ),
+        pinned_key_id=GOLDEN_KEY_ID,
+        verifier=_golden_public_key(),
     )
     assert replayed.created is False
 
@@ -323,7 +327,9 @@ def test_append_sends_the_exact_bytes_and_idempotency_header() -> None:
         _response(201, _golden_receipt_bytes(), marker="created")
     )
     client.append_exact_request(
-        request_bytes, endpoint=ENDPOINT, transport=transport
+        request_bytes, endpoint=ENDPOINT, transport=transport,
+        pinned_key_id=GOLDEN_KEY_ID,
+        verifier=_golden_public_key(),
     )
     ((method, url, headers, body),) = transport.calls
     assert method == "POST"
@@ -342,6 +348,8 @@ def test_append_rejects_an_inconsistent_result_marker() -> None:
             transport=_transport_returning(
                 _response(201, _golden_receipt_bytes(), marker="replayed")
             ),
+            pinned_key_id=GOLDEN_KEY_ID,
+            verifier=_golden_public_key(),
         )
 
 
@@ -357,6 +365,8 @@ def test_append_conflicts_carry_their_code(code: str) -> None:
             transport=_transport_returning(
                 _response(409, _error_bytes(code, "conflict"))
             ),
+            pinned_key_id=GOLDEN_KEY_ID,
+            verifier=_golden_public_key(),
         )
     assert excinfo.value.code == code
 
@@ -369,6 +379,8 @@ def test_append_rejects_unknown_conflict_codes_and_markers() -> None:
             transport=_transport_returning(
                 _response(409, _error_bytes("mystery_code", "conflict"))
             ),
+            pinned_key_id=GOLDEN_KEY_ID,
+            verifier=_golden_public_key(),
         )
     with pytest.raises(client.LedgerProtocolError):
         client.append_exact_request(
@@ -379,6 +391,8 @@ def test_append_rejects_unknown_conflict_codes_and_markers() -> None:
                     409, _error_bytes("cas_conflict", "conflict"), marker="created"
                 )
             ),
+            pinned_key_id=GOLDEN_KEY_ID,
+            verifier=_golden_public_key(),
         )
 
 
@@ -390,6 +404,8 @@ def test_append_definite_rejection_is_not_ambiguous() -> None:
             transport=_transport_returning(
                 _response(400, _error_bytes("invalid_request", "bad"))
             ),
+            pinned_key_id=GOLDEN_KEY_ID,
+            verifier=_golden_public_key(),
         )
 
 
@@ -402,6 +418,8 @@ def test_append_ambiguous_statuses_demand_exact_retry(status: int) -> None:
             transport=_transport_returning(
                 client.HttpResponse(status=status, headers=(), body=b"")
             ),
+            pinned_key_id=GOLDEN_KEY_ID,
+            verifier=_golden_public_key(),
         )
 
 
@@ -413,7 +431,9 @@ def test_append_transport_failure_is_ambiguous() -> None:
 
     with pytest.raises(client.LedgerAmbiguousOutcome):
         client.append_exact_request(
-            _golden_request_bytes(), endpoint=ENDPOINT, transport=_broken
+            _golden_request_bytes(), endpoint=ENDPOINT, transport=_broken,
+            pinned_key_id=GOLDEN_KEY_ID,
+            verifier=_golden_public_key(),
         )
 
 
@@ -533,3 +553,81 @@ def test_endpoint_validation_refuses_unsafe_urls() -> None:
         "https://ledger.example",
         "/v1",
     )
+
+
+def test_append_fully_verifies_the_served_receipt() -> None:
+    # A self-consistent (canonical, well-formed) receipt that names a
+    # different ledger must be rejected by the append path itself.
+    forged = _golden_receipt()
+    forged["ledger_id"] = "ledger-evil"
+    forged_bytes = client.canonical_json_bytes(forged)
+    with pytest.raises(client.ReceiptVerificationError):
+        client.append_exact_request(
+            _golden_request_bytes(),
+            endpoint=ENDPOINT,
+            transport=_transport_returning(
+                _response(201, forged_bytes, marker="created")
+            ),
+            pinned_key_id=GOLDEN_KEY_ID,
+            verifier=_golden_public_key(),
+        )
+
+
+def test_append_transport_raised_client_errors_stay_ambiguous() -> None:
+    def _oversized(
+        method: str, url: str, headers: dict[str, str], body: bytes | None
+    ) -> client.HttpResponse:
+        raise client.LedgerProtocolError("ledger response is oversized")
+
+    with pytest.raises(client.LedgerAmbiguousOutcome):
+        client.append_exact_request(
+            _golden_request_bytes(),
+            endpoint=ENDPOINT,
+            transport=_oversized,
+            pinned_key_id=GOLDEN_KEY_ID,
+            verifier=_golden_public_key(),
+        )
+
+
+@pytest.mark.parametrize("status", [402, 403, 404, 405, 413, 451])
+def test_append_other_4xx_statuses_are_definite_rejections(status: int) -> None:
+    with pytest.raises(client.LedgerRejectedError):
+        client.append_exact_request(
+            _golden_request_bytes(),
+            endpoint=ENDPOINT,
+            transport=_transport_returning(
+                client.HttpResponse(status=status, headers=(), body=b"denied")
+            ),
+            pinned_key_id=GOLDEN_KEY_ID,
+            verifier=_golden_public_key(),
+        )
+
+
+def test_head_assertion_with_non_list_limitations_is_a_protocol_error() -> None:
+    projection = {
+        "schema_version": client.HEAD_ASSERTION_SCHEMA,
+        "signature_domain": client.HEAD_SIGNATURE_DOMAIN,
+        "signature_purpose": client.HEAD_SIGNATURE_PURPOSE,
+        "proof_level": client.REFERENCE_PROOF_LEVEL,
+        "ledger_id": "field-ledger-01",
+        "head": {"receipt_sha256": GOLDEN_RECEIPT_SHA256, "sequence": 1},
+        "limitations": True,
+        "authentication": {
+            "algorithm": "Ed25519",
+            "key_id": GOLDEN_KEY_ID,
+            "signature_encoding": "base64",
+            "signature": GOLDEN_RECEIPT_SIGNATURE,
+        },
+    }
+    with pytest.raises(client.LedgerProtocolError):
+        client.validate_head_assertion(projection)
+
+
+def test_endpoint_validation_refuses_invalid_ports() -> None:
+    for bad in (
+        "https://ledger.example:0/transitions",
+        "https://ledger.example:99999/transitions",
+        "https://ledger.example:abc/transitions",
+    ):
+        with pytest.raises(client.LedgerProtocolError):
+            client.validate_endpoint(bad)

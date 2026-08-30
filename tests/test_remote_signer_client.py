@@ -523,3 +523,44 @@ def test_base_url_validation_refuses_unsafe_origins() -> None:
             client.validate_base_url(bad)
     assert client.validate_base_url(BASE_URL) == BASE_URL
     assert client.validate_base_url(BASE_URL + "/") == BASE_URL
+
+
+def test_post_transport_raised_client_errors_stay_ambiguous() -> None:
+    def _oversized(
+        method: str, url: str, headers: dict[str, str], body: bytes | None
+    ) -> client.HttpResponse:
+        raise client.SignerProtocolError("signer response is oversized")
+
+    with pytest.raises(client.SignerAmbiguousOutcome):
+        _post(_oversized)
+
+
+@pytest.mark.parametrize("status", [402, 405, 413, 451])
+def test_post_other_4xx_statuses_are_definite_rejections(status: int) -> None:
+    with pytest.raises(client.SignerRejectedError) as excinfo:
+        _post(
+            _transport_returning(
+                _response(status, b"denied by intermediary")
+            )
+        )
+    assert excinfo.value.code == f"http_{status}"
+
+
+@pytest.mark.parametrize("status", [100, 302, 408, 425, 429, 500, 503])
+def test_post_ambiguous_statuses_demand_exact_retry(status: int) -> None:
+    with pytest.raises(client.SignerAmbiguousOutcome):
+        _post(
+            _transport_returning(
+                client.HttpResponse(status=status, headers=(), body=b"")
+            )
+        )
+
+
+def test_base_url_validation_refuses_invalid_ports() -> None:
+    for bad in (
+        "https://signer.example:0",
+        "https://signer.example:99999",
+        "https://signer.example:abc",
+    ):
+        with pytest.raises(client.SignerProtocolError):
+            client.validate_base_url(bad)

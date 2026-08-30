@@ -230,7 +230,9 @@ class CandidateRunner:
             # Docker mode delivers mem_limit_mb via --memory; a host subprocess
             # must deliver the same promise via RLIMIT_AS or refuse to run.
             # Silently dropping a requested cap would be a fail-open policy gap.
-            config["mem_limit_bytes"] = self.mem_limit_mb * 1024 * 1024
+            limit = self.mem_limit_mb * 1024 * 1024
+            self._require_rlimit_deliverable(limit)
+            config["mem_limit_bytes"] = limit
             note += (
                 f" An RLIMIT_AS cap of {self.mem_limit_mb} MiB is applied by "
                 "the launcher before exec; an unappliable cap aborts the "
@@ -248,6 +250,38 @@ class CandidateRunner:
             "EVOGUARD_PYTHON": self.python or "python3",
         }
         return launcher, env, evidence
+
+    @staticmethod
+    def _require_rlimit_deliverable(limit: int) -> None:
+        """Refuse at prepare time when the RLIMIT_AS cap provably cannot apply.
+
+        This keeps an undeliverable memory boundary on the module's normal
+        refusal channel (a distinct isolation-unavailable result) instead of
+        surfacing later as a launch abort that a verdict could misread as a
+        failing candidate. The launcher's runtime fail-closed abort remains
+        as defense in depth for conditions this probe cannot see.
+        """
+        try:
+            import resource
+        except ImportError as exc:
+            raise IsolationUnavailable(
+                "subprocess isolation with a memory cap requires the POSIX "
+                "resource module, which is unavailable on this platform"
+            ) from exc
+        try:
+            _soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+        except (OSError, ValueError) as exc:
+            raise IsolationUnavailable(
+                f"subprocess isolation cannot observe RLIMIT_AS: {exc}"
+            ) from exc
+        geteuid = getattr(os, "geteuid", None)
+        privileged = geteuid is not None and geteuid() == 0
+        if hard != resource.RLIM_INFINITY and limit > hard and not privileged:
+            raise IsolationUnavailable(
+                f"subprocess isolation cannot deliver the configured "
+                f"{limit}-byte memory cap: the process hard RLIMIT_AS is "
+                f"{hard} and raising it requires privilege"
+            )
 
     # ---- container boundary ----------------------------------------------- #
     def _prepare_container(
@@ -423,11 +457,17 @@ class CandidateRunner:
                 "    if limit:\n"
                 "        # Fail closed: a configured memory cap that cannot be\n"
                 "        # applied must abort the launch (125, matching the\n"
-                "        # bounded-process launcher), never run uncapped.\n"
+                "        # bounded-process launcher), never run uncapped. The\n"
+                "        # stderr line lets evidence attribute the abort to the\n"
+                "        # launcher boundary, not the candidate under test.\n"
                 "        try:\n"
                 "            import resource\n"
                 "            resource.setrlimit(resource.RLIMIT_AS, (limit, limit))\n"
-                "        except (ImportError, OSError, ValueError):\n"
+                "        except (ImportError, OSError, ValueError) as _exc:\n"
+                "            sys.stderr.write(\n"
+                "                'evoguard launcher: configured memory cap could '\n"
+                "                f'not be applied ({_exc}); aborting fail-closed\\n'\n"
+                "            )\n"
                 "            sys.exit(125)\n"
                 "    os.chdir(CFG['target'])\n"
                 "    os.execvp(argv[0], argv)\n"
