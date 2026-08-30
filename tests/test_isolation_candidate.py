@@ -267,6 +267,28 @@ def test_subprocess_launcher_fails_closed_on_unappliable_mem_limit(
     assert "memory cap could not be applied" in completed.stderr
 
 
+def test_prepare_plans_mem_limit_without_the_resource_module(
+    tmp_path: Path,
+) -> None:
+    # Planning must stay host-independent: with the platform gate mocked to
+    # POSIX but no importable resource module (the Windows planning context),
+    # prepare still emits the capped plan — enforcement rests on the real
+    # platform gate and the launcher's runtime fail-closed abort.
+    workdir = tmp_path / "workdir"
+    target = tmp_path / "target"
+    workdir.mkdir()
+    target.mkdir()
+    runner = implementation.CandidateRunner(isolation="subprocess", mem_limit_mb=64)
+    with (
+        mock.patch.object(implementation.os, "name", "posix"),
+        mock.patch.dict(sys.modules, {"resource": None}),
+    ):
+        launcher, _env, evidence = runner.prepare(str(workdir), str(target))
+    config = json.loads(Path(launcher + ".json").read_text(encoding="utf-8"))
+    assert config["mem_limit_bytes"] == 64 * 1024 * 1024
+    assert "fail-closed" in evidence.note
+
+
 @pytest.mark.skipif(os.name == "nt", reason="POSIX launcher contract")
 def test_prepare_refuses_a_provably_undeliverable_mem_limit(
     tmp_path: Path,

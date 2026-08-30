@@ -260,14 +260,17 @@ class CandidateRunner:
         surfacing later as a launch abort that a verdict could misread as a
         failing candidate. The launcher's runtime fail-closed abort remains
         as defense in depth for conditions this probe cannot see.
+
+        Planning must stay host-independent: ``prepare`` already refuses
+        non-POSIX hosts before reaching this probe, so a missing ``resource``
+        module here only means the plan is being built on a host that will
+        never run it (e.g. the cross-platform planning tests) — enforcement
+        then rests on the platform gate and the launcher's runtime abort.
         """
         try:
             import resource
-        except ImportError as exc:
-            raise IsolationUnavailable(
-                "subprocess isolation with a memory cap requires the POSIX "
-                "resource module, which is unavailable on this platform"
-            ) from exc
+        except ImportError:
+            return
         try:
             _soft, hard = resource.getrlimit(resource.RLIMIT_AS)
         except (OSError, ValueError) as exc:
