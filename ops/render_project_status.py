@@ -354,7 +354,7 @@ _RELEASE_SPEC = _WorkflowSpec(
     ),
     "validate-test",
     _RELEASE_MAIN_GATE,
-    reviewed_sha256="78c828012604ebd0b49056e70bac6f97c09ff2bddd07b2343a602c2907eba69d",
+    reviewed_sha256="e1342a2186794b5a8d4837dc14c3c90fb13a0d3f0c20872c8aeed6dba023d5f1",
 )
 _ASSET_SENTINELS = {
     ("E", "build"): (

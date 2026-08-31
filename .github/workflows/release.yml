@@ -57,6 +57,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # Full history: the provenance-ancestry and failure-registry tests
+          # verify source-to-evidence commit ancestry, which a shallow
+          # checkout cannot prove.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Resolve and validate the requested tag
