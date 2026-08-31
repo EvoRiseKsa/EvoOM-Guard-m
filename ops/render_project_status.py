@@ -266,7 +266,7 @@ _WORKFLOW_SPECS = (
         (("metadata", ()), ("reverify", ("metadata",))),
         "metadata",
         _MAIN_SOURCE_GATE,
-        reviewed_sha256="d439c27daecb4c5d0b3d1a1dd67a83644fb7359fcf8169a66a9bcf0561e5b4bd",
+        reviewed_sha256="78a166128d91d0b970da82e8c6d2acaeeaae3b3976ad2bd4df386b8ba74f8cd6",
     ),
     _WorkflowSpec(
         "B",
@@ -274,7 +274,7 @@ _WORKFLOW_SPECS = (
         (("preflight", ()), ("receipt", ("preflight",))),
         "preflight",
         _SOURCE_GATE,
-        reviewed_sha256="28b82ef90404a0773408b43d01646ff9b371aa84f8f6560b0277f96c6da9fb14",
+        reviewed_sha256="606035cea283ca4dd2101e73c4d72b75c5467f9810cbee068c72807962da780e",
     ),
     _WorkflowSpec(
         "C/D",
@@ -299,7 +299,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _MAIN_ARTIFACT_GATE,
         ("build", "attest"),
-        "c9ab62d29442ee6ecbf768d5868d25463fe1373ea31aa9a99ab7bfe8ccec8339",
+        "a5c7310e648c6c447edd4b6b674ed3923aa664e7bebc5b784c792281b6041d1e",
     ),
     _WorkflowSpec(
         "F",
@@ -354,7 +354,7 @@ _RELEASE_SPEC = _WorkflowSpec(
     ),
     "validate-test",
     _RELEASE_MAIN_GATE,
-    reviewed_sha256="e1342a2186794b5a8d4837dc14c3c90fb13a0d3f0c20872c8aeed6dba023d5f1",
+    reviewed_sha256="13dc1888a6f823289ab9e22f45a38eb3e54c9c2225fef60d5bbb6bb180d37bd3",
 )
 _ASSET_SENTINELS = {
     ("E", "build"): (
