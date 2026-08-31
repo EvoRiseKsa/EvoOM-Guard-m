@@ -15,10 +15,15 @@ corresponding private signing key currently exists or remains controlled.
 ## Current state
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:RELEASE_TRUST_PIPELINE_STATUS -->
-The protected A-H release pipeline is implemented in source and **disabled by default**.
-The legacy release workflow is hard-disabled. The externally anchored signed v2 ledger
-records a completed protected A-H operation. That validated ledger also records the
-resulting publication. An admitted release is contracted to exactly `evo-guard.pyz`,
+Releases ship through the manually dispatched draft-release workflow
+(`.github/workflows/release.yml`): tag-equals-version validation, the full test suite,
+Linux and Windows end-to-end checks, a reproducible artifact build with checksums, and
+asset attestation, ending in a draft the maintainer publishes by hand. No release step
+is gated on dates, elapsed time, or stabilization windows. The archived A-H signed lane
+is implemented in source but inert with every activation flag false; it is a design
+reference, not a release path. The externally anchored signed v2 ledger records a
+completed protected A-H operation. That validated ledger also records the resulting
+publication. An admitted release is contracted to exactly `evo-guard.pyz`,
 `evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not evidence that those
 assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:RELEASE_TRUST_PIPELINE_STATUS -->
