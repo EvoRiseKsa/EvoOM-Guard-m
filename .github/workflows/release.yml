@@ -4,14 +4,16 @@
 # Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
 # ─────────────────────────────────────────────────────────────────────────────
-# Legacy release reference: retained as reviewed documentation and test corpus,
-# but every job is hard-disabled on protected main. The only future publication
-# path is A-H, ending in `evoguard-publish-admitted-release.yml`.
+# The official release path. A maintainer dispatches this workflow manually
+# with the release tag; nothing here is gated on dates, elapsed time, or
+# stabilization windows. Policy: time-based release gates are abolished
+# (see docs/GOVERNANCE.md).
 #
-# Previously this workflow validated the requested version, ran the full test
-# suite, built release assets, and prepared a mutable draft. It is retained only
-# as disabled historical test corpus; none of its UI instructions authorize a
-# release.
+# The pipeline validates the requested tag against `evoom_guard.__version__`,
+# runs lint/type/test plus Linux and Windows end-to-end checks, builds the
+# reproducible `evo-guard.pyz` and SPDX SBOM with checksums, attests the
+# assets, and prepares a DRAFT release. Publication of the draft stays a
+# deliberate human action in the GitHub UI.
 #
 # The workflow is manual-only and its jobs accept the default branch only.
 # A push to an unprotected release/* branch must never receive the contents:write
@@ -19,13 +21,10 @@
 #
 # These job-level ref guards assume this reviewed workflow definition is
 # intact. They are not an external trust root against a maintainer who can
-# alter a workflow on the ref selected for workflow_dispatch. The RAAE release
-# path must add environment branch policy before claiming protected admission.
+# alter a workflow on the ref selected for workflow_dispatch.
 #
-# The A-H successor uses distinct protected Environments for draft creation and
-# final publication, checks the Immutable Releases API before either write, and
-# verifies the published tag and exact assets. Marketplace listing is separate
-# from that admitted publication path.
+# The archived A-H signed lane (evoguard-*-release-*.yml) remains inert with
+# all activation flags false; it is a design reference, not a release path.
 name: Release
 
 on:
@@ -49,7 +48,7 @@ concurrency:
 jobs:
   validate-test:
     # workflow_dispatch can be invoked with another ref; that must be a no-op.
-    if: false && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -122,7 +121,7 @@ jobs:
   release-e2e:
     # Re-run the two integration boundaries for the manually selected default
     # branch; the write-capable job cannot run before these complete.
-    if: false && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -163,7 +162,7 @@ jobs:
           tests/test_docker_isolation.py::test_docker_setup_suite_and_pack_e2e -v
 
   release-windows-e2e:
-    if: false && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: windows-latest
     permissions:
       contents: read
@@ -188,7 +187,7 @@ jobs:
 
   build-artifact:
     needs: [validate-test, release-e2e, release-windows-e2e]
-    if: false && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     outputs:
       release-artifact-digest: ${{ steps.upload-release-assets.outputs.artifact-digest }}
@@ -246,7 +245,7 @@ jobs:
 
   attest-release-assets:
     needs: [validate-test, build-artifact]
-    if: false && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     outputs:
       approved-artifact-digest: ${{ steps.approve-artifact.outputs.artifact-digest }}
@@ -393,7 +392,7 @@ jobs:
 
   prepare-draft:
     needs: [validate-test, attest-release-assets]
-    if: false && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     permissions:
       contents: write

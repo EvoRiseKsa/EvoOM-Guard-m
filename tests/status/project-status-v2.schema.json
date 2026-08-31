@@ -134,7 +134,7 @@
       ],
       "properties": {
         "contract": {
-          "const": "protected-a-h-v1"
+          "const": "simple-release-v1"
         },
         "implementation": {
           "enum": [
@@ -143,10 +143,10 @@
           ]
         },
         "legacy_workflow": {
-          "const": "hard-disabled"
+          "const": "archived-inert"
         },
         "activation_model": {
-          "const": "disabled-by-default"
+          "const": "manual-dispatch"
         },
         "evidence_scope": {
           "const": "durable-repository-record"

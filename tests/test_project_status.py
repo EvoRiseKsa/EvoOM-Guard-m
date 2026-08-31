@@ -1694,11 +1694,11 @@ class ProjectStatusTests(unittest.TestCase):
                     ("evo-guard.pyz", "evo-guard.spdx.json", "SHA256SUMS"),
                 )
 
-    def test_legacy_workflow_rejects_any_unguarded_job(self) -> None:
-        spec = render_project_status._LEGACY_SPEC
+    def test_release_workflow_rejects_any_unguarded_job(self) -> None:
+        spec = render_project_status._RELEASE_SPEC
         text = (ROOT / spec.path).read_text(encoding="utf-8")
         bypass = text.replace(
-            f"    if: {render_project_status._LEGACY_FALSE_GATE}\n",
+            f"    if: {render_project_status._RELEASE_MAIN_GATE}\n",
             "",
             1,
         )

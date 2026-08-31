@@ -19,11 +19,11 @@
     ]
   },
   "release_pipeline": {
-    "activation_model": "disabled-by-default",
-    "contract": "protected-a-h-v1",
+    "activation_model": "manual-dispatch",
+    "contract": "simple-release-v1",
     "evidence_scope": "durable-repository-record",
     "implementation": "implemented",
-    "legacy_workflow": "hard-disabled"
+    "legacy_workflow": "archived-inert"
   },
   "schema_version": "evoguard-project-status-v2",
   "source": {

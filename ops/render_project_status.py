@@ -259,10 +259,6 @@ _PUBLICATION_GATE = (
     "vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED == "
     "github.event.workflow_run.head_sha"
 )
-_SIGNED_PROMOTION_GATE = (
-    "github.ref == 'refs/heads/main' && "
-    "vars.EVOGUARD_RELEASE_SOURCE_PROMOTION_ENABLED == inputs.candidate_sha"
-)
 _WORKFLOW_SPECS = (
     _WorkflowSpec(
         "A",
@@ -270,7 +266,7 @@ _WORKFLOW_SPECS = (
         (("metadata", ()), ("reverify", ("metadata",))),
         "metadata",
         _MAIN_SOURCE_GATE,
-        reviewed_sha256="249f0b475d48054f36f2a6812f73e91b0d7918c64a9eb24c03ec4723da42f12e",
+        reviewed_sha256="d439c27daecb4c5d0b3d1a1dd67a83644fb7359fcf8169a66a9bcf0561e5b4bd",
     ),
     _WorkflowSpec(
         "B",
@@ -340,36 +336,13 @@ _WORKFLOW_SPECS = (
         ("preflight", "draft", "publish"),
         "6f8e593f3a6d264211b3d72fdebad33cf4ddd6eb9b30bfd4f19b02a3fb65a249",
     ),
-    _WorkflowSpec(
-        "P",
-        ".github/workflows/evoguard-promote-signed-release-source.yml",
-        (
-            ("preflight", ()),
-            ("promote", ("preflight",)),
-            ("prove-source-authority-retired", ("preflight", "promote")),
-            (
-                "enforce-source-promotion-closure",
-                ("promote", "prove-source-authority-retired"),
-            ),
-        ),
-        "preflight",
-        _SIGNED_PROMOTION_GATE,
-        reviewed_sha256="148860cfad16686d8b04aa8c792c30411e8cc6effe0e6930817e7a4f4c90c7ca",
-        job_gates=(
-            (
-                "prove-source-authority-retired",
-                "always() && needs.preflight.result == 'success'",
-            ),
-            ("enforce-source-promotion-closure", "always()"),
-        ),
-    ),
 )
-_LEGACY_FALSE_GATE = (
-    "false && github.ref == format('refs/heads/{0}', "
+_RELEASE_MAIN_GATE = (
+    "github.ref == format('refs/heads/{0}', "
     "github.event.repository.default_branch)"
 )
-_LEGACY_SPEC = _WorkflowSpec(
-    "legacy",
+_RELEASE_SPEC = _WorkflowSpec(
+    "release",
     ".github/workflows/release.yml",
     (
         ("validate-test", ()),
@@ -380,8 +353,8 @@ _LEGACY_SPEC = _WorkflowSpec(
         ("prepare-draft", ("validate-test", "attest-release-assets")),
     ),
     "validate-test",
-    _LEGACY_FALSE_GATE,
-    reviewed_sha256="36f61696fdee3da0baf7a85d199f0ff11b0d344ff80870b7e43776e0362e570c",
+    _RELEASE_MAIN_GATE,
+    reviewed_sha256="78c828012604ebd0b49056e70bac6f97c09ff2bddd07b2343a602c2907eba69d",
 )
 _ASSET_SENTINELS = {
     ("E", "build"): (
@@ -1056,12 +1029,14 @@ def load_status(root: Path, *, raw: bytes | None = None) -> Status:
             "legacy_workflow",
         },
     )
-    if pipeline["contract"] != "protected-a-h-v1":
-        raise ProjectStatusError("release_pipeline.contract is not protected-a-h-v1")
-    if pipeline["legacy_workflow"] != "hard-disabled":
-        raise ProjectStatusError("legacy release workflow must remain hard-disabled")
-    if pipeline["activation_model"] != "disabled-by-default":
-        raise ProjectStatusError("A-H pipeline must remain disabled by default")
+    if pipeline["contract"] != "simple-release-v1":
+        raise ProjectStatusError("release_pipeline.contract is not simple-release-v1")
+    if pipeline["legacy_workflow"] != "archived-inert":
+        raise ProjectStatusError(
+            "the archived A-H signed lane must be recorded archived-inert"
+        )
+    if pipeline["activation_model"] != "manual-dispatch":
+        raise ProjectStatusError("release activation must be manual-dispatch")
     if pipeline["evidence_scope"] != "durable-repository-record":
         raise ProjectStatusError("pipeline evidence must mean durable repository evidence")
     status = Status(
@@ -3213,7 +3188,7 @@ def _verify_workflow_text(
                 f"expected {sorted(expected_needs)!r}"
             )
         expected_gate = job_gates.get(name)
-        if spec.phase == "legacy" or name == spec.gate_job:
+        if spec.phase == "release" or name == spec.gate_job:
             if expected_gate is not None:
                 raise ProjectStatusError(
                     f"phase {spec.phase} gate job has two structural gates"
@@ -3255,7 +3230,7 @@ def _verify_pipeline(root: Path, status: Status) -> None:
     }
     if set(activation) != expected_flags or any(value is not False for value in activation.values()):
         raise ProjectStatusError("release bootstrap activation flags are not all false")
-    for spec in (*_WORKFLOW_SPECS, _LEGACY_SPEC):
+    for spec in (*_WORKFLOW_SPECS, _RELEASE_SPEC):
         workflow = _read_text(root, root / spec.path)
         _verify_workflow_text(workflow, spec, _PIPELINE_ASSETS)
 
@@ -3614,10 +3589,17 @@ def _pipeline_summary(context: Context) -> str:
             "pipeline."
         )
     return _wrap(
-        f"The protected A-H release pipeline is {implementation} and **disabled "
-        f"by default**. The legacy release workflow is hard-disabled. {operational} "
-        f"{publication} An admitted release is contracted to exactly `{assets}`; "
-        "this source contract is not evidence that those assets were published."
+        "Releases ship through the manually dispatched draft-release workflow "
+        "(`.github/workflows/release.yml`): tag-equals-version validation, the "
+        "full test suite, Linux and Windows end-to-end checks, a reproducible "
+        "artifact build with checksums, and asset attestation, ending in a "
+        "draft the maintainer publishes by hand. No release step is gated on "
+        "dates, elapsed time, or stabilization windows. The archived A-H "
+        f"signed lane is {implementation} but inert with every activation "
+        f"flag false; it is a design reference, not a release path. "
+        f"{operational} {publication} An admitted release is contracted to "
+        f"exactly `{assets}`; this source contract is not evidence that those "
+        "assets were published."
     )
 
 

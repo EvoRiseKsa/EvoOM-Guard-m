@@ -36,8 +36,7 @@ E = WORKFLOWS / "evoguard-build-release-artifact.yml"
 F = WORKFLOWS / "evoguard-admit-release-artifact.yml"
 G = WORKFLOWS / "evoguard-verify-release-artifact.yml"
 H = WORKFLOWS / "evoguard-publish-admitted-release.yml"
-P = WORKFLOWS / "evoguard-promote-signed-release-source.yml"
-LEGACY = WORKFLOWS / "release.yml"
+RELEASE = WORKFLOWS / "release.yml"
 
 PINNED_GH_VERSION = "2.97.0"
 PINNED_GH_ARCHIVE_SHA256 = (
@@ -181,11 +180,11 @@ def test_release_workflow_python_heredocs_are_exact_and_compile() -> None:
 
 def test_source_provenance_workflow_python_heredocs_compile() -> None:
     count = 0
-    for path in (A, P):
+    for path in (A,):
         for source_index, source in enumerate(_python_heredocs(path)):
             compile(source, f"{path.name}:heredoc:{source_index}", "exec")
             count += 1
-    assert count == 8
+    assert count == 2
 
 
 def test_sensitive_release_jobs_materialize_one_exact_github_cli() -> None:
@@ -445,230 +444,6 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
     assert "six admission public roots and key IDs" in frozen
     assert "one distinct release-ledger signing public root and key ID" in frozen
     assert "six public roots and key IDs" not in frozen
-
-
-def test_signed_source_promotion_has_executable_ruleset_only_authority() -> None:
-    whole = _text(P)
-    preflight = _job(P, "preflight")
-    promote = _job(P, "promote")
-    capture = _text(ROOT / "tools/ci/capture_release_source_protection.js")
-    assert "EVOGUARD_RELEASE_MAIN_RULESET_ID" in preflight
-    assert "EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY_ID" in preflight
-    assert "EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY_FINGERPRINT" in preflight
-    assert "source_authority: {" in preflight
-    assert "freeze_workflow_ids: {" in preflight
-    assert "core.setOutput('main_ruleset_id'" in preflight
-    assert "core.setOutput('source_deploy_key_id'" in preflight
-    assert "core.setOutput('source_deploy_key_fingerprint'" in preflight
-    assert "needs.preflight.outputs.main_ruleset_id" in promote
-    assert "needs.preflight.outputs.source_deploy_key_id" in promote
-    assert "needs.preflight.outputs.source_deploy_key_fingerprint" in promote
-    assert "${{ vars." not in promote
-    assert "EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN" in promote
-    assert "validate_release_source_protection.py" in promote
-    assert "classic_main_branch_protection" in capture
-    assert "branches/{branch}/protection" in capture
-    assert "targets: 'branch,push'" in capture
-    assert "includes_parents: true" in capture
-    assert "rules/branches/{branch}" in capture
-    assert "GET /repos/{owner}/{repo}/keys" in capture
-    assert "MAX_PAGES = 10" in capture
-    assert "EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN" not in capture
-    assert "SOURCE_DEPLOY_KEY" not in capture
-    first_capture = promote.index("Capture the live ruleset-only main authority")
-    first_validation = promote.index("Fail closed on classic protection")
-    immediate_capture = promote.index("Recapture the authority immediately")
-    immediate_validation = promote.index(
-        "Validate immediate source authority before any transport secret is exposed"
-    )
-    active_upload = promote.index(
-        "Upload exact current-run source-active authority evidence"
-    )
-    deploy_secret = promote.index("secrets.EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY")
-    push = promote.index("git -C \"$objects\" push")
-    post_capture = promote.index("Capture the post-push main authority")
-    assert first_capture < first_validation < immediate_capture < immediate_validation
-    assert immediate_validation < active_upload < deploy_secret < push < post_capture
-    assert promote.count("--expected-main-sha") == 3
-    assert promote.count("capture_release_source_protection.js") == 3
-    assert promote.count("validate_release_source_protection.py") == 3
-    assert promote.count("reviewDecision") == 2
-    assert promote.count("mergeStateStatus") == 2
-    assert promote.count("globally approved and clean") == 1
-    assert "exact PR is no longer globally approved and clean" in promote
-    assert "capture_minor_release_freeze_anchor.js" in whole
-    assert whole.count("validate_release_freeze_github_anchor.py") == 2
-    for argument in (
-        "--expected-windows-workflow-id",
-        "--expected-codeql-workflow-id",
-        "--expected-ci-workflow-id",
-        "--expected-cflite-workflow-id",
-    ):
-        assert whole.count(argument) == 2
-    assert "${{ runner.temp }}/pre-push-source-protection.json" in whole
-    assert "${{ runner.temp }}/source-authority-active.json" in whole
-    assert "${{ runner.temp }}/source-authority-active-receipt.json" in whole
-    assert "${{ runner.temp }}/post-push-source-protection.json" in whole
-    assert '--force-with-lease="refs/heads/main:$BASE_SHA"' in promote
-    assert "EVOGUARD_SIGNED_SOURCE_MUTATION_RECEIPT_V1" in promote
-    assert "expected_refspec = f\"{os.environ['CANDIDATE_SHA']}:refs/heads/main\"" in promote
-    assert "rows[0][0] != ' '" in promote
-    assert promote.index("cleanup_key\n          trap - EXIT") < promote.index(
-        "EVOGUARD_SIGNED_SOURCE_MUTATION_RECEIPT_V1"
-    )
-    retirement = _job(P, "prove-source-authority-retired")
-    assert "if: always() && needs.preflight.result == 'success'" in retirement
-    assert "environment: evoguard-release-source-retirement" in retirement
-    assert "${{ vars." not in retirement
-    assert "Download the exact current-run source-active authority artifact" in retirement
-    assert "Verify and bind the downloaded source-active authority identity" in retirement
-    assert "needs.promote.outputs.active_snapshot_sha256" in retirement
-    assert "needs.promote.outputs.active_receipt_sha256" in retirement
-    assert "Bind the post-attempt main SHA before validating retirement" in retirement
-    assert "steps.retired_main.outputs.main_sha" in retirement
-    assert "steps.retired_main.outputs.promotion_completed" in retirement
-    assert '"$CANDIDATE_SHA") promotion_completed=true' in retirement
-    assert '"$BASE_SHA") promotion_completed=false' in retirement
-    assert "main_sha_after_attempt" in retirement
-    assert "--authority-state source-retired" in retirement
-    assert "EVOGUARD_SIGNED_SOURCE_AUTHORITY_CLOSURE_V1" in retirement
-    assert "promotion_completed" in retirement
-    assert "retired_source_deploy_key_id" in retirement
-    assert "retired_source_deploy_key_fingerprint" in retirement
-    assert "active_snapshot" in retirement
-    assert "active_verification" in retirement
-    assert "main_ruleset_id" in retirement
-    assert "source_deploy_key_id" in retirement
-    assert "source_deploy_key_fingerprint" in retirement
-    assert "validate_release_source_retirement_artifact.py" in retirement
-    assert retirement.count("--expected-base-sha") == 1
-    assert retirement.count("--expected-candidate-sha") == 1
-    assert retirement.count("--allow-unpromoted-terminal-closure") == 1
-    assert "source-authority-retirement" in retirement
-    assert "continue-on-error: true" in promote
-    assert "post_capture_outcome: ${{ steps.post_capture.outcome }}" in promote
-    assert "post_validate_outcome: ${{ steps.post_validate.outcome }}" in promote
-    assert "post_upload_outcome: ${{ steps.post_upload.outcome }}" in promote
-    assert "active_upload_outcome: ${{ steps.active_upload.outcome }}" in promote
-    closure = _job(P, "enforce-source-promotion-closure")
-    assert "needs: [promote, prove-source-authority-retired]" in closure
-    assert "if: always()" in closure
-    assert "needs.promote.result" in closure
-    assert "needs.prove-source-authority-retired.result" in closure
-    assert "needs.prove-source-authority-retired.outputs.promotion_completed" in closure
-    assert 'test "$PROMOTE_RESULT" = success' in closure
-    assert 'test "$RETIREMENT_RESULT" = success' in closure
-    assert 'test "$PROMOTION_COMPLETED" = true' in closure
-    assert "needs.promote.outputs.post_capture_outcome" in closure
-    assert "needs.promote.outputs.post_validate_outcome" in closure
-    assert "needs.promote.outputs.post_upload_outcome" in closure
-    assert "needs.promote.outputs.active_upload_outcome" in closure
-    assert 'test "$POST_CAPTURE_OUTCOME" = success' in closure
-    assert 'test "$POST_VALIDATE_OUTCOME" = success' in closure
-    assert 'test "$POST_UPLOAD_OUTCOME" = success' in closure
-    assert 'test "$ACTIVE_UPLOAD_OUTCOME" = success' in closure
-    assert "release-source-promotion.key" not in whole[:first_validation]
-
-
-def test_signed_source_push_parser_accepts_real_raw_sha_fast_forward_only(
-    tmp_path: Path,
-) -> None:
-    parser_source = next(
-        source
-        for source in _python_heredocs(P)
-        if "EVOGUARD_SIGNED_SOURCE_MUTATION_RECEIPT_V1" in source
-    )
-    remote = tmp_path / "remote.git"
-    local = tmp_path / "local"
-
-    def git(*arguments: str, capture: bool = False) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            ["git", *arguments],
-            cwd=local if local.exists() else tmp_path,
-            check=True,
-            capture_output=capture,
-            text=True,
-        )
-
-    git("init", "--bare", str(remote))
-    git("init", str(local))
-    git("config", "user.name", "EvoGuard transcript fixture")
-    git("config", "user.email", "fixture@example.invalid")
-    tracked = local / "tracked.txt"
-    tracked.write_text("base\n", encoding="utf-8")
-    git("add", "tracked.txt")
-    git("commit", "-m", "base")
-    git("branch", "-M", "main")
-    git("remote", "add", "origin", str(remote))
-    git("push", "origin", "main")
-    base_sha = git("rev-parse", "HEAD", capture=True).stdout.strip()
-
-    tracked.write_text("candidate\n", encoding="utf-8")
-    git("commit", "-am", "candidate")
-    candidate_sha = git("rev-parse", "HEAD", capture=True).stdout.strip()
-    fast_forward = git(
-        "push",
-        "--porcelain",
-        "origin",
-        f"{candidate_sha}:refs/heads/main",
-        capture=True,
-    )
-    transcript = tmp_path / "fast-forward.txt"
-    transcript.write_text(
-        fast_forward.stdout + fast_forward.stderr,
-        encoding="utf-8",
-        newline="",
-    )
-    receipt = tmp_path / "receipt.json"
-    environment = {
-        **os.environ,
-        "BASE_SHA": base_sha,
-        "CANDIDATE_SHA": candidate_sha,
-        "TRANSCRIPT": str(transcript),
-        "RECEIPT": str(receipt),
-        "GITHUB_RUN_ID": "123456789",
-        "GITHUB_RUN_ATTEMPT": "1",
-    }
-    parsed = subprocess.run(
-        [sys.executable, "-I", "-c", parser_source],
-        check=False,
-        capture_output=True,
-        text=True,
-        env=environment,
-    )
-    assert parsed.returncode == 0, parsed.stderr
-    assert json.loads(receipt.read_bytes())["candidate_sha"] == candidate_sha
-
-    git("switch", "--orphan", "divergent")
-    tracked.write_text("divergent\n", encoding="utf-8")
-    git("add", "tracked.txt")
-    git("commit", "-m", "divergent")
-    divergent_sha = git("rev-parse", "HEAD", capture=True).stdout.strip()
-    forced = git(
-        "push",
-        "--porcelain",
-        "--force",
-        "origin",
-        f"{divergent_sha}:refs/heads/main",
-        capture=True,
-    )
-    transcript.write_text(
-        forced.stdout + forced.stderr,
-        encoding="utf-8",
-        newline="",
-    )
-    receipt.unlink()
-    environment["CANDIDATE_SHA"] = divergent_sha
-    rejected = subprocess.run(
-        [sys.executable, "-I", "-c", parser_source],
-        check=False,
-        capture_output=True,
-        text=True,
-        env=environment,
-    )
-    assert rejected.returncode != 0
-    assert "true fast-forward" in rejected.stderr
-    assert not receipt.exists()
 
 
 def test_h_live_tag_authority_is_proved_before_and_after_publication() -> None:
@@ -2266,7 +2041,7 @@ false
     assert expected_message in completed.stderr
 
 
-def test_historical_direct_release_path_is_hard_disabled() -> None:
+def test_direct_release_path_is_enabled_and_main_only() -> None:
     for name in (
         "validate-test",
         "release-e2e",
@@ -2275,5 +2050,6 @@ def test_historical_direct_release_path_is_hard_disabled() -> None:
         "attest-release-assets",
         "prepare-draft",
     ):
-        block = _job(LEGACY, name)
-        assert "if: false && github.ref ==" in block
+        block = _job(RELEASE, name)
+        assert "if: github.ref ==" in block
+        assert "if: false" not in block

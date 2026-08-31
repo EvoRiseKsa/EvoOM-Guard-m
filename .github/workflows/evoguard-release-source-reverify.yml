@@ -268,25 +268,6 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Capture GitHub server-time anchor for the exact freeze declaration
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          DECLARATION_SHA: ${{ needs.metadata.outputs.parent_sha }}
-          DECLARATION_TREE_SHA: ${{ needs.metadata.outputs.parent_tree_sha }}
-          OUTPUT_PATH: ${{ runner.temp }}/release-freeze-github-anchor.json
-        with:
-          script: |
-            const capture = require(
-              `${process.env.GITHUB_WORKSPACE}/base/tools/ci/capture_minor_release_freeze_anchor.js`
-            );
-            await capture({
-              github,
-              context,
-              declarationSha: process.env.DECLARATION_SHA,
-              declarationTreeSha: process.env.DECLARATION_TREE_SHA,
-              outputPath: process.env.OUTPUT_PATH,
-            });
-
       - name: Verify the raw release commit against the parent-pinned maintainer root
         env:
           PARENT_SHA: ${{ needs.metadata.outputs.parent_sha }}
@@ -304,38 +285,6 @@ jobs:
             --root "$GITHUB_WORKSPACE/base/$EVOGUARD_MAINTAINER_ROOT" \
             --expected-parent "$PARENT_SHA" \
             --receipt "$RUNNER_TEMP/release-source-signature.json"
-
-      - name: Require the exact elapsed v4.7.0 freeze declaration
-        env:
-          PARENT_SHA: ${{ needs.metadata.outputs.parent_sha }}
-          PARENT_TREE_SHA: ${{ needs.metadata.outputs.parent_tree_sha }}
-          AUTHORIZED_FREEZE_SHA: ${{ vars.EVOGUARD_V470_FREEZE_DECLARATION_SHA }}
-          AUTHORIZED_FREEZE_TREE_SHA: ${{ vars.EVOGUARD_V470_FREEZE_DECLARATION_TREE_SHA }}
-          FREEZE_WINDOWS_WORKFLOW_ID: ${{ vars.EVOGUARD_V470_FREEZE_WINDOWS_WORKFLOW_ID }}
-          FREEZE_CODEQL_WORKFLOW_ID: ${{ vars.EVOGUARD_V470_FREEZE_CODEQL_WORKFLOW_ID }}
-          FREEZE_CI_WORKFLOW_ID: ${{ vars.EVOGUARD_V470_FREEZE_CI_WORKFLOW_ID }}
-          FREEZE_CFLITE_WORKFLOW_ID: ${{ vars.EVOGUARD_V470_FREEZE_CFLITE_WORKFLOW_ID }}
-        run: |
-          set -euo pipefail
-          test "$PARENT_SHA" = "$AUTHORIZED_FREEZE_SHA"
-          test "$PARENT_TREE_SHA" = "$AUTHORIZED_FREEZE_TREE_SHA"
-          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_minor_release_freeze.py" \
-            --root "$GITHUB_WORKSPACE/base" \
-            --repository "$RUNNER_TEMP/signed-release-source.git" \
-            --declaration-commit "$PARENT_SHA" \
-            --expected-tree "$PARENT_TREE_SHA" \
-            --receipt "$RUNNER_TEMP/release-freeze-verification.json"
-          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_release_freeze_github_anchor.py" \
-            --root "$GITHUB_WORKSPACE/base" \
-            --snapshot "$RUNNER_TEMP/release-freeze-github-anchor.json" \
-            --expected-declaration-commit "$PARENT_SHA" \
-            --expected-declaration-tree "$PARENT_TREE_SHA" \
-            --expected-repository-id "$GITHUB_REPOSITORY_ID" \
-            --expected-windows-workflow-id "$FREEZE_WINDOWS_WORKFLOW_ID" \
-            --expected-codeql-workflow-id "$FREEZE_CODEQL_WORKFLOW_ID" \
-            --expected-ci-workflow-id "$FREEZE_CI_WORKFLOW_ID" \
-            --expected-cflite-workflow-id "$FREEZE_CFLITE_WORKFLOW_ID" \
-            --receipt "$RUNNER_TEMP/release-freeze-github-anchor-receipt.json"
 
       - name: Install hash-locked judge dependencies from the trusted parent
         run: |
@@ -554,15 +503,12 @@ jobs:
           overwrite: false
           retention-days: 7
 
-      - name: Upload independent source-signature and freeze receipts
+      - name: Upload independent source-signature receipts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: evoguard-release-source-governance-v1-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/release-source-signature.json
-            ${{ runner.temp }}/release-freeze-verification.json
-            ${{ runner.temp }}/release-freeze-github-anchor.json
-            ${{ runner.temp }}/release-freeze-github-anchor-receipt.json
           if-no-files-found: error
           overwrite: false
           retention-days: 7
