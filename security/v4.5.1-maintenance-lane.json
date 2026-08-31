@@ -212,7 +212,7 @@
     "trusted_workflow_sha": "POST_MERGE_REQUIRED",
     "trusted_workflow_tree": "POST_MERGE_REQUIRED",
     "required_entries": {
-      ".github/workflows/evoguard-release-source-reverify.yml": {"role": "workflow-A", "mode": "100644", "blob_sha": "4b5e18ee0e3da1bfe67900d19c6aa2074e1177c0"},
+      ".github/workflows/evoguard-release-source-reverify.yml": {"role": "workflow-A", "mode": "100644", "blob_sha": "60eb7e62213d3f41cb190fd6989ae089df597398"},
       ".github/workflows/evoguard-produce-release-source-receipt.yml": {"role": "workflow-B", "mode": "100644", "blob_sha": "ae6c2ecda3e7b29223db69b33b9135949e0ad567"},
       ".github/workflows/evoguard-admit-release-source.yml": {"role": "workflow-CD", "mode": "100644", "blob_sha": "8b38f5d2a7957782f3945b671bd877e047f8598d"},
       ".github/workflows/evoguard-build-release-artifact.yml": {"role": "workflow-E", "mode": "100644", "blob_sha": "ffdbc343f7331551a6f69361c8091a517d7dff7e"},
@@ -225,7 +225,7 @@
       "security/release-source-pack/pack.json": {"role": "pack", "mode": "100644", "blob_sha": "a05bb0d113cfc9675e06c9480590496dbf841b82"},
       "security/release-source-pack/test_release_protocol.py": {"role": "pack", "mode": "100644", "blob_sha": "f8f6d9369d295171ad78c87dff424840a800de3e"},
       "security/judge-requirements.lock": {"role": "control", "mode": "100644", "blob_sha": "8d173d39ba87c7a075fcac42c8fabe692263cbf6"},
-      "tools/ci/validate_v451_maintenance_control.py": {"role": "control-validator", "mode": "100644", "blob_sha": "109d65236e7464339fac18fb90396b3b179b6ed7"}
+      "tools/ci/validate_v451_maintenance_control.py": {"role": "control-validator", "mode": "100644", "blob_sha": "74f4d77283cb72bc1572542942522c7232267ead"}
     }
   },
   "local_signature_verification": {
