@@ -42,6 +42,20 @@ The full protocol and limitation statements remain canonical in
 [ASSURANCE.md](ASSURANCE.md), and
 [ARTIFACT_ADMISSION.md](ARTIFACT_ADMISSION.md).
 
+## Release cadence policy: evidence-gated, never time-gated
+
+Adopted 2026-08-31, by maintainer decision. A release or merge decision in
+this project is gated on evidence — passing tests, recorded verdicts, and
+verifiable receipts — and never on dates, elapsed time, or waiting windows.
+Time-based gates (such as the retired fourteen-day stabilization window of
+the archived signed lane) are abolished and must not be reintroduced: a
+waiting period adds no integrity that evidence does not already provide,
+while it blocks development and release for no benefit. The active release
+process is documented in [RELEASING.md](RELEASING.md); the archived
+time-gated design is preserved for reference in
+[RELEASE_TRUST_PIPELINE.md](RELEASE_TRUST_PIPELINE.md) and
+[V4.7.0_SIGNED_RELEASE_LANE.md](V4.7.0_SIGNED_RELEASE_LANE.md).
+
 ## Change classes
 
 | Change class | Examples | Required handling |

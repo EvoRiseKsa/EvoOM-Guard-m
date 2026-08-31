@@ -1,5 +1,14 @@
 # Protected release trust pipeline
 
+> **ARCHIVED (2026-08-31).** The A–H signed lane described here is an inert
+> design reference, not the release path. Time-based release gates — the
+> freeze declaration, the fourteen-day boundary, and their validators — are
+> abolished by policy (see [`GOVERNANCE.md`](GOVERNANCE.md)), and the
+> promotion workflow P has been deleted. Releases ship through the manually
+> dispatched draft-release workflow documented in
+> [`RELEASING.md`](RELEASING.md). Procedural sections below that reference
+> P, the freeze declaration, or waiting windows are historical.
+
 > **Audience:** release maintainers and independent auditors. This is an
 > implementation and authority-separation contract, not an end-user setup
 > guide. Consumers should start with [`README.md`](../README.md) or

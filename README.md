@@ -419,6 +419,7 @@ Use the [documentation index](docs/README.md) to choose a path by audience.
 | [JSON contract](docs/JSON_SCHEMA.md) | Stable machine-readable verdict fields. |
 | [Production blueprint](docs/PRODUCTION_BLUEPRINT.md) | Deployment profiles and readiness requirements. |
 | [Project and release status](docs/PROJECT_STATUS.md) | Current implementation, evidence, and release boundary. |
+| [Releasing](docs/RELEASING.md) | The evidence-gated, manual-dispatch release process (maintainers). |
 
 Historical demonstrations, release procedures, architecture decisions, and
 advanced admission contracts remain public and discoverable through the index

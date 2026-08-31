@@ -48,7 +48,7 @@ production channel.
 | Inspect the prospective semantic extraction boundary | [`SEMANTIC_CORE_EXTRACTION_PLAN.md`](SEMANTIC_CORE_EXTRACTION_PLAN.md) | [`CANDIDATE_TEXT_MAP_IDENTITY_V2.md`](CANDIDATE_TEXT_MAP_IDENTITY_V2.md) |
 | Integrate machine-readable evidence | [`JSON_SCHEMA.md`](JSON_SCHEMA.md) | [`RECORD_VERIFICATION.md`](RECORD_VERIFICATION.md) |
 | Consume signed positive and negative attempts | [`CHANGE_ATTEMPT_OBSERVATION.md`](CHANGE_ATTEMPT_OBSERVATION.md) | [`adr/0009-change-attempt-observation-v1.md`](adr/0009-change-attempt-observation-v1.md) |
-| Maintain or release the project | [`GOVERNANCE.md`](GOVERNANCE.md) | [`RELEASE_TRUST_PIPELINE.md`](RELEASE_TRUST_PIPELINE.md) |
+| Maintain or release the project | [`RELEASING.md`](RELEASING.md) | [`GOVERNANCE.md`](GOVERNANCE.md) |
 | Understand the implementation | [`architecture/OVERVIEW.md`](architecture/OVERVIEW.md) | [`adr/0001-layered-architecture.md`](adr/0001-layered-architecture.md) |
 
 ## Getting started

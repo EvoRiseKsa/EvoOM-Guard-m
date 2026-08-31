@@ -28,7 +28,39 @@ retained evidence say so.
   are not supported releases.
 <!-- END EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 
-## [Unreleased]
+## [4.7.0] — 2026-08-31
+
+### Removed
+
+- **Abolished time-based release gates.** The fourteen-day stabilization
+  window, its freeze declaration (`security/release-freezes/`), both freeze
+  validators, the GitHub server-time anchor capture helper, and their tests
+  are deleted. Project policy (see `docs/GOVERNANCE.md`) now forbids gating
+  any release or merge on dates, elapsed time, or waiting windows: releases
+  are gated on evidence — tests, verdicts, and receipts — never on the
+  calendar.
+- Deleted the signed-source promotion workflow
+  (`evoguard-promote-signed-release-source.yml`): its sole purpose was
+  enforcing the frozen-declaration window during promotion to `main`. The
+  remaining A–H workflows stay in the tree as an inert, archived design
+  reference with every activation flag false (see
+  `docs/RELEASE_TRUST_PIPELINE.md`).
+
+### Changed (release path)
+
+- **Reinstated the direct release path.** `.github/workflows/release.yml` is
+  the official release pipeline again: a maintainer dispatches it manually
+  with the release tag; it validates tag-equals-version, runs the full test
+  suite plus Linux and Windows end-to-end checks, builds the reproducible
+  `evo-guard.pyz` and SPDX SBOM with checksums, attests the assets, and
+  prepares a draft release the maintainer publishes by hand. Every job
+  remains guarded to the default branch. The process is documented in
+  `docs/RELEASING.md`.
+- `PROJECT_STATUS.json` now records `contract: simple-release-v1`,
+  `activation_model: manual-dispatch`, and `legacy_workflow: archived-inert`
+  (the archived A–H lane), and `ops/render_project_status.py` verifies the
+  new posture — including that every release job stays branch-guarded — with
+  updated reviewed workflow hashes.
 
 ### Added
 
