@@ -1709,6 +1709,19 @@ class ProjectStatusTests(unittest.TestCase):
                 ("evo-guard.pyz", "evo-guard.spdx.json", "SHA256SUMS"),
             )
 
+    def test_postpublication_verifier_byte_drift_is_rejected(self) -> None:
+        source = ROOT / render_project_status._RELEASE_PUBLISHED_VERIFY_PATH
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / render_project_status._RELEASE_PUBLISHED_VERIFY_PATH
+            target.parent.mkdir(parents=True)
+            target.write_bytes(source.read_bytes() + b"# drift\n")
+            with self.assertRaisesRegex(
+                render_project_status.ProjectStatusError,
+                "post-publication verifier bytes differ",
+            ):
+                render_project_status._verify_release_published_workflow(root)
+
     def test_asset_names_in_comments_do_not_satisfy_active_handling(self) -> None:
         spec = render_project_status._WorkflowSpec(
             "test",

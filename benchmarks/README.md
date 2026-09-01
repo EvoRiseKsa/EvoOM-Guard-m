@@ -352,3 +352,13 @@ protocol in [`docs/INDEPENDENT_EVALUATION.md`](../docs/INDEPENDENT_EVALUATION.md
 The tool binds exact case bundles, Guard artifact, policy, raw verdicts, labels,
 and baseline without exposing held-out labels before predictions are frozen.
 It deliberately does not certify that the named parties are independent.
+
+Agent-behaviour measurement is a separate track. The strict
+[`agent-origin-1`](../tools/evaluation/schemas/agent-origin-1.schema.json)
+contract binds provider/model/version, prompt digest, tools, permissions, run
+and retry identities, randomization settings, and candidate digest without
+turning those declarations into a correctness label. See
+[`AGENT_ORIGIN_EVALUATION.md`](../docs/AGENT_ORIGIN_EVALUATION.md). The planned
+80-case external gate-efficacy round remains **`INPUTS_REQUIRED`**: no external
+case/label authority, case-selection reviewer, execution authority, result
+verifier, frozen case inventory, or score report is supplied by this repository.

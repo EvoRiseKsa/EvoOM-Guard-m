@@ -7,8 +7,8 @@
 name: "EvoOM Guard"
 # Marketplace requires < 125 characters; the full story lives in the README.
 description: >-
-  Evidence-bound change verification: rejects test-harness edits;
-  judge-owned verdicts and optional black-box checks.
+  Evidence-bound agent gate: rejects test-harness edits;
+  emits bounded verdicts and optional black-box evidence.
 branding:
   icon: "shield"
   color: "red"
@@ -35,6 +35,10 @@ inputs:
     description: "Verdicts that fail the step: 'any-non-pass' (default) or 'rejected-only'. PR runs require any-non-pass; rejected-only is accepted only for trusted non-PR invocations."
     required: false
     default: "any-non-pass"
+  agent-origin:
+    description: "Optional display-only origin label (for example, 'codex'). It never shapes the verdict and is always reported as DECLARED_UNVERIFIED; authenticate agent provenance in a separate trusted attestation/finalization lane."
+    required: false
+    default: ""
   isolation:
     description: "Isolation: 'subprocess' (default), 'docker', or 'gvisor' (the latter two need docker-image + a docker daemon; 'gvisor' also needs the runsc runtime)."
     required: false
@@ -137,6 +141,9 @@ outputs:
   policy-sha:
     description: "sha256 of the COMPLETE effective policy that shaped the judgment (attestation.policy_sha256) — pass to `evo-guard verify-verdict --expect-policy-sha`."
     value: ${{ steps.guard.outputs.policy-sha }}
+  receipt-sha256:
+    description: "SHA-256 of the exact JSON receipt bytes at json-path when they pass the bounded strict parser; blank otherwise. This detects byte changes but is not a signature or provenance attestation."
+    value: ${{ steps.guard.outputs.receipt-sha256 }}
 
 runs:
   using: "composite"
@@ -324,19 +331,413 @@ runs:
         INPUT_BASELINE_EVIDENCE: ${{ inputs.baseline-evidence }}
         INPUT_REQUIRE_DEMONSTRATED_FIX: ${{ inputs.require-demonstrated-fix }}
         INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_AGENT_ORIGIN: ${{ inputs.agent-origin }}
         PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set -euo pipefail
+        if ! CANDIDATE_COMMIT="$(git rev-parse HEAD 2>/dev/null)"; then
+          CANDIDATE_COMMIT=""
+        fi
+        write_agent_gate_summary() {
+          local fallback_verdict="$1"
+          local setup_code="$2"
+          local setup_message="$3"
+          local require_receipt="$4"
+          local guard_code="$5"
+          if ! python -I - \
+            "$RUNNER_TEMP/guard.json" \
+            "$GITHUB_STEP_SUMMARY" \
+            "$CANDIDATE_COMMIT" \
+            "$INPUT_AGENT_ORIGIN" \
+            "$fallback_verdict" \
+            "$setup_code" \
+            "$setup_message" \
+            "$RUNNER_TEMP/guard-receipt.sha256" \
+            "$require_receipt" \
+            "$guard_code" <<'PY'
+        # BEGIN AGENT_GATE_SUMMARY_PY
+        import hashlib
+        import html
+        import json
+        import math
+        import os
+        from pathlib import Path
+        import re
+        import stat
+        import sys
+        import unicodedata
+
+        MAX_RECEIPT_BYTES = 8 * 1024 * 1024
+
+        receipt_path = Path(sys.argv[1])
+        summary_path = Path(sys.argv[2])
+        fallback_commit = sys.argv[3]
+        declared_origin_input = sys.argv[4]
+        fallback_verdict = sys.argv[5]
+        setup_code = sys.argv[6]
+        setup_message = sys.argv[7]
+        receipt_digest_path = Path(sys.argv[8])
+        require_receipt = sys.argv[9] == "true"
+        guard_code_text = sys.argv[10]
+        summary_verdict_path = receipt_digest_path.with_suffix(".verdict")
+        policy_digest_path = receipt_digest_path.with_suffix(".policy")
+        receipt_digest_path.unlink(missing_ok=True)
+        summary_verdict_path.unlink(missing_ok=True)
+        policy_digest_path.unlink(missing_ok=True)
+
+        verdicts = {"PASS", "REJECTED", "FAIL", "TAMPERED", "ERROR"}
+        badges = {
+            "PASS": "✅",
+            "REJECTED": "⛔",
+            "FAIL": "❌",
+            "TAMPERED": "🚨",
+            "ERROR": "⚠️",
+        }
+
+        def mapping(value):
+            return value if isinstance(value, dict) else {}
+
+        def cell(value):
+            if value is None or value == "":
+                return "not available"
+            rendered = str(value).replace("\r", " ").replace("\n", " ")
+            return html.escape(rendered, quote=True).replace("|", "&#124;")
+
+        def code(value):
+            return f"<code>{cell(value)}</code>"
+
+        def digest(value, length=64):
+            normalized = str(value or "").lower()
+            if re.fullmatch(rf"[0-9a-f]{{{length}}}", normalized):
+                return normalized
+            return None
+
+        def bounded_display(value, *, limit, fallback):
+            if not isinstance(value, str) or not value:
+                return fallback
+            encoded = value.encode("utf-8")
+            if len(encoded) <= limit:
+                return value
+            prefix = encoded[:limit].decode("utf-8", errors="ignore")
+            observed = hashlib.sha256(encoded).hexdigest()
+            return f"{prefix}… [truncated; sha256={observed}]"
+
+        def unique_object(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError(f"duplicate JSON key: {key!r}")
+                result[key] = value
+            return result
+
+        def reject_constant(value):
+            raise ValueError(f"non-finite JSON constant: {value}")
+
+        def finite_float(value):
+            parsed = float(value)
+            if not math.isfinite(parsed):
+                raise ValueError("non-finite JSON number")
+            return parsed
+
+        def bounded_origin(value):
+            if not value:
+                return "not supplied"
+            if (
+                value != value.strip()
+                or unicodedata.normalize("NFC", value) != value
+                or len(value.encode("utf-8")) > 256
+                or any(unicodedata.category(character).startswith("C") for character in value)
+            ):
+                return "invalid declaration rejected"
+            return value
+
+        declared_origin = bounded_origin(declared_origin_input)
+
+        record = {}
+        receipt_bytes = None
+        receipt_present = False
+        receipt_valid = False
+        receipt_status = "not_emitted"
+        if require_receipt:
+            try:
+                before = receipt_path.lstat()
+                receipt_present = True
+                reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 1024)
+
+                def is_reparse(value):
+                    return bool(getattr(value, "st_file_attributes", 0) & reparse_flag)
+
+                if (
+                    stat.S_ISLNK(before.st_mode)
+                    or is_reparse(before)
+                    or not stat.S_ISREG(before.st_mode)
+                ):
+                    receipt_status = "receipt_not_regular_file"
+                elif before.st_size > MAX_RECEIPT_BYTES:
+                    receipt_status = "receipt_size_limit_exceeded"
+                else:
+                    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
+                    flags |= getattr(os, "O_NOFOLLOW", 0)
+                    flags |= getattr(os, "O_NONBLOCK", 0)
+                    descriptor = os.open(receipt_path, flags)
+                    try:
+                        with os.fdopen(descriptor, "rb", closefd=False) as handle:
+                            opened = os.fstat(handle.fileno())
+                            identity = [
+                                "st_dev",
+                                "st_ino",
+                                "st_mode",
+                                "st_nlink",
+                                "st_size",
+                                "st_mtime_ns",
+                            ]
+                            identity.extend(
+                                field
+                                for field in ("st_file_attributes", "st_reparse_tag")
+                                if hasattr(before, field) and hasattr(opened, field)
+                            )
+                            if (
+                                not stat.S_ISREG(opened.st_mode)
+                                or is_reparse(opened)
+                                or any(getattr(before, key) != getattr(opened, key) for key in identity)
+                            ):
+                                raise OSError("receipt identity changed before open")
+                            candidate_bytes = handle.read(MAX_RECEIPT_BYTES + 1)
+                            after_handle = os.fstat(handle.fileno())
+                    finally:
+                        os.close(descriptor)
+                    after_path = receipt_path.lstat()
+                    if (
+                        is_reparse(after_handle)
+                        or is_reparse(after_path)
+                        or any(
+                            getattr(before, key) != getattr(after_handle, key)
+                            or getattr(before, key) != getattr(after_path, key)
+                            for key in identity
+                        )
+                    ):
+                        raise OSError("receipt identity changed during read")
+                    if len(candidate_bytes) > MAX_RECEIPT_BYTES:
+                        receipt_status = "receipt_size_limit_exceeded"
+                    else:
+                        decoded = json.loads(
+                            candidate_bytes.decode("utf-8"),
+                            object_pairs_hook=unique_object,
+                            parse_constant=reject_constant,
+                            parse_float=finite_float,
+                        )
+                        if not isinstance(decoded, dict):
+                            raise ValueError("JSON receipt root must be an object")
+                        receipt_bytes = candidate_bytes
+                        record = decoded
+                        receipt_valid = True
+                        receipt_status = "strict_json_accepted"
+            except FileNotFoundError:
+                pass
+            except OSError:
+                receipt_present = True
+                receipt_status = "receipt_unreadable"
+            except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+                receipt_status = "receipt_json_invalid"
+        else:
+            # Setup failures happen before the current Guard invocation. Ignore
+            # every pre-existing path even if a prior composite invocation used
+            # the same RUNNER_TEMP; stale PASS bytes must never override ERROR.
+            receipt_status = "not_emitted_for_setup_error"
+
+        if receipt_valid:
+            try:
+                guard_code = int(guard_code_text)
+            except ValueError:
+                guard_code = -1
+            record_verdict = record.get("verdict")
+            record_exit = record.get("exit_code")
+            record_passed = record.get("passed")
+            record_attestation = record.get("attestation")
+            envelope_valid = (
+                guard_code in {0, 1}
+                and record.get("schema_version") in {"1.11", "1.12"}
+                and record.get("tool") == "evoguard"
+                and isinstance(record.get("tool_version"), str)
+                and bool(record["tool_version"])
+                and isinstance(record_verdict, str)
+                and record_verdict in verdicts
+                and type(record_passed) is bool
+                and record_passed is (record_verdict == "PASS")
+                and type(record_exit) is int
+                and record_exit == (0 if record_verdict == "PASS" else 1)
+                and guard_code == record_exit
+                and isinstance(record.get("reason_code"), str)
+                and bool(record["reason_code"])
+                and isinstance(record.get("reason"), str)
+                and isinstance(record.get("assurance"), dict)
+                and (record_attestation is None or isinstance(record_attestation, dict))
+            )
+            if not envelope_valid:
+                record = {}
+                receipt_bytes = None
+                receipt_valid = False
+                receipt_status = "receipt_semantic_envelope_invalid"
+
+        raw_verdict = record.get("verdict") if receipt_valid else None
+        if not receipt_present and not require_receipt:
+            raw_verdict = fallback_verdict
+        verdict = (
+            raw_verdict
+            if isinstance(raw_verdict, str) and raw_verdict in verdicts
+            else "ERROR"
+        )
+        attestation = mapping(record.get("attestation"))
+        assurance = mapping(record.get("assurance"))
+        pack_assurance = mapping(assurance.get("verifier_pack"))
+
+        candidate_commit = (
+            digest(attestation.get("head_sha"), 40)
+            or digest(attestation.get("head_sha"), 64)
+            or digest(fallback_commit, 40)
+            or digest(fallback_commit, 64)
+        )
+        candidate_digest = digest(attestation.get("candidate_sha256"))
+        policy_digest = digest(attestation.get("policy_sha256"))
+        pack_digest = digest(attestation.get("verifier_pack_sha256")) or digest(
+            pack_assurance.get("snapshot_sha256")
+        )
+        receipt_digest = (
+            hashlib.sha256(receipt_bytes).hexdigest()
+            if receipt_valid and receipt_bytes is not None
+            else None
+        )
+        if receipt_valid:
+            reason_code = bounded_display(
+                record.get("reason_code"),
+                limit=256,
+                fallback="not_available",
+            )
+            reason = bounded_display(
+                record.get("reason"),
+                limit=4096,
+                fallback="No reason was emitted.",
+            )
+        elif receipt_present:
+            reason_code = receipt_status
+            reason = "Agent Gate refused an ambiguous, invalid, or oversized receipt."
+        elif not require_receipt:
+            reason_code = bounded_display(
+                setup_code,
+                limit=256,
+                fallback="receipt_not_emitted",
+            )
+            reason = bounded_display(
+                setup_message,
+                limit=4096,
+                fallback="No JSON receipt was emitted.",
+            )
+        else:
+            reason_code = "receipt_not_emitted"
+            reason = "Agent Gate required a JSON receipt, but none was emitted."
+        def write_lf_sidecar(path, value):
+            with path.open("w", encoding="ascii", newline="\n") as handle:
+                handle.write(value + "\n")
+
+        # Git Bash consumes these files on both Linux and Windows.  Native
+        # Windows text translation would otherwise emit CRLF; `read -r` strips
+        # only LF and leaves a trailing CR that turns a valid PASS into ERROR.
+        write_lf_sidecar(summary_verdict_path, verdict)
+        if receipt_digest is not None:
+            write_lf_sidecar(receipt_digest_path, receipt_digest)
+        if policy_digest is not None:
+            write_lf_sidecar(policy_digest_path, policy_digest)
+
+        rows = [
+            ("Verdict", f"**{cell(verdict)}**"),
+            ("Reason code", code(reason_code)),
+            ("Candidate commit", code(candidate_commit)),
+            ("Candidate change digest", code(candidate_digest)),
+            ("Policy SHA-256", code(policy_digest)),
+            (
+                "Report integrity",
+                code(
+                    bounded_display(
+                        assurance.get("report_integrity"),
+                        limit=256,
+                        fallback="not available",
+                    )
+                ),
+            ),
+            (
+                "Candidate isolation",
+                code(
+                    bounded_display(
+                        assurance.get("candidate_isolation"),
+                        limit=256,
+                        fallback="not available",
+                    )
+                ),
+            ),
+            ("Verifier pack SHA-256", code(pack_digest)),
+            ("Agent origin status", code("DECLARED_UNVERIFIED")),
+            ("Declared agent origin", code(declared_origin or "not supplied")),
+            (
+                "JSON receipt",
+                code(str(receipt_path)) if receipt_present else "not emitted",
+            ),
+            ("Receipt parser", code(receipt_status)),
+            ("Receipt SHA-256", code(receipt_digest)),
+            (
+                "Receipt authentication",
+                "byte digest only; sign/finalize in a separate trusted lane",
+            ),
+        ]
+
+        lines = [
+            f"## EvoOM Agent Gate — {badges[verdict]} {verdict}",
+            "",
+            f"<strong>{cell(reason)}</strong>",
+            "",
+            "| Field | Observed value |",
+            "|---|---|",
+            *[f"| {name} | {value} |" for name, value in rows],
+            "",
+            "> Agent origin is display-only and unverified in this Action. "
+            "The receipt SHA-256 identifies local bytes; neither field is a "
+            "signature, agent identity attestation, or proof of independent judgment.",
+            "",
+        ]
+        with summary_path.open("a", encoding="utf-8", newline="\n") as handle:
+            handle.write("\n".join(lines))
+        # END AGENT_GATE_SUMMARY_PY
+        PY
+          then
+            {
+              echo "## EvoOM Agent Gate — ⚠️ ERROR"
+              echo
+              echo "The bounded Agent Gate summary could not be rendered."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+        }
         # A diagnosable, fail-fast exit for setup problems (missing base, shallow
         # history): name the cause, write it to the step summary, and stop BEFORE
         # the guard runs — never let a broken diff surface as a confusing
         # "empty diff" verdict downstream.
         fail_setup() {
           echo "::error::EvoGuard: $1 — $2"
-          { echo "## EvoGuard — ⚠️ ERROR (${1})"; echo; echo "**$2**"; } >> "$GITHUB_STEP_SUMMARY"
           echo "verdict=ERROR" >> "$GITHUB_OUTPUT"
+          echo "head-sha=$CANDIDATE_COMMIT" >> "$GITHUB_OUTPUT"
+          write_agent_gate_summary "ERROR" "$1" "$2" "false" "-1"
           exit 1
         }
+        # RUNNER_TEMP is shared by composite invocations in one job. Remove
+        # every prior invocation's fixed-name output before setup so a stale
+        # receipt/report/sidecar can never be mistaken for this attempt.
+        if ! rm -f -- \
+          "$RUNNER_TEMP/guard.json" \
+          "$RUNNER_TEMP/guard-report.md" \
+          "$RUNNER_TEMP/guard-receipt.sha256" \
+          "$RUNNER_TEMP/guard-receipt.verdict" \
+          "$RUNNER_TEMP/guard-receipt.policy"; then
+          fail_setup "stale_output_cleanup_failed" \
+            "could not remove a prior Agent Gate output from RUNNER_TEMP"
+        fi
         # On a PR, the event payload is the authority for the base and this
         # action must not accept candidate-controlled workflow inputs that weaken
         # the gate. Outside a PR, a maintainer may choose a base/ref and the
@@ -542,19 +943,46 @@ runs:
         python -I "$RUNNER_TEMP/evo-guard.pyz" "${ARGS[@]}" < "$RUNNER_TEMP/guard.diff"
         GUARD_CODE=$?
         set -e
-        # Tolerant reads: if the guard crashed before writing its JSON/report,
-        # surface ERROR + the exit code rather than a bash traceback.
-        VERDICT=$(python -I -c 'import json,sys;print(json.load(open(sys.argv[1], encoding="utf-8"))["verdict"])' "$RUNNER_TEMP/guard.json" 2>/dev/null || echo "ERROR")
-        echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
         # Surface the evidence (1.7): the attestation is the point of the newer
         # releases — make it reachable without custom steps.
         echo "json-path=$RUNNER_TEMP/guard.json" >> "$GITHUB_OUTPUT"
         echo "report-path=$RUNNER_TEMP/guard-report.md" >> "$GITHUB_OUTPUT"
-        POLICY_SHA=$(python -I -c 'import json,sys;print((json.load(open(sys.argv[1], encoding="utf-8")).get("attestation") or {}).get("policy_sha256") or "")' "$RUNNER_TEMP/guard.json" 2>/dev/null || echo "")
-        echo "policy-sha=$POLICY_SHA" >> "$GITHUB_OUTPUT"
         echo "head-sha=$HEAD_COMMIT" >> "$GITHUB_OUTPUT"
+        # This is the first and only Action-side read of guard.json. The parser
+        # bounds bytes before reading, rejects ambiguous JSON, and emits only
+        # small validated sidecars for the shell-facing outputs below.
+        write_agent_gate_summary "ERROR" "" "" "true" "$GUARD_CODE"
+        STRICT_VERDICT="ERROR"
+        if [ -f "$RUNNER_TEMP/guard-receipt.verdict" ]; then
+          IFS= read -r STRICT_VERDICT < "$RUNNER_TEMP/guard-receipt.verdict"
+        fi
+        case "$STRICT_VERDICT" in
+          PASS|REJECTED|FAIL|TAMPERED|ERROR) ;;
+          *) STRICT_VERDICT="ERROR" ;;
+        esac
+        VERDICT="$STRICT_VERDICT"
+        if [ "$VERDICT" != "PASS" ] && [ "$GUARD_CODE" -eq 0 ]; then
+          GUARD_CODE=1
+        fi
+        echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+        POLICY_SHA=""
+        if [ -f "$RUNNER_TEMP/guard-receipt.policy" ]; then
+          IFS= read -r POLICY_SHA < "$RUNNER_TEMP/guard-receipt.policy"
+        fi
+        echo "policy-sha=$POLICY_SHA" >> "$GITHUB_OUTPUT"
+        RECEIPT_SHA256=""
+        if [ -f "$RUNNER_TEMP/guard-receipt.sha256" ]; then
+          IFS= read -r RECEIPT_SHA256 < "$RUNNER_TEMP/guard-receipt.sha256"
+        fi
+        echo "receipt-sha256=$RECEIPT_SHA256" >> "$GITHUB_OUTPUT"
         if [ -f "$RUNNER_TEMP/guard-report.md" ]; then
-          cat "$RUNNER_TEMP/guard-report.md" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "<details><summary>Detailed Guard report</summary>"
+            echo
+            cat "$RUNNER_TEMP/guard-report.md"
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
         fi
         if [ "$INPUT_FAIL_ON" = "rejected-only" ]; then
           [ "$VERDICT" = "REJECTED" ] && exit 1 || exit 0

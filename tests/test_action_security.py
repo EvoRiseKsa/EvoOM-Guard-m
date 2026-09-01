@@ -710,7 +710,8 @@ def test_action_uses_only_preprovisioned_optional_coverage() -> None:
 
 def test_windows_temp_paths_are_passed_to_python_as_argv() -> None:
     text = ACTION.read_text(encoding="utf-8")
-    assert 'open(sys.argv[1], encoding="utf-8")' in text
+    assert 'receipt_path = Path(sys.argv[1])' in text
+    assert '"$RUNNER_TEMP/guard.json" \\' in text
     assert "'$RUNNER_TEMP/guard.json'" not in text
 
 

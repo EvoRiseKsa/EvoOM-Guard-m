@@ -37,6 +37,7 @@ F = WORKFLOWS / "evoguard-admit-release-artifact.yml"
 G = WORKFLOWS / "evoguard-verify-release-artifact.yml"
 H = WORKFLOWS / "evoguard-publish-admitted-release.yml"
 RELEASE = WORKFLOWS / "release.yml"
+PUBLISHED_VERIFY = WORKFLOWS / "release-published-verify.yml"
 
 PINNED_GH_VERSION = "2.97.0"
 PINNED_GH_ARCHIVE_SHA256 = (
@@ -178,6 +179,38 @@ def test_release_workflow_python_heredocs_are_exact_and_compile() -> None:
     assert count == 36
 
 
+def test_direct_release_python_heredocs_compile() -> None:
+    expected_counts = {RELEASE: 3, PUBLISHED_VERIFY: 1}
+    for path, expected_count in expected_counts.items():
+        sources = _python_heredocs(path)
+        assert len(sources) == expected_count
+        for source_index, source in enumerate(sources):
+            compile(source, f"{path.name}:heredoc:{source_index}", "exec")
+
+
+def test_direct_release_literal_bash_blocks_parse() -> None:
+    bash = _working_bash()
+    if bash is None:
+        pytest.skip("a working Bash is required to parse release steps")
+
+    for path in (RELEASE, PUBLISHED_VERIFY):
+        blocks = _literal_run_blocks(path)
+        assert blocks
+        for index, source in enumerate(blocks):
+            parsed = subprocess.run(
+                [bash, "-n"],
+                input=source,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=10,
+            )
+            assert parsed.returncode == 0, (
+                f"{path.name} run block {index} failed Bash parsing:\n"
+                f"{parsed.stderr}"
+            )
+
+
 def test_source_provenance_workflow_python_heredocs_compile() -> None:
     count = 0
     for path in (A,):
@@ -298,6 +331,7 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
     assert bootstrap["policy"]["bootstrap_state"] == (
         "INERT_UNTIL_POST_MERGE_CONFIGURATION"
     )
+    assert bootstrap["policy"]["time_based_release_gates"] == "FORBIDDEN"
     required = bootstrap["post_merge_required"]
     assert set(required["workflow_ids"]) == {
         "EVOGUARD_RELEASE_SOURCE_PROMOTION_WORKFLOW_ID",
@@ -340,27 +374,7 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
         "github_verification_required": True,
         "private_key_in_actions": False,
     }
-    assert required["minor_release_freeze"]["stabilization_seconds"] == 1209600
-    assert required["minor_release_freeze"]["candidate_promotion_policy"] == (
-        "exact-stable-promotion-scope-only"
-    )
-    assert required["minor_release_freeze"][
-        "stabilization_window_allowed_changes"
-    ] == ["release-record-corrections-only"]
-    freeze_contract = required["minor_release_freeze"]
-    assert freeze_contract["git_commit_timestamp_role"] == (
-        "SANITY_CHECK_ONLY_NOT_TRUSTED_TIME"
-    )
-    assert freeze_contract["github_server_time_anchor_validator"] == (
-        "tools/ci/validate_release_freeze_github_anchor.py"
-    )
-    for name in (
-        "EVOGUARD_V470_FREEZE_WINDOWS_WORKFLOW_ID",
-        "EVOGUARD_V470_FREEZE_CODEQL_WORKFLOW_ID",
-        "EVOGUARD_V470_FREEZE_CI_WORKFLOW_ID",
-        "EVOGUARD_V470_FREEZE_CFLITE_WORKFLOW_ID",
-    ):
-        assert freeze_contract[name] == "POST_MERGE_REQUIRED"
+    assert "minor_release_freeze" not in required
     assert bootstrap["protected_environments"][
         "evoguard-release-source-promotion"
     ]["secret"] == "EVOGUARD_RELEASE_SOURCE_DEPLOY_KEY"
@@ -444,6 +458,44 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
     assert "six admission public roots and key IDs" in frozen
     assert "one distinct release-ledger signing public root and key ID" in frozen
     assert "six public roots and key IDs" not in frozen
+
+
+def test_authoritative_release_paths_cannot_reintroduce_calendar_waits() -> None:
+    bootstrap = (
+        ROOT / "security" / "release-pipeline-bootstrap.json"
+    ).read_text(encoding="utf-8")
+    governance = (ROOT / "GOVERNANCE.md").read_text(encoding="utf-8")
+    docs_governance = (ROOT / "docs" / "GOVERNANCE.md").read_text(
+        encoding="utf-8"
+    )
+    release_workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+    dependabot = (ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8")
+
+    for retired_token in (
+        '"minor_release_freeze"',
+        '"stabilization_seconds"',
+        "EVOGUARD_V470_FREEZE_",
+        "1209600",
+    ):
+        assert retired_token not in bootstrap
+    assert "minimum 14-day" not in governance
+    assert "never time-gated" in docs_governance
+    assert "must not be reintroduced" in docs_governance
+    assert "time-based release gates are abolished" in release_workflow.lower()
+    assert "not_before" not in release_workflow.lower()
+    assert "wait_timer" not in release_workflow.lower()
+    assert "cooldown:" not in dependabot
+
+    for deleted_path in (
+        "security/release-freezes/v4.7.0.json",
+        "tests/baseline/schema/minor-release-freeze-v1.schema.json",
+        "tools/ci/capture_minor_release_freeze_anchor.js",
+        "tools/ci/validate_minor_release_freeze.py",
+        "tools/ci/validate_release_freeze_github_anchor.py",
+    ):
+        assert not (ROOT / deleted_path).exists()
 
 
 def test_h_live_tag_authority_is_proved_before_and_after_publication() -> None:
@@ -2042,6 +2094,11 @@ false
 
 
 def test_direct_release_path_is_enabled_and_main_only() -> None:
+    dispatch_guard = _job(RELEASE, "dispatch-ref-guard")
+    assert "if: always()" in dispatch_guard
+    assert 'test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"' in dispatch_guard
+    assert "release_dispatch_requires_default_branch" in dispatch_guard
+    assert "timeout-minutes:" in dispatch_guard
     for name in (
         "validate-test",
         "release-e2e",
@@ -2049,7 +2106,29 @@ def test_direct_release_path_is_enabled_and_main_only() -> None:
         "build-artifact",
         "attest-release-assets",
         "prepare-draft",
+        "publish-release",
     ):
         block = _job(RELEASE, name)
         assert "if: github.ref ==" in block
         assert "if: false" not in block
+        assert "timeout-minutes:" in block
+
+    prepare = _job(RELEASE, "prepare-draft")
+    assert "environment: evoguard-release-draft" in prepare
+    assert "EVOGUARD_IMMUTABLE_RELEASES_READ_TOKEN" in prepare
+    assert "immutable_releases_required" in prepare
+    assert "release_source_not_protected_main" in prepare
+    assert "release_tag_not_signed_by_maintainer_root" in prepare
+    assert "--verify-tag" in prepare
+
+    publish = _job(RELEASE, "publish-release")
+    assert "environment: evoguard-release-publication" in publish
+    assert "EVOGUARD_IMMUTABLE_RELEASES_READ_TOKEN" in publish
+    assert "EVOGUARD_RELEASE_MAIN_RULESET_ID" in publish
+    assert "EVOGUARD_RELEASE_TAG_RULESET_ID" in publish
+    assert "refs/tags/v*" in publish
+    assert "release_tag_ruleset_contract_not_exact" in publish
+    assert "release_main_ruleset_bypass_or_scope_drift" in publish
+    assert "release_tag_transport_not_retired" in publish
+    assert "--method PATCH" in publish
+    assert '.draft == false and .immutable == true' in publish

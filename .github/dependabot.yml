@@ -3,18 +3,14 @@ updates:
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
+      interval: daily
     groups:
       github-actions:
         patterns: ["*"]
   - package-ecosystem: pip
     directory: "/"
     schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
+      interval: daily
     # This compatibility backport is installed from a separately reviewed,
     # hash-locked file. Dependabot only edits the .in declaration and cannot
     # regenerate or review the matching multi-wheel SHA-256 lock, so its
