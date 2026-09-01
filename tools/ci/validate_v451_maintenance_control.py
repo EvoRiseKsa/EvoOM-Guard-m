@@ -68,11 +68,11 @@ RUN_JOBS: dict[str, tuple[str, ...]] = {
 RAW_ENTRY_PINS: dict[str, tuple[str, str]] = {
     ".github/workflows/evoguard-release-source-reverify.yml": (
         "workflow-A",
-        "60eb7e62213d3f41cb190fd6989ae089df597398",
+        "00288a7792f2aec5954d1e7ff72024e312f813e8",
     ),
     ".github/workflows/evoguard-produce-release-source-receipt.yml": (
         "workflow-B",
-        "ae6c2ecda3e7b29223db69b33b9135949e0ad567",
+        "48ace886b9757440749b1e237760ed2ab5817860",
     ),
     ".github/workflows/evoguard-admit-release-source.yml": (
         "workflow-CD",
@@ -80,7 +80,7 @@ RAW_ENTRY_PINS: dict[str, tuple[str, str]] = {
     ),
     ".github/workflows/evoguard-build-release-artifact.yml": (
         "workflow-E",
-        "ffdbc343f7331551a6f69361c8091a517d7dff7e",
+        "7906b615a5b88f605b005d157c1196fe56c902bf",
     ),
     ".github/workflows/evoguard-admit-release-artifact.yml": (
         "workflow-F",

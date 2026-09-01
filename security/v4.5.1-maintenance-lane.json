@@ -212,10 +212,10 @@
     "trusted_workflow_sha": "POST_MERGE_REQUIRED",
     "trusted_workflow_tree": "POST_MERGE_REQUIRED",
     "required_entries": {
-      ".github/workflows/evoguard-release-source-reverify.yml": {"role": "workflow-A", "mode": "100644", "blob_sha": "60eb7e62213d3f41cb190fd6989ae089df597398"},
-      ".github/workflows/evoguard-produce-release-source-receipt.yml": {"role": "workflow-B", "mode": "100644", "blob_sha": "ae6c2ecda3e7b29223db69b33b9135949e0ad567"},
+      ".github/workflows/evoguard-release-source-reverify.yml": {"role": "workflow-A", "mode": "100644", "blob_sha": "00288a7792f2aec5954d1e7ff72024e312f813e8"},
+      ".github/workflows/evoguard-produce-release-source-receipt.yml": {"role": "workflow-B", "mode": "100644", "blob_sha": "48ace886b9757440749b1e237760ed2ab5817860"},
       ".github/workflows/evoguard-admit-release-source.yml": {"role": "workflow-CD", "mode": "100644", "blob_sha": "8b38f5d2a7957782f3945b671bd877e047f8598d"},
-      ".github/workflows/evoguard-build-release-artifact.yml": {"role": "workflow-E", "mode": "100644", "blob_sha": "ffdbc343f7331551a6f69361c8091a517d7dff7e"},
+      ".github/workflows/evoguard-build-release-artifact.yml": {"role": "workflow-E", "mode": "100644", "blob_sha": "7906b615a5b88f605b005d157c1196fe56c902bf"},
       ".github/workflows/evoguard-admit-release-artifact.yml": {"role": "workflow-F", "mode": "100644", "blob_sha": "c85117813d93d8d1e148345ed444994ace4be468"},
       ".github/workflows/evoguard-verify-release-artifact.yml": {"role": "workflow-G", "mode": "100644", "blob_sha": "3fd1aa0f274900c5aa877d473f6fdb6f87e8bc4c"},
       ".github/workflows/evoguard-publish-admitted-release.yml": {"role": "workflow-H", "mode": "100644", "blob_sha": "bc6e41645b151775c339af17e3941851c15e2d3f"},
@@ -225,7 +225,7 @@
       "security/release-source-pack/pack.json": {"role": "pack", "mode": "100644", "blob_sha": "a05bb0d113cfc9675e06c9480590496dbf841b82"},
       "security/release-source-pack/test_release_protocol.py": {"role": "pack", "mode": "100644", "blob_sha": "f8f6d9369d295171ad78c87dff424840a800de3e"},
       "security/judge-requirements.lock": {"role": "control", "mode": "100644", "blob_sha": "8d173d39ba87c7a075fcac42c8fabe692263cbf6"},
-      "tools/ci/validate_v451_maintenance_control.py": {"role": "control-validator", "mode": "100644", "blob_sha": "567c71330676be64cb0190c48a2df651f1f5416e"}
+      "tools/ci/validate_v451_maintenance_control.py": {"role": "control-validator", "mode": "100644", "blob_sha": "5cf848fa26689c6089c3e07ca4a3daa9e83b1578"}
     }
   },
   "local_signature_verification": {
