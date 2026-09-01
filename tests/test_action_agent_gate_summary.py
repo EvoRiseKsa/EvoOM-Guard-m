@@ -180,6 +180,25 @@ def test_summary_surfaces_bounded_evidence_without_overclaiming(
     assert "Judge integrity" not in summary
 
 
+def test_summary_sidecars_are_exact_lf_bytes_for_git_bash(
+    tmp_path: Path,
+) -> None:
+    record: dict[str, object] = {
+        "verdict": "PASS",
+        "attestation": {"policy_sha256": "d" * 64},
+    }
+    _, receipt = _render_summary(tmp_path, record=record, verdict="PASS")
+    receipt_sha256 = hashlib.sha256(receipt.read_bytes()).hexdigest()
+
+    assert (tmp_path / "receipt.verdict").read_bytes() == b"PASS\n"
+    assert (tmp_path / "receipt.policy").read_bytes() == ("d" * 64 + "\n").encode(
+        "ascii"
+    )
+    assert (tmp_path / "receipt.sha256").read_bytes() == (
+        receipt_sha256 + "\n"
+    ).encode("ascii")
+
+
 def test_setup_error_summary_is_stable_without_a_receipt(tmp_path: Path) -> None:
     summary, _ = _render_summary(
         tmp_path,
