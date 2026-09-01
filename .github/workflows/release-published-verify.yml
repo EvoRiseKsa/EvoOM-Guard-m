@@ -1,0 +1,321 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Copyright © 2026 EvoRise Tech. All rights reserved.
+# Author / original creator: Mana Alharbi.
+# Licensor: EvoRise Tech.
+# Source-available — see LICENSE for permitted use.
+# ────────────────────────────────────────────────────────────────────────────
+name: Release published verifier
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      target_sha:
+        required: true
+        type: string
+      release_id:
+        required: true
+        type: string
+      tag_object_sha:
+        required: true
+        type: string
+      release_body_sha256:
+        required: true
+        type: string
+      pyz_sha256:
+        required: true
+        type: string
+      pyz_size:
+        required: true
+        type: string
+      sbom_sha256:
+        required: true
+        type: string
+      sbom_size:
+        required: true
+        type: string
+      sums_sha256:
+        required: true
+        type: string
+      sums_size:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Exact immutable release tag
+        required: true
+        type: string
+      target_sha:
+        description: Exact 40-hex release commit
+        required: true
+        type: string
+      release_id:
+        description: Exact numeric GitHub release ID
+        required: true
+        type: string
+      tag_object_sha:
+        description: Exact annotated tag-object SHA
+        required: true
+        type: string
+      release_body_sha256:
+        description: SHA-256 of canonical JSON release body plus LF
+        required: true
+        type: string
+      pyz_sha256:
+        description: Expected evo-guard.pyz SHA-256
+        required: true
+        type: string
+      pyz_size:
+        description: Expected evo-guard.pyz byte size
+        required: true
+        type: string
+      sbom_sha256:
+        description: Expected external SBOM SHA-256
+        required: true
+        type: string
+      sbom_size:
+        description: Expected external SBOM byte size
+        required: true
+        type: string
+      sums_sha256:
+        description: Expected SHA256SUMS SHA-256
+        required: true
+        type: string
+      sums_size:
+        description: Expected SHA256SUMS byte size
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-published-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TAG: ${{ inputs.tag }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      TARGET_SHA: ${{ inputs.target_sha }}
+      RELEASE_ID: ${{ inputs.release_id }}
+      TAG_OBJECT_SHA: ${{ inputs.tag_object_sha }}
+      EXPECTED_RELEASE_BODY_SHA256: ${{ inputs.release_body_sha256 }}
+      EXPECTED_PYZ_SHA256: ${{ inputs.pyz_sha256 }}
+      EXPECTED_PYZ_SIZE: ${{ inputs.pyz_size }}
+      EXPECTED_SBOM_SHA256: ${{ inputs.sbom_sha256 }}
+      EXPECTED_SBOM_SIZE: ${{ inputs.sbom_size }}
+      EXPECTED_SUMS_SHA256: ${{ inputs.sums_sha256 }}
+      EXPECTED_SUMS_SIZE: ${{ inputs.sums_size }}
+    steps:
+      - name: Validate immutable verifier inputs
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH" || {
+            echo '::error::postpublication_verifier_requires_default_branch'
+            exit 1
+          }
+          [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$TAG_OBJECT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_RELEASE_BODY_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_PYZ_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_SBOM_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_SUMS_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_PYZ_SIZE" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_SBOM_SIZE" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_SUMS_SIZE" =~ ^[1-9][0-9]*$ ]]
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.target_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Rebuild the exact deterministic asset set
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          test "$(git rev-parse "refs/tags/$TAG")" = "$TAG_OBJECT_SHA"
+          test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$TARGET_SHA"
+          VERSION="$(PYTHONPATH="$GITHUB_WORKSPACE" python -c \
+            'import evoom_guard; print(evoom_guard.__version__)')"
+          test "$TAG" = "v$VERSION"
+          mkdir -p dist
+          python -I ops/build_pyz.py -o dist/evo-guard.pyz
+          test "$(python -I dist/evo-guard.pyz version)" = "evo-guard $VERSION"
+          CREATED="$(git show -s --format=%cI "$TARGET_SHA")"
+          python -I ops/generate_spdx_sbom.py dist/evo-guard.pyz \
+            --version "$VERSION" --created "$CREATED" \
+            --output dist/evo-guard.spdx.json
+          ( cd dist && \
+            sha256sum evo-guard.pyz evo-guard.spdx.json > SHA256SUMS )
+          test "$(sha256sum dist/evo-guard.pyz | awk '{print $1}')" = \
+            "$EXPECTED_PYZ_SHA256"
+          test "$(stat -c '%s' dist/evo-guard.pyz)" = "$EXPECTED_PYZ_SIZE"
+          test "$(sha256sum dist/evo-guard.spdx.json | awk '{print $1}')" = \
+            "$EXPECTED_SBOM_SHA256"
+          test "$(stat -c '%s' dist/evo-guard.spdx.json)" = "$EXPECTED_SBOM_SIZE"
+          test "$(sha256sum dist/SHA256SUMS | awk '{print $1}')" = \
+            "$EXPECTED_SUMS_SHA256"
+          test "$(stat -c '%s' dist/SHA256SUMS)" = "$EXPECTED_SUMS_SIZE"
+
+      - name: Verify exact immutable provider state and downloaded bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ALLOWED_SIGNERS="$RUNNER_TEMP/evoguard-postpublish-allowed-signers"
+          printf '%s\n' \
+            'EvoRiseKsa namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDZCepQbTxouwR5UwSKMF+4RvlK/MRQ+D9HE+fxJOKdi' \
+            > "$ALLOWED_SIGNERS"
+          TAG_REF="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG")"
+          jq -e --arg ref "refs/tags/$TAG" --arg object "$TAG_OBJECT_SHA" '
+            .ref == $ref and .object.type == "tag" and .object.sha == $object
+          ' <<<"$TAG_REF" >/dev/null
+          TAG_OBJECT="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT_SHA")"
+          jq -e --arg tag "$TAG" --arg sha "$TARGET_SHA" '
+            (.sha | type == "string") and
+            .tag == $tag and .object.type == "commit" and .object.sha == $sha and
+            .verification.verified == true and .verification.reason == "valid" and
+            (.verification.payload | type == "string") and
+            (.verification.signature | type == "string")
+          ' <<<"$TAG_OBJECT" >/dev/null
+          jq -j '.verification.payload' <<<"$TAG_OBJECT" \
+            > "$RUNNER_TEMP/postpublish-tag.payload"
+          jq -j '.verification.signature' <<<"$TAG_OBJECT" \
+            > "$RUNNER_TEMP/postpublish-tag.signature"
+          ssh-keygen -Y verify -q \
+            -f "$ALLOWED_SIGNERS" -I EvoRiseKsa -n git \
+            -s "$RUNNER_TEMP/postpublish-tag.signature" \
+            < "$RUNNER_TEMP/postpublish-tag.payload"
+
+          gh api \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            > "$RUNNER_TEMP/release.json"
+          RELEASE_BY_TAG="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "repos/$GITHUB_REPOSITORY/releases/tags/$TAG")"
+          jq -e --argjson id "$RELEASE_ID" --arg tag "$TAG" '
+            .id == $id and .tag_name == $tag
+          ' <<<"$RELEASE_BY_TAG" >/dev/null
+          python -I - "$RUNNER_TEMP/release.json" <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import sys
+
+          def unique_object(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise ValueError(f"duplicate JSON key: {key}")
+                  result[key] = value
+              return result
+
+          release = json.loads(
+              pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"),
+              object_pairs_hook=unique_object,
+              parse_constant=lambda value: (_ for _ in ()).throw(
+                  ValueError(f"non-finite JSON constant: {value}")
+              ),
+          )
+          expected = {
+              "evo-guard.pyz": (
+                  "sha256:" + os.environ["EXPECTED_PYZ_SHA256"],
+                  int(os.environ["EXPECTED_PYZ_SIZE"]),
+              ),
+              "evo-guard.spdx.json": (
+                  "sha256:" + os.environ["EXPECTED_SBOM_SHA256"],
+                  int(os.environ["EXPECTED_SBOM_SIZE"]),
+              ),
+              "SHA256SUMS": (
+                  "sha256:" + os.environ["EXPECTED_SUMS_SHA256"],
+                  int(os.environ["EXPECTED_SUMS_SIZE"]),
+              ),
+          }
+          author = release.get("author")
+          if (
+              release.get("id") != int(os.environ["RELEASE_ID"])
+              or release.get("tag_name") != os.environ["TAG"]
+              or release.get("name") != os.environ["TAG"]
+              or release.get("target_commitish") != os.environ["TARGET_SHA"]
+              or release.get("draft") is not False
+              or release.get("prerelease") is not False
+              or release.get("immutable") is not True
+              or not isinstance(release.get("published_at"), str)
+              or not isinstance(author, dict)
+              or author.get("login") != "github-actions[bot]"
+              or author.get("id") != 41898282
+          ):
+              raise SystemExit("published release identity is not exact")
+          if "body" not in release:
+              raise SystemExit("published release body is absent")
+          body = release["body"]
+          if body is not None and not isinstance(body, str):
+              raise SystemExit("published release body is neither null nor a string")
+          canonical_body = (
+              json.dumps(
+                  body,
+                  ensure_ascii=False,
+                  allow_nan=False,
+                  separators=(",", ":"),
+              ).encode("utf-8")
+              + b"\n"
+          )
+          if hashlib.sha256(canonical_body).hexdigest() != os.environ[
+              "EXPECTED_RELEASE_BODY_SHA256"
+          ]:
+              raise SystemExit("published release body digest changed")
+          assets = release.get("assets")
+          if not isinstance(assets, list) or len(assets) != 3:
+              raise SystemExit("published release asset count is not exact")
+          if {asset.get("name") for asset in assets if isinstance(asset, dict)} != set(expected):
+              raise SystemExit("published release asset names are not exact")
+          for asset in assets:
+              if not isinstance(asset, dict):
+                  raise SystemExit("published release asset is not an object")
+              digest, size = expected[asset["name"]]
+              uploader = asset.get("uploader")
+              if (
+                  asset.get("state") != "uploaded"
+                  or asset.get("digest") != digest
+                  or asset.get("size") != size
+                  or isinstance(asset.get("size"), bool)
+                  or asset.get("label") != ""
+                  or not isinstance(uploader, dict)
+                  or uploader.get("login") != "github-actions[bot]"
+                  or uploader.get("id") != 41898282
+                  or uploader.get("type") != "Bot"
+              ):
+                  raise SystemExit(f"published asset metadata changed: {asset['name']}")
+          PY
+
+          mkdir "$RUNNER_TEMP/published-assets"
+          gh release download "$TAG" --dir "$RUNNER_TEMP/published-assets"
+          EXPECTED_ENTRIES="$(printf 'f\t%s\n' \
+            SHA256SUMS evo-guard.pyz evo-guard.spdx.json | LC_ALL=C sort)"
+          ACTUAL_ENTRIES="$(find "$RUNNER_TEMP/published-assets" \
+            -mindepth 1 -maxdepth 1 -printf '%y\t%f\n' | LC_ALL=C sort)"
+          test "$ACTUAL_ENTRIES" = "$EXPECTED_ENTRIES"
+          for asset in evo-guard.pyz evo-guard.spdx.json SHA256SUMS; do
+            cmp -s "dist/$asset" "$RUNNER_TEMP/published-assets/$asset"
+          done
+          echo "Verified immutable $TAG at $TARGET_SHA with exact provider metadata and rebuilt bytes."

@@ -37,6 +37,7 @@ F = WORKFLOWS / "evoguard-admit-release-artifact.yml"
 G = WORKFLOWS / "evoguard-verify-release-artifact.yml"
 H = WORKFLOWS / "evoguard-publish-admitted-release.yml"
 RELEASE = WORKFLOWS / "release.yml"
+PUBLISHED_VERIFY = WORKFLOWS / "release-published-verify.yml"
 
 PINNED_GH_VERSION = "2.97.0"
 PINNED_GH_ARCHIVE_SHA256 = (
@@ -176,6 +177,38 @@ def test_release_workflow_python_heredocs_are_exact_and_compile() -> None:
             compile(source, f"{path.name}:heredoc:{source_index}", "exec")
             count += 1
     assert count == 36
+
+
+def test_direct_release_python_heredocs_compile() -> None:
+    expected_counts = {RELEASE: 3, PUBLISHED_VERIFY: 1}
+    for path, expected_count in expected_counts.items():
+        sources = _python_heredocs(path)
+        assert len(sources) == expected_count
+        for source_index, source in enumerate(sources):
+            compile(source, f"{path.name}:heredoc:{source_index}", "exec")
+
+
+def test_direct_release_literal_bash_blocks_parse() -> None:
+    bash = _working_bash()
+    if bash is None:
+        pytest.skip("a working Bash is required to parse release steps")
+
+    for path in (RELEASE, PUBLISHED_VERIFY):
+        blocks = _literal_run_blocks(path)
+        assert blocks
+        for index, source in enumerate(blocks):
+            parsed = subprocess.run(
+                [bash, "-n"],
+                input=source,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=10,
+            )
+            assert parsed.returncode == 0, (
+                f"{path.name} run block {index} failed Bash parsing:\n"
+                f"{parsed.stderr}"
+            )
 
 
 def test_source_provenance_workflow_python_heredocs_compile() -> None:
@@ -2061,6 +2094,11 @@ false
 
 
 def test_direct_release_path_is_enabled_and_main_only() -> None:
+    dispatch_guard = _job(RELEASE, "dispatch-ref-guard")
+    assert "if: always()" in dispatch_guard
+    assert 'test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"' in dispatch_guard
+    assert "release_dispatch_requires_default_branch" in dispatch_guard
+    assert "timeout-minutes:" in dispatch_guard
     for name in (
         "validate-test",
         "release-e2e",
@@ -2068,6 +2106,7 @@ def test_direct_release_path_is_enabled_and_main_only() -> None:
         "build-artifact",
         "attest-release-assets",
         "prepare-draft",
+        "publish-release",
     ):
         block = _job(RELEASE, name)
         assert "if: github.ref ==" in block
@@ -2081,3 +2120,15 @@ def test_direct_release_path_is_enabled_and_main_only() -> None:
     assert "release_source_not_protected_main" in prepare
     assert "release_tag_not_signed_by_maintainer_root" in prepare
     assert "--verify-tag" in prepare
+
+    publish = _job(RELEASE, "publish-release")
+    assert "environment: evoguard-release-publication" in publish
+    assert "EVOGUARD_IMMUTABLE_RELEASES_READ_TOKEN" in publish
+    assert "EVOGUARD_RELEASE_MAIN_RULESET_ID" in publish
+    assert "EVOGUARD_RELEASE_TAG_RULESET_ID" in publish
+    assert "refs/tags/v*" in publish
+    assert "release_tag_ruleset_contract_not_exact" in publish
+    assert "release_main_ruleset_bypass_or_scope_drift" in publish
+    assert "release_tag_transport_not_retired" in publish
+    assert "--method PATCH" in publish
+    assert '.draft == false and .immutable == true' in publish

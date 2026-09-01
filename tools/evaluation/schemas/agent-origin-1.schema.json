@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v4.7.0/tools/evaluation/schemas/agent-origin-1.schema.json",
+  "title": "EvoOM Guard Agent Origin V1",
+  "description": "Closed evaluation metadata binding a declared or externally attested agent run to an exact repository, task, prompt descriptor and candidate descriptor. This contract never grants admission authority.",
+  "$comment": "JSON Schema validates shape only. Canonical JSON, Unicode categories, ordering, retry-chain/time relations, external descriptor equality, statement derivation, trusted-key identity, and Ed25519 verification require tools.evaluation.agent_origin.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "claims", "assurance"],
+  "properties": {
+    "schema_version": {"const": "evoguard-agent-origin-v1"},
+    "claims": {"$ref": "#/$defs/claims"},
+    "assurance": {"$ref": "#/$defs/assurance"}
+  },
+  "$defs": {
+    "boundedText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\u0000-\\u001f\\u007f\\ud800-\\udfff]+$"
+    },
+    "sha256": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "task", "run", "prompt", "execution", "change"],
+      "properties": {
+        "agent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "model", "model_version", "agent", "agent_version"],
+          "properties": {
+            "provider": {"$ref": "#/$defs/boundedText"},
+            "model": {"$ref": "#/$defs/boundedText"},
+            "model_version": {"$ref": "#/$defs/boundedText"},
+            "agent": {"$ref": "#/$defs/boundedText"},
+            "agent_version": {"$ref": "#/$defs/boundedText"}
+          }
+        },
+        "task": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["repository_sha256", "task_sha256"],
+          "properties": {
+            "repository_sha256": {"$ref": "#/$defs/sha256"},
+            "task_sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "run": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["run_id", "started_utc", "completed_utc", "attempt", "max_attempts", "retry_of_run_id"],
+          "properties": {
+            "run_id": {"$ref": "#/$defs/boundedText"},
+            "started_utc": {"$ref": "#/$defs/utcTimestamp"},
+            "completed_utc": {"$ref": "#/$defs/utcTimestamp"},
+            "attempt": {"type": "integer", "minimum": 1, "maximum": 1000},
+            "max_attempts": {"type": "integer", "minimum": 1, "maximum": 1000},
+            "retry_of_run_id": {
+              "oneOf": [
+                {"$ref": "#/$defs/boundedText"},
+                {"type": "null"}
+              ]
+            }
+          }
+        },
+        "prompt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sha256", "size_bytes", "content_disclosure"],
+          "properties": {
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "size_bytes": {"type": "integer", "minimum": 0, "maximum": 67108864},
+            "content_disclosure": {"enum": ["public", "retained_external", "not_retained"]}
+          }
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tools", "permissions", "randomization"],
+          "properties": {
+            "tools": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "version", "descriptor_sha256"],
+                "properties": {
+                  "name": {"$ref": "#/$defs/boundedText"},
+                  "version": {"$ref": "#/$defs/boundedText"},
+                  "descriptor_sha256": {"$ref": "#/$defs/sha256"}
+                }
+              }
+            },
+            "permissions": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["capability", "access", "scope_sha256"],
+                "properties": {
+                  "capability": {"$ref": "#/$defs/boundedText"},
+                  "access": {"enum": ["none", "read", "write", "execute", "invoke"]},
+                  "scope_sha256": {"$ref": "#/$defs/sha256"}
+                }
+              }
+            },
+            "randomization": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["mode", "seed", "settings_sha256"],
+              "properties": {
+                "mode": {"enum": ["deterministic", "stochastic", "provider_unspecified"]},
+                "seed": {
+                  "oneOf": [
+                    {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+                    {"type": "null"}
+                  ]
+                },
+                "settings_sha256": {"$ref": "#/$defs/sha256"}
+              }
+            }
+          }
+        },
+        "change": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["candidate_format", "candidate_sha256"],
+          "properties": {
+            "candidate_format": {"enum": ["EVOGUARD_CANDIDATE_TEXT_MAP_V2", "sha256_opaque_candidate_bytes"]},
+            "candidate_sha256": {"$ref": "#/$defs/sha256"}
+          }
+        }
+      }
+    },
+    "assurance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "attestation"],
+      "properties": {
+        "status": {"enum": ["declared_unverified", "attested"]},
+        "attestation": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/attestation"}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"status": {"const": "declared_unverified"}},
+            "required": ["status"]
+          },
+          "then": {"properties": {"attestation": {"type": "null"}}},
+          "else": {"properties": {"attestation": {"$ref": "#/$defs/attestation"}}}
+        }
+      ]
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "statement_sha256", "signature_algorithm", "key_id", "attester"],
+      "properties": {
+        "format": {"const": "EVOGUARD_AGENT_ORIGIN_ATTESTATION_V1"},
+        "statement_sha256": {"$ref": "#/$defs/sha256"},
+        "signature_algorithm": {"const": "Ed25519"},
+        "key_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "attester": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\u0000-\\u001f\\u007f\\ud800-\\udfff]+$"}
+      }
+    }
+  }
+}

@@ -292,9 +292,10 @@ jobs:
           test "$V" = "$TAG"
 
   publish-pyz:
-    # Publishing the immutable draft creates the version tag only after the
-    # assets are locked in place. Rebuild deterministically, then verify the
-    # published bytes; this tag-triggered job is intentionally read-only.
+    # The signed annotated tag is pushed before draft creation. Its push run
+    # may therefore finish before a release exists. Rebuild on that event, but
+    # reserve the immutable-release assertion for the explicit read-only
+    # post-publication verifier job. Both paths are read-only.
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [test, release-tag-guard]
@@ -336,9 +337,36 @@ jobs:
             exit 1
           fi
 
+          REPOSITORY_OWNER="${GITHUB_REPOSITORY%%/*}"
+          REPOSITORY_NAME="${GITHUB_REPOSITORY#*/}"
+          # GraphQL variables must remain literal for the API request.
+          # shellcheck disable=SC2016
+          RELEASE_LOOKUP="$(gh api graphql \
+            -f query='query($owner:String!,$name:String!,$tag:String!){repository(owner:$owner,name:$name){release(tagName:$tag){id}}}' \
+            -F owner="$REPOSITORY_OWNER" \
+            -F name="$REPOSITORY_NAME" \
+            -F tag="$GITHUB_REF_NAME")"
+          if ! jq -e '
+            (.errors | not) and
+            (.data.repository | type == "object") and
+            (.data.repository.release == null or
+             (.data.repository.release.id | type == "string"))
+          ' <<<"$RELEASE_LOOKUP" >/dev/null; then
+            echo "::error::release_lookup_invalid: release lookup failed or returned an unexpected schema"
+            exit 1
+          fi
+          if jq -e '.data.repository.release == null' \
+               <<<"$RELEASE_LOOKUP" >/dev/null; then
+            if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+              echo "::notice::prepublication_signed_tag_verified: $GITHUB_REF_NAME has no release yet; the protected release workflow will run the immutable postpublication verifier"
+              exit 0
+            fi
+            echo "::error::release_asset_immutable: immutable release is missing for $GITHUB_REF_NAME"
+            exit 1
+          fi
           if ! RELEASE_JSON="$(gh release view "$GITHUB_REF_NAME" \
                --json assets,isDraft,isImmutable,tagName,targetCommitish)"; then
-            echo "::error::release_asset_immutable: immutable release is missing for $GITHUB_REF_NAME"
+            echo "::error::release_lookup_failed: the release exists but its exact state could not be read"
             exit 1
           fi
 
@@ -349,6 +377,12 @@ jobs:
           if [ "$RELEASE_TAG" != "$GITHUB_REF_NAME" ] || [ "$RELEASE_TARGET" != "$GITHUB_SHA" ]; then
             echo "::error::release_target_commit_mismatch: release metadata does not bind $GITHUB_REF_NAME to $GITHUB_SHA"
             exit 1
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && \
+             [ "$RELEASE_IS_DRAFT" = "true" ] && \
+             [ "$RELEASE_IS_IMMUTABLE" = "false" ]; then
+            echo "::notice::prepublication_draft_verified: $GITHUB_REF_NAME is an exact draft; the protected post-publication verifier will prove immutable assets"
+            exit 0
           fi
           if [ "$RELEASE_IS_DRAFT" != "false" ] || [ "$RELEASE_IS_IMMUTABLE" != "true" ]; then
             echo "::error::release_not_immutable: $GITHUB_REF_NAME must be published and immutable"
