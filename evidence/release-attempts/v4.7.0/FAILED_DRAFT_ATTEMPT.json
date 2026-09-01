@@ -1,0 +1,143 @@
+{
+  "format": "EVOGUARD_FAILED_RELEASE_ATTEMPT_V1",
+  "version": "v4.7.0",
+  "status": "WITHDRAWN_UNPUBLISHED_DRAFT_ATTEMPT",
+  "observed_utc": "2026-09-01T11:06:32Z",
+  "repository": "EvoRiseKsa/EvoOM-Guard-m",
+  "source": {
+    "commit_sha": "06c3fd7744a22b94a194124731046241fa219db3",
+    "tree_sha": "0eeb4fbe5d49a152a9afdb572f088e06a7e15558"
+  },
+  "tag": {
+    "name": "v4.7.0",
+    "object_sha": "026d9f86e167efe7728c4fd5feb89cc9b6a0ad7c",
+    "target_commit_sha": "06c3fd7744a22b94a194124731046241fa219db3",
+    "github_verification": {
+      "verified": true,
+      "reason": "valid",
+      "verified_at": "2026-09-01T10:11:51Z"
+    },
+    "disposition": "PRESERVED_UNCHANGED_NOT_A_CONSUMER_RELEASE"
+  },
+  "workflow_run": {
+    "id": 33498177503,
+    "attempt": 1,
+    "event": "workflow_dispatch",
+    "actor": "EvoRiseKsa",
+    "head_sha": "06c3fd7744a22b94a194124731046241fa219db3",
+    "created_at": "2026-09-01T10:35:17Z",
+    "updated_at": "2026-09-01T10:47:48Z",
+    "conclusion": "failure",
+    "prepare_draft_job": {
+      "id": 99827881565,
+      "failed_step_number": 6,
+      "failed_step_name": "Prepare the draft release and immutable asset set",
+      "failure": "GH_RELEASE_DOWNLOAD_BY_TAG_RETURNED_HTTP_404_FOR_DRAFT"
+    },
+    "publish_release_job": {
+      "id": 99828411652,
+      "conclusion": "skipped",
+      "started_at": "2026-09-01T10:47:48Z",
+      "completed_at": "2026-09-01T10:47:47Z"
+    },
+    "postpublication_verifier_job": {
+      "id": 99828411734,
+      "conclusion": "skipped",
+      "started_at": "2026-09-01T10:47:48Z",
+      "completed_at": "2026-09-01T10:47:47Z"
+    },
+    "provider_timestamp_anomaly": "SKIPPED_JOB_STARTED_AT_AFTER_COMPLETED_AT_NO_TEMPORAL_ORDER_CLAIM",
+    "publication_mutation_started": false
+  },
+  "draft_release": {
+    "id": 380414798,
+    "tag_name": "v4.7.0",
+    "name": "v4.7.0",
+    "target_commitish": "06c3fd7744a22b94a194124731046241fa219db3",
+    "draft": true,
+    "prerelease": false,
+    "immutable": false,
+    "published_at": null,
+    "author": {
+      "login": "github-actions[bot]",
+      "id": 41898282
+    },
+    "canonical_body_sha256": "981b8128c58d059fc94aff4441633412acae6fc6fd7c0596a1266e5e827b4e85",
+    "raw_api_snapshot": {
+      "sha256": "bdd35c076e85e129da486bc613c9478f457765bc90fdbcff096a95b2832cc2e8",
+      "bytes": 12238,
+      "raw_bytes_retained": false
+    },
+    "assets": [
+      {
+        "id": 539407115,
+        "name": "evo-guard.pyz",
+        "size": 2986078,
+        "digest": "sha256:cf58bd26e9facaa0fd14c2b4812c962ea051ca6b6b54c9065d0ce98a2ccf6ad0",
+        "state": "uploaded",
+        "label": "",
+        "content_type": "application/octet-stream",
+        "uploader_login": "github-actions[bot]",
+        "uploader_id": 41898282,
+        "uploader_type": "Bot"
+      },
+      {
+        "id": 539407160,
+        "name": "evo-guard.spdx.json",
+        "size": 130832,
+        "digest": "sha256:2a96c4fc2b10dbe6a02a3294226bfc51b0656b47f96c333b5695119e87616114",
+        "state": "uploaded",
+        "label": "",
+        "content_type": "application/json",
+        "uploader_login": "github-actions[bot]",
+        "uploader_id": 41898282,
+        "uploader_type": "Bot"
+      },
+      {
+        "id": 539407180,
+        "name": "SHA256SUMS",
+        "size": 166,
+        "digest": "sha256:d3a5388c0153cf5e00ef3d2b75a56dcb5054a565717e37d9eaab9cbd807f1a6e",
+        "state": "uploaded",
+        "label": "",
+        "content_type": "application/octet-stream",
+        "uploader_login": "github-actions[bot]",
+        "uploader_id": 41898282,
+        "uploader_type": "Bot"
+      }
+    ]
+  },
+  "root_cause": "The workflow used tag-based release resolution while the release was still a draft. The immediate gh release download returned HTTP 404, the later published-release-by-tag REST lookup would also have returned 404, and a retry could have created a duplicate hidden draft.",
+  "corrective_action": "The corrected workflow uses paginated unique draft discovery, numeric release and asset IDs before publication, and a by-tag identity join only after immutable publication. A future v4.7.1 candidate must complete its own dev0 evidence lane before stable promotion.",
+  "cleanup": {
+    "draft_release_id": 380414798,
+    "status": "VERIFIED_DELETED_TAG_PRESERVED",
+    "public_branch_capture": {
+      "commit_sha": "8e2a518ecaee611897871a6abec1b9584c8f3a7b",
+      "evidence_blob_sha": "670c78549de31f190d9c00d9bf7b9ce3c9f8087d",
+      "evidence_sha256": "e6cb5ed59a8bd29364b956dad56fed7236b3722726fff9567d44c582901281b1",
+      "evidence_bytes": 4384
+    },
+    "delete_method": "REST_DELETE_NUMERIC_RELEASE_ID_ONLY",
+    "delete_actor": "MANA-awam",
+    "delete_observed_github_server_utc": "2026-09-01T11:50:14Z",
+    "release_get_http_after_delete": 404,
+    "release_tag_matches_after_delete": 0,
+    "tag_object_sha_after_delete": "026d9f86e167efe7728c4fd5feb89cc9b6a0ad7c",
+    "tag_target_commit_sha_after_delete": "06c3fd7744a22b94a194124731046241fa219db3",
+    "tag_github_verification_after_delete": {
+      "verified": true,
+      "reason": "valid"
+    },
+    "main_commit_sha_after_delete": "06c3fd7744a22b94a194124731046241fa219db3",
+    "deploy_keys_after_delete": 0,
+    "tag_delete_forbidden": true,
+    "same_owner_operation": true,
+    "independent_validation": false
+  },
+  "claims": {
+    "consumer_release_created": false,
+    "publication_authorized": false,
+    "independent_validation": false
+  }
+}

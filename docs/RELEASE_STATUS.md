@@ -26,6 +26,14 @@ the resulting publication. An admitted release is contracted to exactly `evo-gua
 assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_SUMMARY -->
 
+The signed `v4.7.0` tag is a preserved, unpublished release attempt—not a
+consumer release. Its protected workflow stopped while reading the draft; no
+publication mutation or postpublication verifier ran. The exact bounded
+same-owner incident record is
+[`FAILED_DRAFT_ATTEMPT.json`](../evidence/release-attempts/v4.7.0/FAILED_DRAFT_ATTEMPT.json).
+The tag is not moved or reused. A future `v4.7.1` candidate must complete a
+fresh `4.7.1.dev0` evidence lane before stable-version promotion.
+
 For `v4.5.0`, after the signed ledger bytes were committed and independently revalidated,
 the exact temporary publication deploy key and publication Environment secret
 were removed. Their later successful HTTP 200 absence observations are bound by

@@ -30,6 +30,12 @@ useful, but a fix will be delivered in a new immutable release rather than by
 rewriting an existing tag, asset, checksum, or attestation.
 <!-- END EVOGUARD_PROJECT_STATUS:SECURITY_SUPPORTED_VERSIONS -->
 
+The preserved `v4.7.0` tag was never published and is explicitly unsupported.
+Its bounded same-owner failure record is
+[`FAILED_DRAFT_ATTEMPT.json`](evidence/release-attempts/v4.7.0/FAILED_DRAFT_ATTEMPT.json);
+the tag is retained unchanged for auditability and must not be treated as a
+consumer release.
+
 ## Reporting a vulnerability
 
 **Please report privately, not in a public issue.**

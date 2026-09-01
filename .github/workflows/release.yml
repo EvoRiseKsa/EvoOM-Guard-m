@@ -778,46 +778,157 @@ jobs:
             }
           }
 
-          # A rerun must never retarget an existing tag/release or replace an
-          # existing asset with bytes built from another commit.
-          verify_mutable_authority
+          release_api() {
+            gh api \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2026-03-10' "$@"
+          }
+          capture_tag_matches() {
+            local output="$1"
+            local pages="$RUNNER_TEMP/release-pages.json"
+            release_api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$pages"
+            jq -e '
+              type == "array" and
+              all(.[]; type == "array") and
+              all(.[][]; type == "object")
+            ' "$pages" >/dev/null || {
+              echo "::error::release_inventory_invalid"
+              return 1
+            }
+            jq --arg tag "$TAG" \
+              '[.[][] | select(.tag_name == $tag)]' "$pages" > "$output"
+          }
+          verify_unique_tag_release() {
+            local matches="$RUNNER_TEMP/release-tag-matches-recheck.json"
+            capture_tag_matches "$matches"
+            jq -e --argjson id "$RELEASE_ID" '
+              length == 1 and .[0].id == $id
+            ' "$matches" >/dev/null || {
+              echo "::error::release_tag_match_not_unique_or_id_drift"
+              return 1
+            }
+          }
+          validate_release_record() {
+            local record="$1"
+            jq -e --argjson id "$RELEASE_ID" \
+              --arg tag "$TAG" --arg sha "$GITHUB_SHA" '
+              .id == $id and
+              .tag_name == $tag and
+              .name == $tag and
+              .target_commitish == $sha and
+              .prerelease == false and
+              .author.login == "github-actions[bot]" and
+              .author.id == 41898282 and
+              (
+                (.draft == true and .immutable == false and .published_at == null) or
+                (.draft == false and .immutable == true and
+                  (.published_at | type == "string" and length > 0))
+              )
+            ' "$record" >/dev/null || {
+              echo "::error::prepared_release_identity_invalid"
+              return 1
+            }
+          }
+          capture_release_record() {
+            local output="$1"
+            release_api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+              > "$output"
+            validate_release_record "$output"
+          }
+          download_release_asset() {
+            local asset_id="$1"
+            local destination="$2"
+            [[ "$asset_id" =~ ^[1-9][0-9]*$ ]]
+            gh api \
+              -H 'Accept: application/octet-stream' \
+              -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+              > "$destination"
+          }
+          upload_release_asset() {
+            local asset="$1"
+            local response="$RUNNER_TEMP/upload-$asset.json"
+            local expected_digest expected_size status
+            expected_digest="sha256:$(sha256sum "dist/$asset" | awk '{print $1}')"
+            expected_size="$(stat -c '%s' "dist/$asset")"
+            status="$(curl --fail-with-body --silent --show-error --location \
+              --request POST \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header 'X-GitHub-Api-Version: 2026-03-10' \
+              --header 'Content-Type: application/octet-stream' \
+              --data-binary "@dist/$asset" \
+              --output "$response" \
+              --write-out '%{http_code}' \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$asset&label=")"
+            if [ "$status" != "201" ] || ! jq -e \
+              --arg asset "$asset" --arg digest "$expected_digest" \
+              --argjson size "$expected_size" '
+              (.id | type == "number" and . >= 1 and floor == .) and
+              .name == $asset and
+              .state == "uploaded" and
+              .size == $size and
+              .digest == $digest and
+              .label == "" and
+              .uploader.login == "github-actions[bot]" and
+              .uploader.id == 41898282 and
+              .uploader.type == "Bot"
+            ' "$response" >/dev/null; then
+              echo "::error::release_asset_upload_response_invalid: $asset"
+              return 1
+            fi
+          }
 
-          set +e
-          RELEASE_LOOKUP="$(gh api --include \
-            "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" 2>&1)"
-          RELEASE_LOOKUP_STATUS=$?
-          set -e
-          if [ "$RELEASE_LOOKUP_STATUS" -ne 0 ] && \
-             ! grep -Eq '^HTTP/[^ ]+ 404 ' <<<"$RELEASE_LOOKUP"; then
-            echo "::error::release_lookup_failed"
-            printf '%s\n' "$RELEASE_LOOKUP" >&2
-            exit "$RELEASE_LOOKUP_STATUS"
+          # A rerun must never create a second hidden draft. The REST by-tag
+          # endpoint exposes published releases only, so enumerate all releases
+          # (including drafts), require a unique tag match, and bind every later
+          # operation to its numeric release ID.
+          verify_mutable_authority
+          RELEASE_MATCHES="$RUNNER_TEMP/release-tag-matches.json"
+          capture_tag_matches "$RELEASE_MATCHES"
+          RELEASE_MATCH_COUNT="$(jq -r length "$RELEASE_MATCHES")"
+          if [ "$RELEASE_MATCH_COUNT" -gt 1 ]; then
+            echo "::error::release_tag_match_not_unique"
+            exit 1
           fi
-          if [ "$RELEASE_LOOKUP_STATUS" -ne 0 ]; then
+          if [ "$RELEASE_MATCH_COUNT" -eq 0 ]; then
             gh release create "$TAG" \
               --draft \
               --verify-tag \
               --target "$GITHUB_SHA" \
               --title "$TAG" \
               --generate-notes
+            RELEASE_MATCH_COUNT=0
+            for attempt in {1..10}; do
+              : "$attempt"
+              capture_tag_matches "$RELEASE_MATCHES"
+              RELEASE_MATCH_COUNT="$(jq -r length "$RELEASE_MATCHES")"
+              if [ "$RELEASE_MATCH_COUNT" -eq 1 ]; then
+                break
+              fi
+              if [ "$RELEASE_MATCH_COUNT" -gt 1 ]; then
+                echo "::error::release_tag_match_not_unique"
+                exit 1
+              fi
+              sleep 2
+            done
           fi
-
-          RELEASE_JSON="$(gh release view "$TAG" \
-            --json assets,isDraft,isImmutable,tagName,targetCommitish)"
-          RELEASE_TAG="$(jq -r .tagName <<<"$RELEASE_JSON")"
-          RELEASE_TARGET="$(jq -r .targetCommitish <<<"$RELEASE_JSON")"
-          RELEASE_IS_DRAFT="$(jq -r .isDraft <<<"$RELEASE_JSON")"
-          RELEASE_IS_IMMUTABLE="$(jq -r .isImmutable <<<"$RELEASE_JSON")"
-          test "$RELEASE_TAG" = "$TAG"
-          test "$RELEASE_TARGET" = "$GITHUB_SHA"
-          if [ "$RELEASE_IS_DRAFT" != "true" ] && [ "$RELEASE_IS_IMMUTABLE" != "true" ]; then
-            echo "::error::release_not_immutable: published $TAG is not immutable"
+          if [ "$RELEASE_MATCH_COUNT" -ne 1 ]; then
+            echo "::error::created_draft_not_uniquely_visible"
             exit 1
           fi
+          RELEASE_ID="$(jq -r '.[0].id' "$RELEASE_MATCHES")"
+          [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
+
+          RELEASE_RECORD_FILE="$RUNNER_TEMP/prepared-release-record.json"
+          capture_release_record "$RELEASE_RECORD_FILE"
+          RELEASE_IS_DRAFT="$(jq -r .draft "$RELEASE_RECORD_FILE")"
+          RELEASE_IS_IMMUTABLE="$(jq -r .immutable "$RELEASE_RECORD_FILE")"
 
           EXPECTED_ASSETS="$(printf '%s\n' \
             SHA256SUMS evo-guard.pyz evo-guard.spdx.json | LC_ALL=C sort)"
-          RELEASE_ASSETS="$(jq -r '.assets[].name' <<<"$RELEASE_JSON" | LC_ALL=C sort)"
+          RELEASE_ASSETS="$(jq -r '.assets[].name' "$RELEASE_RECORD_FILE" | LC_ALL=C sort)"
           UNEXPECTED_ASSETS="$(printf '%s\n' "$RELEASE_ASSETS" | \
             awk 'NF && $0 != "SHA256SUMS" && $0 != "evo-guard.pyz" && $0 != "evo-guard.spdx.json"')"
           if [ -n "$UNEXPECTED_ASSETS" ]; then
@@ -829,8 +940,13 @@ jobs:
           mkdir -p existing-release-assets
           for asset in evo-guard.pyz evo-guard.spdx.json SHA256SUMS; do
             if printf '%s\n' "$RELEASE_ASSETS" | grep -Fxq "$asset"; then
-              gh release download "$TAG" --pattern "$asset" \
-                --dir existing-release-assets
+              ASSET_ID="$(jq -r --arg asset "$asset" '
+                [.assets[] | select(.name == $asset)] |
+                if length == 1 and
+                   (.[0].id | type == "number" and . >= 1 and floor == .)
+                then .[0].id else error("release asset identity is not unique") end
+              ' "$RELEASE_RECORD_FILE")"
+              download_release_asset "$ASSET_ID" "existing-release-assets/$asset"
               if ! cmp -s "dist/$asset" "existing-release-assets/$asset"; then
                 echo "::error::release_asset_immutable: existing $asset differs"
                 exit 1
@@ -841,12 +957,12 @@ jobs:
                 echo "::error::release_asset_immutable: published release is missing $asset"
                 exit 1
               fi
-              gh release upload "$TAG" "dist/$asset"
+              upload_release_asset "$asset"
             fi
           done
 
-          FINAL_ASSETS="$(gh release view "$TAG" --json assets \
-            --jq '.assets[].name' | LC_ALL=C sort)"
+          capture_release_record "$RELEASE_RECORD_FILE"
+          FINAL_ASSETS="$(jq -r '.assets[].name' "$RELEASE_RECORD_FILE" | LC_ALL=C sort)"
           if [ "$FINAL_ASSETS" != "$EXPECTED_ASSETS" ]; then
             echo "::error::release_asset_set_mismatch: final release asset set is not exact"
             printf 'expected:\n%s\nactual:\n%s\n' "$EXPECTED_ASSETS" "$FINAL_ASSETS"
@@ -857,37 +973,24 @@ jobs:
           # uploads. This closes the draft job's mutation window; publication
           # remains behind the distinct protected Environment and final job.
           verify_mutable_authority
+          verify_unique_tag_release
+          capture_release_record "$RELEASE_RECORD_FILE"
           rm -rf final-release-assets
           mkdir final-release-assets
-          gh release download "$TAG" --dir final-release-assets
           for asset in evo-guard.pyz evo-guard.spdx.json SHA256SUMS; do
+            ASSET_ID="$(jq -r --arg asset "$asset" '
+              [.assets[] | select(.name == $asset)] |
+              if length == 1 and
+                 (.[0].id | type == "number" and . >= 1 and floor == .)
+              then .[0].id else error("release asset identity is not unique") end
+            ' "$RELEASE_RECORD_FILE")"
+            download_release_asset "$ASSET_ID" "final-release-assets/$asset"
             if ! cmp -s "dist/$asset" "final-release-assets/$asset"; then
               echo "::error::release_asset_readback_mismatch: $asset"
               exit 1
             fi
           done
 
-          RELEASE_RECORD="$(gh api \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'X-GitHub-Api-Version: 2026-03-10' \
-            "repos/$GITHUB_REPOSITORY/releases/tags/$TAG")"
-          if ! jq -e --arg tag "$TAG" --arg sha "$GITHUB_SHA" '
-            (.id | type == "number" and . >= 1 and floor == .) and
-            .tag_name == $tag and
-            .name == $tag and
-            .target_commitish == $sha and
-            .prerelease == false and
-            .author.login == "github-actions[bot]" and
-            .author.id == 41898282 and
-            (
-              (.draft == true and .immutable == false) or
-              (.draft == false and .immutable == true)
-            )
-          ' <<<"$RELEASE_RECORD" >/dev/null; then
-            echo "::error::prepared_release_identity_invalid"
-            exit 1
-          fi
-          RELEASE_ID="$(jq -r .id <<<"$RELEASE_RECORD")"
           {
             printf 'release-id=%s\n' "$RELEASE_ID"
             printf 'pyz-sha256=%s\n' "$(sha256sum dist/evo-guard.pyz | awk '{print $1}')"
@@ -897,8 +1000,6 @@ jobs:
             printf 'sums-sha256=%s\n' "$(sha256sum dist/SHA256SUMS | awk '{print $1}')"
             printf 'sums-size=%s\n' "$(stat -c '%s' dist/SHA256SUMS)"
           } >> "$GITHUB_OUTPUT"
-          printf '%s' "$RELEASE_RECORD" \
-            > "$RUNNER_TEMP/prepared-release-record.json"
           python3 -I - "$RUNNER_TEMP/prepared-release-record.json" \
             >> "$GITHUB_OUTPUT" <<'PY'
           import hashlib
@@ -1007,6 +1108,21 @@ jobs:
             gh api \
               -H 'Accept: application/vnd.github+json' \
               -H 'X-GitHub-Api-Version: 2026-03-10' "$@"
+          }
+          verify_unique_tag_release() {
+            local pages="$RUNNER_TEMP/release-pages.json"
+            release_api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$pages"
+            jq -e --arg tag "$TAG" --argjson id "$RELEASE_ID" '
+              type == "array" and
+              all(.[]; type == "array") and
+              all(.[][]; type == "object") and
+              ([.[][] | select(.tag_name == $tag)] as $matches |
+                ($matches | length) == 1 and $matches[0].id == $id)
+            ' "$pages" >/dev/null || {
+              echo "::error::release_tag_match_not_unique_or_id_drift"
+              return 1
+            }
           }
 
           ALLOWED_SIGNERS="$RUNNER_TEMP/evoguard-publish-allowed-signers"
@@ -1424,6 +1540,14 @@ jobs:
               reject("release asset entry is not an object")
           if {asset.get("name") for asset in assets} != expected_names:
               reject("release asset names are not exact")
+          asset_ids = [asset.get("id") for asset in assets]
+          if any(
+              isinstance(asset_id, bool)
+              or not isinstance(asset_id, int)
+              or asset_id < 1
+              for asset_id in asset_ids
+          ) or len(set(asset_ids)) != len(asset_ids):
+              reject("release asset IDs are not exact and unique")
           for asset in assets:
               descriptor = expected_assets.get(asset["name"])
               uploader = asset.get("uploader")
@@ -1448,32 +1572,40 @@ jobs:
           capture_release() {
             local output="$1"
             release_api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > "$output"
-            local by_tag="$RUNNER_TEMP/release-by-tag.json"
-            release_api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$by_tag"
-            jq -e --argjson id "$RELEASE_ID" '.id == $id' \
-              "$by_tag" >/dev/null || {
-              echo "::error::release_tag_lookup_identity_drift"
-              return 1
-            }
+            # The by-tag REST endpoint exposes published releases only. Require
+            # that second identity join once the numeric record is immutable;
+            # a draft is intentionally bound only by its reviewed numeric ID.
+            if jq -e '.draft == false and .immutable == true' \
+              "$output" >/dev/null; then
+              local by_tag="$RUNNER_TEMP/release-by-tag.json"
+              release_api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$by_tag"
+              jq -e --argjson id "$RELEASE_ID" '.id == $id' \
+                "$by_tag" >/dev/null || {
+                echo "::error::release_tag_lookup_identity_drift"
+                return 1
+              }
+            fi
           }
 
           readback_exact_assets() {
-            local destination="$1"
+            local snapshot="$1"
+            local destination="$2"
             rm -rf -- "$destination"
             mkdir -p -- "$destination"
-            gh release download "$TAG" --dir "$destination"
-            local expected_entries actual_entries
-            expected_entries="$(printf 'f\t%s\n' \
-              SHA256SUMS evo-guard.pyz evo-guard.spdx.json | LC_ALL=C sort)"
-            actual_entries="$(find "$destination" -mindepth 1 -maxdepth 1 \
-              -printf '%y\t%f\n' | LC_ALL=C sort)"
-            if [ "$actual_entries" != "$expected_entries" ]; then
-              echo "::error::release_asset_set_mismatch: live readback is not exact"
-              return 1
-            fi
             local asset
             for asset in evo-guard.pyz evo-guard.spdx.json SHA256SUMS; do
-              local expected_digest expected_size actual_digest actual_size
+              local asset_id expected_digest expected_size actual_digest actual_size
+              asset_id="$(jq -r --arg asset "$asset" '
+                [.assets[] | select(.name == $asset)] |
+                if length == 1 and
+                   (.[0].id | type == "number" and . >= 1 and floor == .)
+                then .[0].id else error("release asset identity is not unique") end
+              ' "$snapshot")"
+              [[ "$asset_id" =~ ^[1-9][0-9]*$ ]]
+              gh api -H 'Accept: application/octet-stream' \
+                -H 'X-GitHub-Api-Version: 2026-03-10' \
+                "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+                > "$destination/$asset"
               expected_digest="$(jq -r --arg asset "$asset" '.[$asset].digest' \
                 "$EXPECTED_ASSETS")"
               expected_size="$(jq -r --arg asset "$asset" '.[$asset].size' \
@@ -1486,10 +1618,20 @@ jobs:
                 return 1
               fi
             done
+            local expected_entries actual_entries
+            expected_entries="$(printf 'f\t%s\n' \
+              SHA256SUMS evo-guard.pyz evo-guard.spdx.json | LC_ALL=C sort)"
+            actual_entries="$(find "$destination" -mindepth 1 -maxdepth 1 \
+              -printf '%y\t%f\n' | LC_ALL=C sort)"
+            if [ "$actual_entries" != "$expected_entries" ]; then
+              echo "::error::release_asset_set_mismatch: live readback is not exact"
+              return 1
+            fi
           }
 
           BEFORE="$RUNNER_TEMP/release-before-publication.json"
           verify_live_authority
+          verify_unique_tag_release
           capture_release "$BEFORE"
           if jq -e '.draft == false and .immutable == true' "$BEFORE" >/dev/null; then
             validate_release_snapshot "$BEFORE" published || {
@@ -1504,13 +1646,15 @@ jobs:
             }
             ALREADY_PUBLISHED=false
           fi
-          readback_exact_assets "$RUNNER_TEMP/release-before-publication-assets"
+          readback_exact_assets "$BEFORE" \
+            "$RUNNER_TEMP/release-before-publication-assets"
 
           # The protected approval has now been consumed. Recheck all mutable
           # authority and the server-side asset digests immediately before the
           # sole publication mutation. GitHub exposes no conditional/CAS form
           # of this PATCH, so the post-state proof remains mandatory.
           verify_live_authority
+          verify_unique_tag_release
           IMMEDIATE="$RUNNER_TEMP/release-immediately-before-publication.json"
           capture_release "$IMMEDIATE"
           if [ "$ALREADY_PUBLISHED" = "true" ]; then
@@ -1553,13 +1697,15 @@ jobs:
           fi
 
           verify_live_authority
-          readback_exact_assets "$RUNNER_TEMP/release-after-publication-assets"
+          verify_unique_tag_release
           FINAL="$RUNNER_TEMP/release-final-readback.json"
           capture_release "$FINAL"
           validate_release_snapshot "$FINAL" published || {
             echo "::error::published_immutable_release_readback_invalid"
             exit 1
           }
+          readback_exact_assets "$FINAL" \
+            "$RUNNER_TEMP/release-after-publication-assets"
           echo "Published immutable $TAG from exact protected main SHA $GITHUB_SHA with byte-identical asset readback."
 
   post-publication-verify:
