@@ -60,10 +60,8 @@ class ActionCommentAuthorityTests(unittest.TestCase):
 
     def test_report_remains_available_without_api_authority(self) -> None:
         self.assertIn("\n  report-path:", self.text)
-        self.assertIn(
-            'cat "$RUNNER_TEMP/guard-report.md" >> "$GITHUB_STEP_SUMMARY"',
-            self.text,
-        )
+        self.assertIn('cat "$RUNNER_TEMP/guard-report.md"', self.text)
+        self.assertIn("<details><summary>Detailed Guard report</summary>", self.text)
 
 
 class ActionCliParityTests(unittest.TestCase):

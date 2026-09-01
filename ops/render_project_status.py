@@ -345,16 +345,30 @@ _RELEASE_SPEC = _WorkflowSpec(
     "release",
     ".github/workflows/release.yml",
     (
+        ("dispatch-ref-guard", ()),
         ("validate-test", ()),
         ("release-e2e", ()),
         ("release-windows-e2e", ()),
         ("build-artifact", ("validate-test", "release-e2e", "release-windows-e2e")),
         ("attest-release-assets", ("validate-test", "build-artifact")),
         ("prepare-draft", ("validate-test", "attest-release-assets")),
+        (
+            "publish-release",
+            ("validate-test", "prepare-draft"),
+        ),
+        (
+            "post-publication-verify",
+            ("validate-test", "prepare-draft", "publish-release"),
+        ),
     ),
     "validate-test",
     _RELEASE_MAIN_GATE,
-    reviewed_sha256="b5764c1cae4f62f467d79e7144d622650c010be6b72762863ef8132f2aff30a7",
+    reviewed_sha256="2bea6fb57829f29d57971bc834463bb2d6e0d825352daca1b541fd52f50fbc9a",
+    job_gates=(("dispatch-ref-guard", "always()"),),
+)
+_RELEASE_PUBLISHED_VERIFY_PATH = ".github/workflows/release-published-verify.yml"
+_RELEASE_PUBLISHED_VERIFY_SHA256 = (
+    "20f9f759bd9f14ae16e697894d62e6eb0eb82d6a26333d41a025cbbb81ea4478"
 )
 _ASSET_SENTINELS = {
     ("E", "build"): (
@@ -3188,7 +3202,10 @@ def _verify_workflow_text(
                 f"expected {sorted(expected_needs)!r}"
             )
         expected_gate = job_gates.get(name)
-        if spec.phase == "release" or name == spec.gate_job:
+        if spec.phase == "release":
+            if expected_gate is None:
+                expected_gate = spec.gate_expression
+        elif name == spec.gate_job:
             if expected_gate is not None:
                 raise ProjectStatusError(
                     f"phase {spec.phase} gate job has two structural gates"
@@ -3216,6 +3233,20 @@ def _verify_workflow_text(
             )
 
 
+def _verify_release_published_workflow(root: Path) -> None:
+    published_verifier = _read_text(
+        root,
+        root / _RELEASE_PUBLISHED_VERIFY_PATH,
+    )
+    if (
+        hashlib.sha256(published_verifier.encode("utf-8")).hexdigest()
+        != _RELEASE_PUBLISHED_VERIFY_SHA256
+    ):
+        raise ProjectStatusError(
+            "post-publication verifier bytes differ from the reviewed contract"
+        )
+
+
 def _verify_pipeline(root: Path, status: Status) -> None:
     bootstrap = _mapping(
         _load_json(root, root / "security/release-pipeline-bootstrap.json"),
@@ -3230,6 +3261,7 @@ def _verify_pipeline(root: Path, status: Status) -> None:
     }
     if set(activation) != expected_flags or any(value is not False for value in activation.values()):
         raise ProjectStatusError("release bootstrap activation flags are not all false")
+    _verify_release_published_workflow(root)
     for spec in (*_WORKFLOW_SPECS, _RELEASE_SPEC):
         workflow = _read_text(root, root / spec.path)
         _verify_workflow_text(workflow, spec, _PIPELINE_ASSETS)
@@ -3589,12 +3621,15 @@ def _pipeline_summary(context: Context) -> str:
             "pipeline."
         )
     return _wrap(
-        "Releases ship through the manually dispatched draft-release workflow "
+        "Releases ship through the manually dispatched protected-release workflow "
         "(`.github/workflows/release.yml`): tag-equals-version validation, the "
         "full test suite, Linux and Windows end-to-end checks, a reproducible "
-        "artifact build with checksums, and asset attestation, ending in a "
-        "draft the maintainer publishes by hand. No release step is gated on "
-        "dates, elapsed time, or stabilization windows. The archived A-H "
+        "artifact build with checksums, and asset attestation. It prepares a "
+        "byte-verified draft, then a distinct protected Environment approval "
+        "authorizes a no-checkout job to revalidate live source, tag-ruleset, "
+        "signed-tag, and asset authority, publish, and prove exact immutable "
+        "readback. No release step is gated on dates, elapsed time, or "
+        "stabilization windows. The archived A-H "
         f"signed lane is {implementation} but inert with every activation "
         f"flag false; it is a design reference, not a release path. "
         f"{operational} {publication} An admitted release is contracted to "

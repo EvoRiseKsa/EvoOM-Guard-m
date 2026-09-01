@@ -147,6 +147,9 @@ contract does not authorize another stage such as publication or deployment.
 - [`SBOM.md`](SBOM.md) — SPDX member inventory and its explicit non-claims.
 - [`INDEPENDENT_EVALUATION.md`](INDEPENDENT_EVALUATION.md) — blind evaluation
   protocol for evidence beyond same-owner testing.
+- [`AGENT_ORIGIN_EVALUATION.md`](AGENT_ORIGIN_EVALUATION.md) — canonical
+  agent-origin metadata, attestation semantics, and separation of gate-efficacy
+  from agent-behaviour studies.
 
 For vulnerability reporting, use [`../SECURITY.md`](../SECURITY.md). Do not
 publish secrets, private keys, credentials, customer policy, held-out labels,

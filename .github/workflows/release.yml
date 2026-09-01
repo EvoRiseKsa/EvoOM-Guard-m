@@ -12,8 +12,10 @@
 # The pipeline validates the requested tag against `evoom_guard.__version__`,
 # runs lint/type/test plus Linux and Windows end-to-end checks, builds the
 # reproducible `evo-guard.pyz` and SPDX SBOM with checksums, attests the
-# assets, and prepares a DRAFT release. Publication of the draft stays a
-# deliberate human action in the GitHub UI.
+# assets, prepares a DRAFT release, and pauses at a second protected
+# Environment. A reviewer approves the state transition; the final job then
+# revalidates the live authorities and exact bytes immediately before
+# publication and proves the resulting release immutable.
 #
 # The workflow is manual-only and its jobs accept the default branch only.
 # A push to an unprotected release/* branch must never receive the contents:write
@@ -36,7 +38,7 @@ on:
 
 # Every permission is declared at the narrowest possible scope below. This
 # prevents a future job from inheriting a repository-wide write token by
-# accident; only prepare-draft needs contents:write.
+# accident; only prepare-draft and publish-release need contents:write.
 permissions: {}
 
 # Never cancel an earlier release run: cancellation after uploading one asset
@@ -46,8 +48,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  dispatch-ref-guard:
+    # A wrong-ref manual dispatch must be visibly red, never an all-skipped
+    # green run. This check carries no repository permission or candidate
+    # execution and does not replace the per-job token guards below.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    env:
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Reject a non-default-branch dispatch
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH" || {
+            echo '::error::release_dispatch_requires_default_branch'
+            exit 1
+          }
+
   validate-test:
-    # workflow_dispatch can be invoked with another ref; that must be a no-op.
+    # A wrong-ref dispatch is rejected above; every privileged or
+    # candidate-executing job also remains independently guarded.
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -249,7 +271,6 @@ jobs:
             dist/SHA256SUMS
           if-no-files-found: error
           overwrite: true
-          retention-days: 1
 
   attest-release-assets:
     needs: [validate-test, build-artifact]
@@ -405,6 +426,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: evoguard-release-draft
+    outputs:
+      release-id: ${{ steps.prepare-release.outputs.release-id }}
+      release-body-sha256: ${{ steps.prepare-release.outputs.release-body-sha256 }}
+      tag-object-sha: ${{ steps.release-authority.outputs.tag-object-sha }}
+      pyz-sha256: ${{ steps.prepare-release.outputs.pyz-sha256 }}
+      pyz-size: ${{ steps.prepare-release.outputs.pyz-size }}
+      sbom-sha256: ${{ steps.prepare-release.outputs.sbom-sha256 }}
+      sbom-size: ${{ steps.prepare-release.outputs.sbom-size }}
+      sums-sha256: ${{ steps.prepare-release.outputs.sums-sha256 }}
+      sums-size: ${{ steps.prepare-release.outputs.sums-size }}
     permissions:
       contents: write
     env:
@@ -452,20 +483,34 @@ jobs:
 
           MAIN_REF_JSON="$(api \
             "repos/$GITHUB_REPOSITORY/git/ref/heads/main")"
-          if ! jq -e --arg sha "$GITHUB_SHA" \
-            '.object.type == "commit" and .object.sha == $sha' \
+          if ! jq -e \
+            '.object.type == "commit" and (.object.sha | test("^[0-9a-f]{40}$"))' \
             <<<"$MAIN_REF_JSON" >/dev/null; then
-            echo "::error::release_source_drift: protected main no longer equals $GITHUB_SHA"
+            echo "::error::release_main_ref_invalid"
             exit 1
           fi
           MAIN_BRANCH_JSON="$(api \
             "repos/$GITHUB_REPOSITORY/branches/main")"
-          if ! jq -e --arg sha "$GITHUB_SHA" '
+          MAIN_HEAD_SHA="$(jq -r '.object.sha' <<<"$MAIN_REF_JSON")"
+          if ! jq -e --arg head "$MAIN_HEAD_SHA" '
             .name == "main" and
             .protected == true and
-            .commit.sha == $sha
+            .commit.sha == $head
           ' <<<"$MAIN_BRANCH_JSON" >/dev/null; then
             echo "::error::release_source_not_protected_main"
+            exit 1
+          fi
+          MAIN_COMPARE_JSON="$(api \
+            "repos/$GITHUB_REPOSITORY/compare/$GITHUB_SHA...$MAIN_HEAD_SHA")"
+          if ! jq -e --arg source "$GITHUB_SHA" '
+            .base_commit.sha == $source and
+            .merge_base_commit.sha == $source and
+            (.status == "ahead" or .status == "identical") and
+            .behind_by == 0 and
+            ((.status == "identical" and .ahead_by == 0) or
+             (.status == "ahead" and .ahead_by > 0))
+          ' <<<"$MAIN_COMPARE_JSON" >/dev/null; then
+            echo "::error::release_source_not_in_protected_main_history"
             exit 1
           fi
 
@@ -621,6 +666,7 @@ jobs:
           ( cd dist && sha256sum -c SHA256SUMS )
 
       - name: Prepare the draft release and immutable asset set
+        id: prepare-release
         env:
           GH_TOKEN: ${{ github.token }}
           CONTROL_PLANE_TOKEN: ${{ secrets.EVOGUARD_IMMUTABLE_RELEASES_READ_TOKEN }}
@@ -639,7 +685,8 @@ jobs:
           }
           [[ "$EXPECTED_TAG_OBJECT_SHA" =~ ^[0-9a-f]{40}$ ]]
           verify_mutable_authority() {
-            local immutability_json main_ref_json main_branch_json
+            local immutability_json main_ref_json main_branch_json main_compare_json
+            local main_head_sha
             local checks_json tag_ref_json
             immutability_json="$(control_api \
               "repos/$GITHUB_REPOSITORY/immutable-releases")"
@@ -651,20 +698,34 @@ jobs:
             }
             main_ref_json="$(control_api \
               "repos/$GITHUB_REPOSITORY/git/ref/heads/main")"
-            jq -e --arg sha "$GITHUB_SHA" \
-              '.object.type == "commit" and .object.sha == $sha' \
+            jq -e \
+              '.object.type == "commit" and (.object.sha | test("^[0-9a-f]{40}$"))' \
               <<<"$main_ref_json" >/dev/null || {
-              echo "::error::release_source_drift"
+              echo "::error::release_main_ref_invalid"
               return 1
             }
             main_branch_json="$(control_api \
               "repos/$GITHUB_REPOSITORY/branches/main")"
-            jq -e --arg sha "$GITHUB_SHA" '
+            main_head_sha="$(jq -r '.object.sha' <<<"$main_ref_json")"
+            jq -e --arg head "$main_head_sha" '
               .name == "main" and
               .protected == true and
-              .commit.sha == $sha
+              .commit.sha == $head
             ' <<<"$main_branch_json" >/dev/null || {
               echo "::error::release_source_not_protected_main"
+              return 1
+            }
+            main_compare_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/compare/$GITHUB_SHA...$main_head_sha")"
+            jq -e --arg source "$GITHUB_SHA" '
+              .base_commit.sha == $source and
+              .merge_base_commit.sha == $source and
+              (.status == "ahead" or .status == "identical") and
+              .behind_by == 0 and
+              ((.status == "identical" and .ahead_by == 0) or
+               (.status == "ahead" and .ahead_by > 0))
+            ' <<<"$main_compare_json" >/dev/null || {
+              echo "::error::release_source_not_in_protected_main_history"
               return 1
             }
             checks_json="$(control_api \
@@ -736,6 +797,7 @@ jobs:
             gh release create "$TAG" \
               --draft \
               --verify-tag \
+              --target "$GITHUB_SHA" \
               --title "$TAG" \
               --generate-notes
           fi
@@ -747,6 +809,7 @@ jobs:
           RELEASE_IS_DRAFT="$(jq -r .isDraft <<<"$RELEASE_JSON")"
           RELEASE_IS_IMMUTABLE="$(jq -r .isImmutable <<<"$RELEASE_JSON")"
           test "$RELEASE_TAG" = "$TAG"
+          test "$RELEASE_TARGET" = "$GITHUB_SHA"
           if [ "$RELEASE_IS_DRAFT" != "true" ] && [ "$RELEASE_IS_IMMUTABLE" != "true" ]; then
             echo "::error::release_not_immutable: published $TAG is not immutable"
             exit 1
@@ -791,8 +854,8 @@ jobs:
           fi
 
           # Re-read every mutable authority input and every asset after all
-          # uploads. This closes the within-job mutation window; publication
-          # remains the separately documented human boundary.
+          # uploads. This closes the draft job's mutation window; publication
+          # remains behind the distinct protected Environment and final job.
           verify_mutable_authority
           rm -rf final-release-assets
           mkdir final-release-assets
@@ -804,8 +867,716 @@ jobs:
             fi
           done
 
-          if [ "$RELEASE_IS_DRAFT" = "true" ]; then
-            echo "Draft $TAG is ready with the exact verified asset set. Select the Marketplace checkbox and publish it in GitHub's web UI."
-          else
-            echo "Published immutable $TAG and its exact assets match this commit; no mutation attempted."
+          RELEASE_RECORD="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "repos/$GITHUB_REPOSITORY/releases/tags/$TAG")"
+          if ! jq -e --arg tag "$TAG" --arg sha "$GITHUB_SHA" '
+            (.id | type == "number" and . >= 1 and floor == .) and
+            .tag_name == $tag and
+            .name == $tag and
+            .target_commitish == $sha and
+            .prerelease == false and
+            .author.login == "github-actions[bot]" and
+            .author.id == 41898282 and
+            (
+              (.draft == true and .immutable == false) or
+              (.draft == false and .immutable == true)
+            )
+          ' <<<"$RELEASE_RECORD" >/dev/null; then
+            echo "::error::prepared_release_identity_invalid"
+            exit 1
           fi
+          RELEASE_ID="$(jq -r .id <<<"$RELEASE_RECORD")"
+          {
+            printf 'release-id=%s\n' "$RELEASE_ID"
+            printf 'pyz-sha256=%s\n' "$(sha256sum dist/evo-guard.pyz | awk '{print $1}')"
+            printf 'pyz-size=%s\n' "$(stat -c '%s' dist/evo-guard.pyz)"
+            printf 'sbom-sha256=%s\n' "$(sha256sum dist/evo-guard.spdx.json | awk '{print $1}')"
+            printf 'sbom-size=%s\n' "$(stat -c '%s' dist/evo-guard.spdx.json)"
+            printf 'sums-sha256=%s\n' "$(sha256sum dist/SHA256SUMS | awk '{print $1}')"
+            printf 'sums-size=%s\n' "$(stat -c '%s' dist/SHA256SUMS)"
+          } >> "$GITHUB_OUTPUT"
+          printf '%s' "$RELEASE_RECORD" \
+            > "$RUNNER_TEMP/prepared-release-record.json"
+          python3 -I - "$RUNNER_TEMP/prepared-release-record.json" \
+            >> "$GITHUB_OUTPUT" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+
+          def unique_object(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise ValueError(f"duplicate JSON key: {key}")
+                  result[key] = value
+              return result
+
+          release = json.loads(
+              pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"),
+              object_pairs_hook=unique_object,
+              parse_constant=lambda value: (_ for _ in ()).throw(
+                  ValueError(f"non-finite JSON constant: {value}")
+              ),
+          )
+          if "body" not in release:
+              raise SystemExit("prepared release body is absent")
+          body = release.get("body")
+          if body is not None and not isinstance(body, str):
+              raise SystemExit("prepared release body is neither null nor a string")
+          canonical = (
+              json.dumps(
+                  body,
+                  ensure_ascii=False,
+                  allow_nan=False,
+                  separators=(",", ":"),
+              ).encode("utf-8")
+              + b"\n"
+          )
+          print(f"release-body-sha256={hashlib.sha256(canonical).hexdigest()}")
+          PY
+
+          if [ "$RELEASE_IS_DRAFT" = "true" ]; then
+            echo "Draft $TAG is byte-verified and awaits the protected publish Environment approval."
+          else
+            echo "Published immutable $TAG and its exact assets match this commit; the final job will re-prove them."
+          fi
+
+  publish-release:
+    needs: [validate-test, prepare-draft]
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: evoguard-release-publication
+    permissions:
+      contents: write
+    env:
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.validate-test.outputs.tag }}
+      RELEASE_ID: ${{ needs.prepare-draft.outputs.release-id }}
+      EXPECTED_RELEASE_BODY_SHA256: ${{ needs.prepare-draft.outputs.release-body-sha256 }}
+      EXPECTED_TAG_OBJECT_SHA: ${{ needs.prepare-draft.outputs.tag-object-sha }}
+      EXPECTED_PYZ_SHA256: ${{ needs.prepare-draft.outputs.pyz-sha256 }}
+      EXPECTED_PYZ_SIZE: ${{ needs.prepare-draft.outputs.pyz-size }}
+      EXPECTED_SBOM_SHA256: ${{ needs.prepare-draft.outputs.sbom-sha256 }}
+      EXPECTED_SBOM_SIZE: ${{ needs.prepare-draft.outputs.sbom-size }}
+      EXPECTED_SUMS_SHA256: ${{ needs.prepare-draft.outputs.sums-sha256 }}
+      EXPECTED_SUMS_SIZE: ${{ needs.prepare-draft.outputs.sums-size }}
+      EXPECTED_MAIN_RULESET_ID: ${{ vars.EVOGUARD_RELEASE_MAIN_RULESET_ID }}
+      EXPECTED_TAG_RULESET_ID: ${{ vars.EVOGUARD_RELEASE_TAG_RULESET_ID }}
+    steps:
+      - name: Validate the approved publication identity
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_RELEASE_BODY_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_TAG_OBJECT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_MAIN_RULESET_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_TAG_RULESET_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_PYZ_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_SBOM_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_SUMS_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_PYZ_SIZE" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_SBOM_SIZE" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_SUMS_SIZE" =~ ^[1-9][0-9]*$ ]]
+
+      # No checkout, artifact download from a short-lived Actions store,
+      # project setup, dependency install, or candidate execution is permitted
+      # in this write-capable job. It consumes only bounded descriptors and
+      # downloads the already-reviewed draft assets from the release itself.
+
+      - name: Publish only the exact live draft and prove immutable readback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTROL_PLANE_TOKEN: ${{ secrets.EVOGUARD_IMMUTABLE_RELEASES_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CONTROL_PLANE_TOKEN:-}" ]; then
+            echo "::error::immutable_release_control_token_missing"
+            exit 1
+          fi
+
+          control_api() {
+            GH_TOKEN="$CONTROL_PLANE_TOKEN" gh api \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2026-03-10' "$@"
+          }
+          release_api() {
+            gh api \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2026-03-10' "$@"
+          }
+
+          ALLOWED_SIGNERS="$RUNNER_TEMP/evoguard-publish-allowed-signers"
+          printf '%s\n' \
+            'EvoRiseKsa namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDZCepQbTxouwR5UwSKMF+4RvlK/MRQ+D9HE+fxJOKdi' \
+            > "$ALLOWED_SIGNERS"
+
+          EXPECTED_ASSETS="$RUNNER_TEMP/expected-release-assets.json"
+          jq -n \
+            --arg pyz_digest "sha256:$EXPECTED_PYZ_SHA256" --argjson pyz_size "$EXPECTED_PYZ_SIZE" \
+            --arg sbom_digest "sha256:$EXPECTED_SBOM_SHA256" --argjson sbom_size "$EXPECTED_SBOM_SIZE" \
+            --arg sums_digest "sha256:$EXPECTED_SUMS_SHA256" --argjson sums_size "$EXPECTED_SUMS_SIZE" '
+              {
+                "evo-guard.pyz": {digest: $pyz_digest, size: $pyz_size},
+                "evo-guard.spdx.json": {digest: $sbom_digest, size: $sbom_size},
+                "SHA256SUMS": {digest: $sums_digest, size: $sums_size}
+              }
+            ' > "$EXPECTED_ASSETS"
+
+          verify_live_authority() {
+            local environment_json immutability_json main_ref_json
+            local main_branch_json main_compare_json main_head_sha
+            local source_commit_json checks_json
+            local tag_ref_json tag_object_json tag_payload tag_signature
+            local main_rulesets_json main_ruleset_json
+            local tag_rulesets_json tag_ruleset_json deploy_keys_json
+            local deployment_policies_json
+
+            environment_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/environments/evoguard-release-publication")"
+            jq -e '
+              .name == "evoguard-release-publication" and
+              .can_admins_bypass == false and
+              .deployment_branch_policy.protected_branches == false and
+              .deployment_branch_policy.custom_branch_policies == true and
+              (.protection_rules | length) == 2 and
+              ([.protection_rules[] | select(.type == "branch_policy")] | length) == 1 and
+              ([.protection_rules[] | select(.type == "required_reviewers")] as $review_rules |
+                ($review_rules | length) == 1 and
+                $review_rules[0].prevent_self_review == true and
+                ($review_rules[0].reviewers | length) == 1 and
+                $review_rules[0].reviewers[0].type == "User" and
+                $review_rules[0].reviewers[0].reviewer.id == 304223352 and
+                $review_rules[0].reviewers[0].reviewer.login == "MANA-awam" and
+                $review_rules[0].reviewers[0].reviewer.type == "User")
+            ' <<<"$environment_json" >/dev/null || {
+              echo "::error::release_publish_environment_not_exact"
+              return 1
+            }
+            deployment_policies_json="$(control_api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/environments/evoguard-release-publication/deployment-branch-policies?per_page=100")"
+            jq -e '
+              length == 1 and
+              .[0].total_count == 1 and
+              (.[0].branch_policies | type == "array" and length == 1) and
+              (.[0].branch_policies[0].id | type == "number" and . >= 1 and floor == .) and
+              .[0].branch_policies[0].name == "main" and
+              .[0].branch_policies[0].type == "branch"
+            ' <<<"$deployment_policies_json" >/dev/null || {
+              echo "::error::release_publish_branch_policy_not_exact_main"
+              return 1
+            }
+
+            immutability_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/immutable-releases")"
+            jq -e \
+              '.enabled == true and (.enforced_by_owner | type == "boolean")' \
+              <<<"$immutability_json" >/dev/null || {
+              echo "::error::immutable_releases_required"
+              return 1
+            }
+
+            main_ref_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/git/ref/heads/main")"
+            jq -e \
+              '.object.type == "commit" and (.object.sha | test("^[0-9a-f]{40}$"))' \
+              <<<"$main_ref_json" >/dev/null || {
+              echo "::error::release_main_ref_invalid"
+              return 1
+            }
+            main_branch_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/branches/main")"
+            main_head_sha="$(jq -r '.object.sha' <<<"$main_ref_json")"
+            jq -e --arg head "$main_head_sha" '
+              .name == "main" and
+              .protected == true and
+              .commit.sha == $head
+            ' <<<"$main_branch_json" >/dev/null || {
+              echo "::error::release_source_not_protected_main"
+              return 1
+            }
+            main_compare_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/compare/$GITHUB_SHA...$main_head_sha")"
+            jq -e --arg source "$GITHUB_SHA" '
+              .base_commit.sha == $source and
+              .merge_base_commit.sha == $source and
+              (.status == "ahead" or .status == "identical") and
+              .behind_by == 0 and
+              ((.status == "identical" and .ahead_by == 0) or
+               (.status == "ahead" and .ahead_by > 0))
+            ' <<<"$main_compare_json" >/dev/null || {
+              echo "::error::release_source_not_in_protected_main_history"
+              return 1
+            }
+            source_commit_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA")"
+            jq -e --arg sha "$GITHUB_SHA" '
+              .sha == $sha and
+              .commit.verification.verified == true and
+              .commit.verification.reason == "valid" and
+              (.commit.verification.signature | type == "string") and
+              (.commit.verification.payload | type == "string")
+            ' <<<"$source_commit_json" >/dev/null || {
+              echo "::error::release_source_signature_invalid"
+              return 1
+            }
+
+            checks_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?filter=latest&per_page=100")"
+            jq -e '
+              .total_count <= 100 and
+              .total_count == (.check_runs | length)
+            ' <<<"$checks_json" >/dev/null || {
+              echo "::error::release_check_run_pagination_incomplete"
+              return 1
+            }
+            jq -e --argjson expected '{
+                "CodeQL": 57789,
+                "analyze": 15368,
+                "blackbox-docker-e2e": 15368,
+                "e2e-runners": 15368,
+                "fuzz (address)": 15368,
+                "fuzz (undefined)": 15368,
+                "project-status": 15368,
+                "smoke": 15368,
+                "test (3.10)": 15368,
+                "test (3.11)": 15368,
+                "test (3.12)": 15368
+              }' '
+                . as $document |
+                all($expected | to_entries[]; . as $required |
+                  ([
+                    $document.check_runs[] |
+                    select(
+                      .name == $required.key and
+                      .app.id == $required.value
+                    )
+                  ] | max_by(.id)) as $latest |
+                  $latest != null and $latest.conclusion == "success"
+                )
+              ' <<<"$checks_json" >/dev/null || {
+              echo "::error::release_required_checks_drift"
+              return 1
+            }
+
+            tag_ref_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG")"
+            jq -e --arg ref "refs/tags/$TAG" \
+              --arg object "$EXPECTED_TAG_OBJECT_SHA" '
+              .ref == $ref and
+              .object.type == "tag" and
+              .object.sha == $object
+            ' <<<"$tag_ref_json" >/dev/null || {
+              echo "::error::release_tag_drift"
+              return 1
+            }
+            tag_object_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/git/tags/$EXPECTED_TAG_OBJECT_SHA")"
+            jq -e --arg object "$EXPECTED_TAG_OBJECT_SHA" \
+              --arg tag "$TAG" --arg sha "$GITHUB_SHA" '
+              .sha == $object and
+              .tag == $tag and
+              .object.type == "commit" and
+              .object.sha == $sha and
+              .verification.verified == true and
+              .verification.reason == "valid" and
+              (.verification.signature | type == "string") and
+              (.verification.payload | type == "string")
+            ' <<<"$tag_object_json" >/dev/null || {
+              echo "::error::release_tag_signature_or_target_invalid"
+              return 1
+            }
+            tag_payload="$RUNNER_TEMP/evoguard-publish-tag.payload"
+            tag_signature="$RUNNER_TEMP/evoguard-publish-tag.signature"
+            jq -j '.verification.payload' <<<"$tag_object_json" > "$tag_payload"
+            jq -j '.verification.signature' <<<"$tag_object_json" > "$tag_signature"
+            ssh-keygen -Y verify -q \
+              -f "$ALLOWED_SIGNERS" -I EvoRiseKsa -n git \
+              -s "$tag_signature" < "$tag_payload" || {
+              echo "::error::release_tag_not_signed_by_maintainer_root"
+              return 1
+            }
+
+            # Main must have no bypass actor. In particular, a generic
+            # DeployKey bypass here would let the temporary tag transport write
+            # to main as well as tags.
+            main_rulesets_json="$(control_api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/rulesets?includes_parents=true&targets=branch&per_page=100")"
+            jq -e --argjson id "$EXPECTED_MAIN_RULESET_ID" '
+              (all(.[]; type == "array")) and
+              ([.[][] | select(.target == "branch")] as $branch_rulesets |
+                ($branch_rulesets | length) == 1 and
+                $branch_rulesets[0].id == $id and
+                $branch_rulesets[0].enforcement == "active")
+            ' <<<"$main_rulesets_json" >/dev/null || {
+              echo "::error::release_main_ruleset_inventory_not_exact"
+              return 1
+            }
+            main_ruleset_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/rulesets/$EXPECTED_MAIN_RULESET_ID?includes_parents=true")"
+            jq -e --argjson id "$EXPECTED_MAIN_RULESET_ID" \
+              --arg repository "$GITHUB_REPOSITORY" '
+              .id == $id and
+              .name == "EvoOM Guard main signed-source authority" and
+              .target == "branch" and
+              .source_type == "Repository" and
+              .source == $repository and
+              .enforcement == "active" and
+              .current_user_can_bypass == "never" and
+              has("bypass_actors") and
+              (.bypass_actors == null or
+                ((.bypass_actors | type) == "array" and
+                 (.bypass_actors | length) == 0)) and
+              .conditions.ref_name.include == ["refs/heads/main"] and
+              .conditions.ref_name.exclude == [] and
+              ([.rules[].type] | sort) == [
+                "creation", "deletion", "non_fast_forward", "pull_request",
+                "required_linear_history", "required_status_checks"
+              ] and
+              ([.rules[] | select(.type == "pull_request")] as $pr |
+                ($pr | length) == 1 and
+                ($pr[0].parameters.allowed_merge_methods | sort) == [
+                  "merge", "rebase", "squash"
+                ] and
+                $pr[0].parameters.dismiss_stale_reviews_on_push == true and
+                $pr[0].parameters.require_code_owner_review == true and
+                $pr[0].parameters.require_extra_approval_for_unattributed_changes == true and
+                $pr[0].parameters.require_last_push_approval == true and
+                $pr[0].parameters.required_approving_review_count == 1 and
+                $pr[0].parameters.required_review_thread_resolution == false and
+                $pr[0].parameters.required_reviewers == []) and
+              ([.rules[] | select(.type == "required_status_checks")] as $checks |
+                ($checks | length) == 1 and
+                $checks[0].parameters.do_not_enforce_on_create == false and
+                $checks[0].parameters.strict_required_status_checks_policy == true and
+                ($checks[0].parameters.required_status_checks |
+                  sort_by(.context, .integration_id)) == ([
+                    {"context":"CodeQL","integration_id":57789},
+                    {"context":"analyze","integration_id":15368},
+                    {"context":"blackbox-docker-e2e","integration_id":15368},
+                    {"context":"e2e-runners","integration_id":15368},
+                    {"context":"fuzz (address)","integration_id":15368},
+                    {"context":"fuzz (undefined)","integration_id":15368},
+                    {"context":"project-status","integration_id":15368},
+                    {"context":"smoke","integration_id":15368},
+                    {"context":"test (3.10)","integration_id":15368},
+                    {"context":"test (3.11)","integration_id":15368},
+                    {"context":"test (3.12)","integration_id":15368}
+                  ] | sort_by(.context, .integration_id)))
+            ' <<<"$main_ruleset_json" >/dev/null || {
+              echo "::error::release_main_ruleset_bypass_or_scope_drift"
+              return 1
+            }
+
+            # The annotated tag is pre-created by one temporary DeployKey
+            # authority. The key must be retired before this workflow starts;
+            # no repository deploy key remains able to exercise the bypass.
+            tag_rulesets_json="$(control_api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/rulesets?includes_parents=true&targets=tag&per_page=100")"
+            jq -e --argjson id "$EXPECTED_TAG_RULESET_ID" '
+              (all(.[]; type == "array")) and
+              ([.[][] | select(.target == "tag")] as $tag_rulesets |
+                ($tag_rulesets | length) == 1 and
+                $tag_rulesets[0].id == $id and
+                $tag_rulesets[0].enforcement == "active")
+            ' <<<"$tag_rulesets_json" >/dev/null || {
+              echo "::error::release_tag_ruleset_inventory_not_exact"
+              return 1
+            }
+            tag_ruleset_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/rulesets/$EXPECTED_TAG_RULESET_ID?includes_parents=true")"
+            jq -e --argjson id "$EXPECTED_TAG_RULESET_ID" \
+              --arg repository "$GITHUB_REPOSITORY" '
+              .id == $id and
+              .name == "EvoOM Guard release tag authority" and
+              .target == "tag" and
+              .source_type == "Repository" and
+              .source == $repository and
+              .enforcement == "active" and
+              .current_user_can_bypass == "never" and
+              .bypass_actors == [{
+                "actor_id": null,
+                "actor_type": "DeployKey",
+                "bypass_mode": "always"
+              }] and
+              .conditions.ref_name.include == ["refs/tags/v*"] and
+              .conditions.ref_name.exclude == [] and
+              ([.rules[].type] | sort) == [
+                "creation", "deletion", "non_fast_forward", "update"
+              ] and
+              all(.rules[]; (keys | sort) == ["type"])
+            ' <<<"$tag_ruleset_json" >/dev/null || {
+              echo "::error::release_tag_ruleset_contract_not_exact"
+              return 1
+            }
+
+            deploy_keys_json="$(control_api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/keys?per_page=100")"
+            jq -e '
+              (all(.[]; type == "array")) and
+              ([.[][]] | length) == 0
+            ' <<<"$deploy_keys_json" >/dev/null || {
+              echo "::error::release_tag_transport_not_retired"
+              return 1
+            }
+          }
+
+          validate_release_snapshot() {
+            local snapshot="$1"
+            local expected_state="$2"
+            EXPECTED_STATE="$expected_state" python3 -I - \
+              "$snapshot" "$EXPECTED_ASSETS" <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import sys
+
+          def unique_object(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise ValueError(f"duplicate JSON key: {key}")
+                  result[key] = value
+              return result
+
+          def load(path):
+              return json.loads(
+                  pathlib.Path(path).read_text(encoding="utf-8"),
+                  object_pairs_hook=unique_object,
+                  parse_constant=lambda value: (_ for _ in ()).throw(
+                      ValueError(f"non-finite JSON constant: {value}")
+                  ),
+              )
+
+          def reject(message):
+              raise SystemExit(message)
+
+          release = load(sys.argv[1])
+          expected_assets = load(sys.argv[2])
+          if not isinstance(release, dict) or not isinstance(expected_assets, dict):
+              reject("release snapshot or expected assets is not an object")
+          expected_id = int(os.environ["RELEASE_ID"])
+          expected_state = os.environ["EXPECTED_STATE"]
+          if expected_state not in {"draft", "published"}:
+              reject("unknown expected release state")
+          author = release.get("author")
+          if (
+              release.get("id") != expected_id
+              or isinstance(release.get("id"), bool)
+              or release.get("tag_name") != os.environ["TAG"]
+              or release.get("name") != os.environ["TAG"]
+              or release.get("target_commitish") != os.environ["GITHUB_SHA"]
+              or release.get("prerelease") is not False
+              or not isinstance(author, dict)
+              or author.get("login") != "github-actions[bot]"
+              or author.get("id") != 41898282
+          ):
+              reject("release identity or author is not exact")
+          if expected_state == "draft":
+              if (
+                  release.get("draft") is not True
+                  or release.get("immutable") is not False
+                  or release.get("published_at") is not None
+              ):
+                  reject("release is not the exact unpublished draft")
+          elif (
+              release.get("draft") is not False
+              or release.get("immutable") is not True
+              or not isinstance(release.get("published_at"), str)
+              or not release["published_at"]
+          ):
+              reject("release is not the exact published immutable state")
+
+          if "body" not in release:
+              reject("release body is absent")
+          body = release["body"]
+          if body is not None and not isinstance(body, str):
+              reject("release body is neither null nor a string")
+          canonical_body = (
+              json.dumps(
+                  body,
+                  ensure_ascii=False,
+                  allow_nan=False,
+                  separators=(",", ":"),
+              ).encode("utf-8")
+              + b"\n"
+          )
+          if hashlib.sha256(canonical_body).hexdigest() != os.environ[
+              "EXPECTED_RELEASE_BODY_SHA256"
+          ]:
+              reject("release body digest changed")
+
+          expected_names = {
+              "evo-guard.pyz",
+              "evo-guard.spdx.json",
+              "SHA256SUMS",
+          }
+          if set(expected_assets) != expected_names:
+              reject("expected asset descriptor set is not exact")
+          assets = release.get("assets")
+          if not isinstance(assets, list) or len(assets) != len(expected_names):
+              reject("release asset count is not exact")
+          if any(not isinstance(asset, dict) for asset in assets):
+              reject("release asset entry is not an object")
+          if {asset.get("name") for asset in assets} != expected_names:
+              reject("release asset names are not exact")
+          for asset in assets:
+              descriptor = expected_assets.get(asset["name"])
+              uploader = asset.get("uploader")
+              if not isinstance(descriptor, dict):
+                  reject(f"missing asset descriptor: {asset['name']}")
+              if (
+                  asset.get("state") != "uploaded"
+                  or asset.get("size") != descriptor.get("size")
+                  or isinstance(asset.get("size"), bool)
+                  or asset.get("digest") != descriptor.get("digest")
+                  or "label" not in asset
+                  or asset["label"] != ""
+                  or not isinstance(uploader, dict)
+                  or uploader.get("login") != "github-actions[bot]"
+                  or uploader.get("id") != 41898282
+                  or uploader.get("type") != "Bot"
+              ):
+                  reject(f"release asset metadata changed: {asset['name']}")
+          PY
+          }
+
+          capture_release() {
+            local output="$1"
+            release_api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > "$output"
+            local by_tag="$RUNNER_TEMP/release-by-tag.json"
+            release_api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$by_tag"
+            jq -e --argjson id "$RELEASE_ID" '.id == $id' \
+              "$by_tag" >/dev/null || {
+              echo "::error::release_tag_lookup_identity_drift"
+              return 1
+            }
+          }
+
+          readback_exact_assets() {
+            local destination="$1"
+            rm -rf -- "$destination"
+            mkdir -p -- "$destination"
+            gh release download "$TAG" --dir "$destination"
+            local expected_entries actual_entries
+            expected_entries="$(printf 'f\t%s\n' \
+              SHA256SUMS evo-guard.pyz evo-guard.spdx.json | LC_ALL=C sort)"
+            actual_entries="$(find "$destination" -mindepth 1 -maxdepth 1 \
+              -printf '%y\t%f\n' | LC_ALL=C sort)"
+            if [ "$actual_entries" != "$expected_entries" ]; then
+              echo "::error::release_asset_set_mismatch: live readback is not exact"
+              return 1
+            fi
+            local asset
+            for asset in evo-guard.pyz evo-guard.spdx.json SHA256SUMS; do
+              local expected_digest expected_size actual_digest actual_size
+              expected_digest="$(jq -r --arg asset "$asset" '.[$asset].digest' \
+                "$EXPECTED_ASSETS")"
+              expected_size="$(jq -r --arg asset "$asset" '.[$asset].size' \
+                "$EXPECTED_ASSETS")"
+              actual_digest="sha256:$(sha256sum "$destination/$asset" | awk '{print $1}')"
+              actual_size="$(stat -c '%s' "$destination/$asset")"
+              if [ "$actual_digest" != "$expected_digest" ] || \
+                 [ "$actual_size" != "$expected_size" ]; then
+                echo "::error::release_asset_readback_mismatch: $asset"
+                return 1
+              fi
+            done
+          }
+
+          BEFORE="$RUNNER_TEMP/release-before-publication.json"
+          verify_live_authority
+          capture_release "$BEFORE"
+          if jq -e '.draft == false and .immutable == true' "$BEFORE" >/dev/null; then
+            validate_release_snapshot "$BEFORE" published || {
+              echo "::error::existing_published_release_not_exact"
+              exit 1
+            }
+            ALREADY_PUBLISHED=true
+          else
+            validate_release_snapshot "$BEFORE" draft || {
+              echo "::error::approved_draft_not_exact"
+              exit 1
+            }
+            ALREADY_PUBLISHED=false
+          fi
+          readback_exact_assets "$RUNNER_TEMP/release-before-publication-assets"
+
+          # The protected approval has now been consumed. Recheck all mutable
+          # authority and the server-side asset digests immediately before the
+          # sole publication mutation. GitHub exposes no conditional/CAS form
+          # of this PATCH, so the post-state proof remains mandatory.
+          verify_live_authority
+          IMMEDIATE="$RUNNER_TEMP/release-immediately-before-publication.json"
+          capture_release "$IMMEDIATE"
+          if [ "$ALREADY_PUBLISHED" = "true" ]; then
+            validate_release_snapshot "$IMMEDIATE" published || {
+              echo "::error::published_release_drift"
+              exit 1
+            }
+            PATCH_STATUS=0
+          else
+            validate_release_snapshot "$IMMEDIATE" draft || {
+              echo "::error::draft_or_asset_drift_immediately_before_publication"
+              exit 1
+            }
+            printf '%s\n' '{"draft":false}' > "$RUNNER_TEMP/publish-request.json"
+            printf 'release_id=%s\n' "$RELEASE_ID" \
+              > "$RUNNER_TEMP/publication-patch-started"
+            set +e
+            release_api --method PATCH \
+              --input "$RUNNER_TEMP/publish-request.json" \
+              "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+              > "$RUNNER_TEMP/publication-response.json"
+            PATCH_STATUS=$?
+            set -e
+          fi
+
+          PUBLICATION_PROVED=false
+          AFTER="$RUNNER_TEMP/release-after-publication.json"
+          for attempt in {1..10}; do
+            : "$attempt"
+            if capture_release "$AFTER" \
+              && validate_release_snapshot "$AFTER" published; then
+              PUBLICATION_PROVED=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$PUBLICATION_PROVED" != "true" ]; then
+            echo "::error::immutable_publication_state_unproven: PATCH exit $PATCH_STATUS; manual recovery required"
+            exit 1
+          fi
+
+          verify_live_authority
+          readback_exact_assets "$RUNNER_TEMP/release-after-publication-assets"
+          FINAL="$RUNNER_TEMP/release-final-readback.json"
+          capture_release "$FINAL"
+          validate_release_snapshot "$FINAL" published || {
+            echo "::error::published_immutable_release_readback_invalid"
+            exit 1
+          }
+          echo "Published immutable $TAG from exact protected main SHA $GITHUB_SHA with byte-identical asset readback."
+
+  post-publication-verify:
+    needs: [validate-test, prepare-draft, publish-release]
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-published-verify.yml
+    with:
+      tag: ${{ needs.validate-test.outputs.tag }}
+      target_sha: ${{ github.sha }}
+      release_id: ${{ needs.prepare-draft.outputs.release-id }}
+      tag_object_sha: ${{ needs.prepare-draft.outputs.tag-object-sha }}
+      release_body_sha256: ${{ needs.prepare-draft.outputs.release-body-sha256 }}
+      pyz_sha256: ${{ needs.prepare-draft.outputs.pyz-sha256 }}
+      pyz_size: ${{ needs.prepare-draft.outputs.pyz-size }}
+      sbom_sha256: ${{ needs.prepare-draft.outputs.sbom-sha256 }}
+      sbom_size: ${{ needs.prepare-draft.outputs.sbom-size }}
+      sums_sha256: ${{ needs.prepare-draft.outputs.sums-sha256 }}
+      sums_size: ${{ needs.prepare-draft.outputs.sums-size }}

@@ -1,0 +1,101 @@
+name: External Agent Gate pilot
+description: Volunteer a repository for the bounded Agent Gate adoption pilot.
+title: "[agent-gate-pilot] "
+labels:
+  - enhancement
+  - help wanted
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This form is public. Do not paste credentials, private source, private prompts, or an undisclosed vulnerability. The pilot measures external installation and operation; it is not automatically an independent efficacy study.
+  - type: input
+    id: repository
+    attributes:
+      label: Repository
+      description: Public URL, or a non-sensitive opaque name if the repository is private.
+      placeholder: https://github.com/example/project
+    validations:
+      required: true
+  - type: dropdown
+    id: visibility
+    attributes:
+      label: Repository visibility
+      options:
+        - Public
+        - Private (details will remain in participant-controlled storage)
+    validations:
+      required: true
+  - type: input
+    id: stack
+    attributes:
+      label: Language and test runner
+      placeholder: Python 3.12 and pytest
+    validations:
+      required: true
+  - type: dropdown
+    id: agent_use
+    attributes:
+      label: How are changes produced?
+      description: This is a declaration, not a verified agent identity.
+      options:
+        - AI coding agent and human changes
+        - AI coding agent only
+        - Human changes only (control repository)
+        - Not decided
+    validations:
+      required: true
+  - type: dropdown
+    id: relationship
+    attributes:
+      label: Relationship to EvoOM Guard
+      description: Used only to disclose conflicts; it does not establish independence.
+      options:
+        - No ownership, employment, funding, or maintainer relationship
+        - User or prospective user
+        - Contributor or maintainer relationship
+        - Commercial, employment, or funding relationship
+        - Prefer to disclose privately before enrollment
+    validations:
+      required: true
+  - type: textarea
+    id: verifier_contract
+    attributes:
+      label: Retained-evidence verifier contract
+      description: Name the exact verifier command and version, receipt format, trust-root source, and participant-controlled retention location. Do not paste a secret key or token.
+      placeholder: verify-record or verify-bundle command/version; receipt format; public-key or trust-manifest reference; controlled storage location
+    validations:
+      required: true
+  - type: checkboxes
+    id: eligibility
+    attributes:
+      label: Pilot prerequisites
+      options:
+        - label: The default branch is protected and EvoOM Guard can be configured as a required pull-request check.
+          required: true
+        - label: The policy and judge configuration will be owned by the protected base branch.
+          required: true
+        - label: At least one attempt will be authored by someone other than the operator who configures the gate.
+          required: true
+        - label: The configured judge produces a judge-owned report that candidate code cannot replace under the claimed report-integrity mode.
+          required: true
+        - label: The EvoOM Action will be pinned to a full commit SHA or immutable release tag.
+          required: true
+        - label: A second operator can verify retained receipts.
+          required: true
+        - label: The participating team is authorized to retain the bounded records, including operator, change-author, receipt-verifier, relationship, and conflict-of-interest roles.
+          required: true
+        - label: I read docs/EXTERNAL_AGENT_GATE_PILOT.md and understand that this pilot does not itself prove independent efficacy.
+          required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Operational constraints
+      description: Describe CI runtime, data-retention, or compliance constraints without including secrets.
+  - type: checkboxes
+    id: disclosure
+    attributes:
+      label: Public issue safety
+      options:
+        - label: I have not included credentials, private code, private prompts, or an undisclosed vulnerability.
+          required: true

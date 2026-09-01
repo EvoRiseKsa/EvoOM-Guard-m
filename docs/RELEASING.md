@@ -19,34 +19,71 @@ re-checked immediately:
 - GitHub Immutable Releases is enabled for the repository. A disabled,
   inaccessible, or schema-incompatible setting fails before any draft is
   created.
-- `evoguard-release-draft` remains `main`-only, requires its configured
-  reviewer, prevents self-review and has no wait timer.
-- That Environment contains
+- Both `evoguard-release-draft` and `evoguard-release-publication` remain
+  custom-branch-policy `main`-only, use the configured MANA-awam review
+  authority, prevent self-review and have no wait timer. Before it can mutate a
+  release, the publish job requires the publication Environment to contain
+  exactly reviewer `MANA-awam` (`User` ID `304223352`), one branch-policy rule,
+  and one paginated deployment-branch-policy entry whose exact name/type is
+  `main`/`branch`; administrator bypass must be disabled.
+- Both Environments contain
   `EVOGUARD_IMMUTABLE_RELEASES_READ_TOKEN`, a fine-grained token limited to
-  repository Metadata read, Administration read, Checks read, and Contents
-  read. The write-capable GitHub job token remains separate.
-- The exact dispatch commit is still protected `main`, has a valid GitHub
-  signature, and has all eleven required checks from their exact GitHub App IDs
-  in `success`.
+  repository Metadata read, Administration read, Actions read, Checks read,
+  and Contents read. The write-capable GitHub job token remains separate.
+- The exact dispatch commit remains in the ancestry of current protected
+  `main`, has a valid GitHub signature, and has all eleven required checks from
+  their exact GitHub App IDs in `success`. Normal merges may advance `main`
+  while approval is pending; advancing it does not invalidate an already
+  signed release commit that remains in protected history.
+- The exact active `main` ruleset is pinned by
+  `EVOGUARD_RELEASE_MAIN_RULESET_ID`, targets only `refs/heads/main`, and has no
+  bypass actors. In particular, the temporary tag transport must never gain a
+  generic DeployKey bypass on `main`.
+- One active repository-owned tag ruleset named
+  `EvoOM Guard release tag authority` is pinned by
+  `EVOGUARD_RELEASE_TAG_RULESET_ID`. It targets only `refs/tags/v*` and makes
+  creation, update, deletion, and non-fast-forward operations bypass-only. Its
+  sole bypass class is `DeployKey`; no repository role or administrator is a
+  ruleset bypass.
+- The temporary write deploy key used to transport the already-signed tag has
+  been deleted before dispatch. Publication requires the paginated repository
+  deploy-key inventory to be empty. Neither release job receives a private key.
 - A pre-existing annotated `vX.Y.Z` tag points to that exact commit and is
   signed by the pinned EvoRiseKsa maintainer key. Lightweight, unsigned,
   missing, or retargeted tags fail closed. Any drift may be corrected and
   re-checked immediately without a calendar delay.
 
+The no-bypass main ruleset, tag ruleset, retired transport key, and pre-existing
+signed tag form one live state gate. As soon as that state is exact, the
+workflow may be dispatched and approved immediately; there is no stabilization
+duration, cooldown, or timed freeze hidden in the publication path.
+
 ## The path
 
 One workflow, [`release.yml`](../.github/workflows/release.yml), dispatched
-by a maintainer. It runs entirely on the default branch and ends in a
-**draft** — publication stays a deliberate human click.
+by a maintainer. It runs entirely on the default branch, prepares a **draft**,
+then pauses at a second protected Environment. Publication remains a
+deliberate human approval, while the state transition and its readback are
+performed by one fail-closed job instead of an unbound web-UI click.
 
 1. **Prepare `main`.**
    - `evoom_guard/__init__.py` carries the exact stable version
      (`X.Y.Z`, no `.dev0`).
    - `CHANGELOG.md` has a dated `[X.Y.Z]` section.
    - CI is green on the tip of `main`.
-2. **Create the signed tag.** Create and push an annotated SSH-signed
-   `vX.Y.Z` tag at that exact `main` commit using the pinned release-maintainer
-   key. The workflow will not create, replace, or retarget a tag.
+2. **Create the signed tag through the declared authority.** Sign an annotated
+   `vX.Y.Z` tag at that exact `main` commit with the pinned release-maintainer
+   signing key, then push the already-signed object using a temporary write
+   deploy key. The active tag ruleset allows that temporary authority
+   to create the tag while preventing ordinary repository credentials from
+   creating, replacing, retargeting, or deleting `v*` tags. Delete the deploy
+   key immediately after the push and prove the repository key inventory is
+   empty before dispatch. The `main` ruleset must have zero bypass actors. The
+   workflow itself receives neither private key and will not create or mutate a
+   tag. The initial tag-push CI verifies source/tag consistency but treats an
+   absent release or exact draft as an expected prepublication state; the
+   release workflow's mandatory `post-publication-verify` job reruns the
+   read-only immutable asset verifier.
 3. **Dispatch.** GitHub → Actions → *Release* → *Run workflow*, with
    `tag = vX.Y.Z`. The tag input must equal `'v' + evoom_guard.__version__`
    or the run fails immediately.
@@ -59,24 +96,51 @@ by a maintainer. It runs entirely on the default branch and ends in a
      `evo-guard.spdx.json` SBOM and a filename-ordered `SHA256SUMS`;
    - `attest-release-assets` — GitHub build-provenance and SBOM
      attestations for the exact asset bytes, verified in a clean job;
-   - `prepare-draft` — after protected Environment approval, re-reads the
+   - `prepare-draft` — after the first protected Environment approval, re-reads the
      immutable-release setting, exact GitHub-verified `main`, the annotated-tag
      signature against the pinned maintainer root, and required checks; then
      re-verifies the transferred assets and creates a **draft** release for the
-     existing tag with exactly `evo-guard.pyz`,
-     `evo-guard.spdx.json`, and `SHA256SUMS`.
-5. **Review and publish.** The maintainer inspects the draft — assets,
-   checksums, generated notes — edits the notes as needed, and publishes.
+      existing tag with exactly `evo-guard.pyz`,
+      `evo-guard.spdx.json`, and `SHA256SUMS`;
+   - `publish-release` — after the distinct publish Environment approval,
+     performs no checkout and executes no project bytes. It revalidates the
+     exact protected `main` SHA, required check/App identities, immutable-release
+     setting, publish-Environment rules, raw annotated-tag signature, release
+     identity, canonical null/string body digest, asset labels/uploaders, server
+     asset digests, and downloaded asset bytes immediately before publishing.
+     It then publishes and requires an immutable release, unchanged tag, exact
+     body/metadata, and byte-identical asset readback.
+   - `post-publication-verify` invokes the separate read-only reusable verifier
+     after `publish-release`; it rebuilds and compares the immutable assets, so
+     the pre-existing-tag ordering cannot leave a successful release workflow
+     without a postpublication observation. The verifier can also be dispatched
+     manually later from exact descriptors.
+5. **Review and approve publication.** While `publish-release` is waiting for
+   Environment approval, the maintainer inspects the draft — assets,
+   checksums, and generated notes — without modifying it. The post-upload draft
+   body is digest-bound; any edit after preparation fails publication. If notes
+   need correction, edit the still-unpublished draft and rerun the workflow so
+   the corrected body is captured and reviewed afresh. Approval, rather than a
+   separate Publish click, authorizes the guarded transition.
 6. **Record.** After publication, update the release record docs
    (`ops/render_project_status.py --write`) on a follow-up commit so the
    maintained status blocks reflect the published tag.
 
-The automated claim currently ends at a re-read, byte-matched draft. The
-subsequent web-UI publication is a separate human act, so it must not be
-described as an atomic evidence-bound publication. A future protected publish
-job should repeat the same live checks, re-download the draft assets, publish,
-and verify `isImmutable=true` in one reviewed job; this is a state-transition
-hardening item, not a reason to restore a calendar wait.
+The automated claim now ends at a published immutable release with exact tag,
+metadata, digest, and byte readback. GitHub exposes no conditional/CAS form of
+the release-publication PATCH, so this is not a claim of mathematical atomicity
+against every possible concurrent repository writer. The workflow narrows that
+provider boundary by re-reading all mutable authority immediately before the
+single PATCH and proving the complete immutable post-state immediately after
+it. Any ambiguous or changed state fails closed and requires manual recovery;
+it never introduces a calendar delay.
+
+Actions artifacts use GitHub's ordinary storage retention. That storage
+lifetime is not a not-before condition: if the draft-approval job is left
+pending until its build artifact expires, rerun the workflow and approve the
+new exact attempt immediately. The final publication job depends only on the
+already-reviewed draft assets plus their bounded descriptors, not on a
+short-lived Actions artifact.
 
 ## Rules that survive from the old design
 
@@ -86,8 +150,9 @@ is gone as a process, but its non-negotiables remain policy:
 - **Never mutate a published release.** Tags, assets, checksums,
   attestations, and ledger/record bytes of anything already published are
   immutable; corrections ship as a new version plus an explicit erratum.
-- **Draft-then-publish.** No workflow publishes a release on its own;
-  the final publication act is always human.
+- **Draft-then-protected-publish.** No unreviewed job may publish. A human
+  authorizes the final act through the separate protected Environment, and the
+  reviewed job—not the browser—performs and proves the state transition.
 - **Exact assets only.** A release carries exactly the three contracted
   assets; nothing else rides along.
 - **Honest claims.** Release notes state what the evidence shows and carry

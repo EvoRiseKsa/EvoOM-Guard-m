@@ -63,6 +63,30 @@ evo-guard init --ref <same-immutable-ref> --preset blocking --force \
 ready report is not a `PASS`. Detailed boundary and Python/pytest cache guidance:
 [`PREFLIGHT.md`](PREFLIGHT.md).
 
+### Agent Gate summary and receipt (current source)
+
+On an exact reviewed source revision that contains this interface, the Action
+adds a stable **EvoOM Agent Gate** job summary. It preserves all five outcomes
+(`PASS`, `REJECTED`, `FAIL`, `TAMPERED`, and `ERROR`) and reports the candidate
+commit/change digest, policy digest, delivered `report_integrity` and isolation,
+the verifier-pack digest when present, and the exact JSON-receipt SHA-256. The
+full Guard report remains available beneath the bounded summary.
+
+The optional `agent-origin` input is display metadata only. It is rendered as
+`DECLARED_UNVERIFIED`, does not shape the verdict, and must not be treated as an
+identity claim. Likewise, `receipt-sha256` identifies the bytes emitted at
+`json-path` only after a bounded parser rejects oversized input, duplicate keys,
+and non-finite JSON numbers; it is not a signature or provenance attestation.
+Upload the JSON receipt from `steps.<guard-step-id>.outputs.json-path`, then authenticate it in a
+separate signing/finalization lane before using it as portable evidence. Pin the
+Guard Action to the reviewed full 40-hex commit (or an immutable release tag
+that actually contains this interface), never a floating major reference.
+
+Teams ready to measure this workflow on repositories outside the project can
+follow the bounded [External Agent Gate pilot](EXTERNAL_AGENT_GATE_PILOT.md).
+The pilot is operational adoption evidence; it is not a substitute for the
+separately controlled independent efficacy evaluation.
+
 > **No repo access / no pip?** Download the single-file `evo-guard.pyz` from the
 > release assets and run `python evo-guard.pyz …` — the core is stdlib-only, so it
 > needs no clone and no install (see the README "Install" section).
