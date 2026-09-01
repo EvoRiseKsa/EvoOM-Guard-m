@@ -248,7 +248,7 @@ git clone https://github.com/EvoRiseKsa/EvoOM-Guard-m.git
 cd EvoOM-Guard-m
 git checkout <reviewed-40-hex-SHA>
 python -m pip install .
-evo-guard version  # expect 4.7.0 on this source line (release candidate)
+evo-guard version  # expect 4.7.1 on this source line (release candidate)
 evo-guard preflight . --strict --json
 evo-guard init --ref <immutable-release-tag-or-40-hex-SHA> --preset advisory \
   --path <workflow-path> --policy-path <trusted-policy-path>
@@ -359,7 +359,7 @@ Use an immutable release tag or full commit SHA in consumer repositories; do
 not treat a moving branch as a production release channel.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
-Source version `4.7.0` is a **release candidate** and is not yet a consumer release. The
+Source version `4.7.1` is a **release candidate** and is not yet a consumer release. The
 latest immutable consumer release recorded by the protected source tree is
 [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) at commit
 `d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4`. Its `evoguard-release-ledger-v2` ledger

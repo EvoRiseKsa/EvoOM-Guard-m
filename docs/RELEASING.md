@@ -99,15 +99,19 @@ performed by one fail-closed job instead of an unbound web-UI click.
    - `prepare-draft` — after the first protected Environment approval, re-reads the
      immutable-release setting, exact GitHub-verified `main`, the annotated-tag
      signature against the pinned maintainer root, and required checks; then
-     re-verifies the transferred assets and creates a **draft** release for the
-      existing tag with exactly `evo-guard.pyz`,
+     re-verifies the transferred assets, enumerates drafts with pagination,
+     requires a unique tag match, and binds the **draft** release and all asset
+     readbacks to numeric provider IDs. The draft for the existing tag contains
+     exactly `evo-guard.pyz`,
       `evo-guard.spdx.json`, and `SHA256SUMS`;
    - `publish-release` — after the distinct publish Environment approval,
      performs no checkout and executes no project bytes. It revalidates the
      exact protected `main` SHA, required check/App identities, immutable-release
      setting, publish-Environment rules, raw annotated-tag signature, release
-     identity, canonical null/string body digest, asset labels/uploaders, server
-     asset digests, and downloaded asset bytes immediately before publishing.
+     identity, canonical null/string body digest, asset IDs/labels/uploaders,
+     server asset digests, and numeric-ID-downloaded asset bytes immediately
+     before publishing. The public release-by-tag identity is joined only after
+     the provider reports the release published and immutable.
      It then publishes and requires an immutable release, unchanged tag, exact
      body/metadata, and byte-identical asset readback.
    - `post-publication-verify` invokes the separate read-only reusable verifier

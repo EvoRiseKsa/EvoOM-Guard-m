@@ -20,7 +20,7 @@ retained evidence say so.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 - [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) is the latest stable and supported consumer release.
-- Source `4.7.0`: release candidate; not a consumer release.
+- Source `4.7.1`: release candidate; not a consumer release.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
@@ -28,7 +28,29 @@ retained evidence say so.
   are not supported releases.
 <!-- END EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 
-## [4.7.0] — 2026-08-31
+## [4.7.1] — 2026-09-01
+
+### Fixed
+
+- Bound draft discovery and all prepublication release/asset readback to exact
+  numeric release and asset IDs. GitHub's release-by-tag REST endpoint returns
+  only published releases, so the previous path could create a second hidden
+  draft on retry and returned `404` after preparing the first `v4.7.0` draft.
+  The corrected path enumerates all releases with pagination, requires one
+  unique tag match, rejects duplicate drafts, and joins the public tag lookup
+  only after immutable publication.
+- Added fail-closed release-asset ID validation and regression coverage for
+  missing, non-integer, Boolean, zero, or duplicate IDs.
+
+### Release-attempt record
+
+- `v4.7.0` was never published and is withdrawn as a consumer release. Its
+  signed annotated tag remains unchanged as an audit record; the failed draft
+  and exact asset/run descriptors are recorded under
+  `evidence/release-attempts/v4.7.0/FAILED_DRAFT_ATTEMPT.json`. The next
+  consumer-release candidate is `v4.7.1`; the old tag is not moved or reused.
+
+## [4.7.0] — 2026-08-31 (unpublished; withdrawn)
 
 ### Removed
 

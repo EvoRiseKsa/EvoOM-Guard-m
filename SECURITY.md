@@ -20,7 +20,7 @@ consumer release only:
 | Version | Status |
 | --- | --- |
 | [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) | Latest stable release; supported |
-| `4.7.0` | Release candidate; not a consumer release |
+| `4.7.1` | Release candidate; not a consumer release |
 | Earlier published releases | Historical and unsupported; retained unchanged for reproducibility, verification, and rollback |
 | Unpublished draft candidates | Unsupported; never consumer releases |
 
@@ -29,6 +29,12 @@ reporting when practical. A report that affects an older release may still be
 useful, but a fix will be delivered in a new immutable release rather than by
 rewriting an existing tag, asset, checksum, or attestation.
 <!-- END EVOGUARD_PROJECT_STATUS:SECURITY_SUPPORTED_VERSIONS -->
+
+The preserved `v4.7.0` tag was never published and is explicitly unsupported.
+Its bounded same-owner failure record is
+[`FAILED_DRAFT_ATTEMPT.json`](evidence/release-attempts/v4.7.0/FAILED_DRAFT_ATTEMPT.json);
+the tag is retained unchanged for auditability and must not be treated as a
+consumer release.
 
 ## Reporting a vulnerability
 
