@@ -635,11 +635,18 @@ runs:
         else:
             reason_code = "receipt_not_emitted"
             reason = "Agent Gate required a JSON receipt, but none was emitted."
-        summary_verdict_path.write_text(verdict + "\n", encoding="ascii")
+        def write_lf_sidecar(path, value):
+            with path.open("w", encoding="ascii", newline="\n") as handle:
+                handle.write(value + "\n")
+
+        # Git Bash consumes these files on both Linux and Windows.  Native
+        # Windows text translation would otherwise emit CRLF; `read -r` strips
+        # only LF and leaves a trailing CR that turns a valid PASS into ERROR.
+        write_lf_sidecar(summary_verdict_path, verdict)
         if receipt_digest is not None:
-            receipt_digest_path.write_text(receipt_digest + "\n", encoding="ascii")
+            write_lf_sidecar(receipt_digest_path, receipt_digest)
         if policy_digest is not None:
-            policy_digest_path.write_text(policy_digest + "\n", encoding="ascii")
+            write_lf_sidecar(policy_digest_path, policy_digest)
 
         rows = [
             ("Verdict", f"**{cell(verdict)}**"),
