@@ -50,6 +50,7 @@ jobs:
     # workflow_dispatch can be invoked with another ref; that must be a no-op.
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
     outputs:
@@ -127,6 +128,7 @@ jobs:
     # branch; the write-capable job cannot run before these complete.
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
     env:
@@ -168,6 +170,7 @@ jobs:
   release-windows-e2e:
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: windows-latest
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
@@ -193,6 +196,7 @@ jobs:
     needs: [validate-test, release-e2e, release-windows-e2e]
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       release-artifact-digest: ${{ steps.upload-release-assets.outputs.artifact-digest }}
       release-artifact-id: ${{ steps.upload-release-assets.outputs.artifact-id }}
@@ -251,6 +255,7 @@ jobs:
     needs: [validate-test, build-artifact]
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       approved-artifact-digest: ${{ steps.approve-artifact.outputs.artifact-digest }}
       approved-artifact-id: ${{ steps.approve-artifact.outputs.artifact-id }}
@@ -398,6 +403,8 @@ jobs:
     needs: [validate-test, attest-release-assets]
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: evoguard-release-draft
     permissions:
       contents: write
     env:
@@ -412,6 +419,177 @@ jobs:
           set -euo pipefail
           [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
           [[ "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+
+      # This token is read-only and belongs only to the protected draft
+      # Environment. The job receives no source checkout and executes no
+      # candidate bytes. Every state check is repeated immediately before the
+      # first release mutation; a changed state fails now, never after a wait.
+      - name: Require current signed source and live immutable-release authority
+        id: release-authority
+        env:
+          CONTROL_PLANE_TOKEN: ${{ secrets.EVOGUARD_IMMUTABLE_RELEASES_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CONTROL_PLANE_TOKEN:-}" ]; then
+            echo "::error::immutable_release_control_token_missing"
+            exit 1
+          fi
+
+          api() {
+            GH_TOKEN="$CONTROL_PLANE_TOKEN" gh api \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2026-03-10' "$1"
+          }
+
+          IMMUTABILITY_JSON="$(api \
+            "repos/$GITHUB_REPOSITORY/immutable-releases")"
+          if ! jq -e \
+            '.enabled == true and (.enforced_by_owner | type == "boolean")' \
+            <<<"$IMMUTABILITY_JSON" >/dev/null; then
+            echo "::error::immutable_releases_required"
+            exit 1
+          fi
+
+          MAIN_REF_JSON="$(api \
+            "repos/$GITHUB_REPOSITORY/git/ref/heads/main")"
+          if ! jq -e --arg sha "$GITHUB_SHA" \
+            '.object.type == "commit" and .object.sha == $sha' \
+            <<<"$MAIN_REF_JSON" >/dev/null; then
+            echo "::error::release_source_drift: protected main no longer equals $GITHUB_SHA"
+            exit 1
+          fi
+          MAIN_BRANCH_JSON="$(api \
+            "repos/$GITHUB_REPOSITORY/branches/main")"
+          if ! jq -e --arg sha "$GITHUB_SHA" '
+            .name == "main" and
+            .protected == true and
+            .commit.sha == $sha
+          ' <<<"$MAIN_BRANCH_JSON" >/dev/null; then
+            echo "::error::release_source_not_protected_main"
+            exit 1
+          fi
+
+          SOURCE_COMMIT_JSON="$(api \
+            "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA")"
+          if ! jq -e --arg sha "$GITHUB_SHA" '
+            .sha == $sha and
+            .commit.verification.verified == true and
+            .commit.verification.reason == "valid" and
+            (.commit.verification.signature | type == "string") and
+            (.commit.verification.payload | type == "string")
+          ' <<<"$SOURCE_COMMIT_JSON" >/dev/null; then
+            echo "::error::release_source_signature_invalid"
+            exit 1
+          fi
+
+          # Protected main and GitHub verification establish the exact source
+          # object. Maintainer authorization is the separately signed
+          # annotated tag below; requiring the same local key on a GitHub-made
+          # PR merge commit would make the protected PR path inoperable.
+          ALLOWED_SIGNERS="$RUNNER_TEMP/evoguard-release-allowed-signers"
+          printf '%s\n' \
+            'EvoRiseKsa namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDZCepQbTxouwR5UwSKMF+4RvlK/MRQ+D9HE+fxJOKdi' \
+            > "$ALLOWED_SIGNERS"
+
+          if ! TAG_REF_JSON="$(api \
+            "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG")"; then
+            echo "::error::signed_annotated_release_tag_required"
+            exit 1
+          fi
+          if ! jq -e --arg ref "refs/tags/$TAG" '
+            .ref == $ref and
+            .object.type == "tag" and
+            (.object.sha | type == "string") and
+            (.object.sha | test("^[0-9a-f]{40}$"))
+          ' <<<"$TAG_REF_JSON" >/dev/null; then
+            echo "::error::signed_annotated_release_tag_required"
+            exit 1
+          fi
+          TAG_OBJECT_SHA="$(jq -r .object.sha <<<"$TAG_REF_JSON")"
+          TAG_OBJECT_JSON="$(api \
+            "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT_SHA")"
+          if ! jq -e --arg tag "$TAG" --arg sha "$GITHUB_SHA" '
+            .tag == $tag and
+            .object.type == "commit" and
+            .object.sha == $sha and
+            .verification.verified == true and
+            .verification.reason == "valid" and
+            (.verification.signature | type == "string") and
+            (.verification.payload | type == "string")
+          ' <<<"$TAG_OBJECT_JSON" >/dev/null; then
+            echo "::error::release_tag_signature_or_target_invalid"
+            exit 1
+          fi
+          TAG_PAYLOAD="$RUNNER_TEMP/evoguard-release-tag.payload"
+          TAG_SIGNATURE="$RUNNER_TEMP/evoguard-release-tag.signature"
+          jq -j '.verification.payload' \
+            <<<"$TAG_OBJECT_JSON" > "$TAG_PAYLOAD"
+          jq -j '.verification.signature' \
+            <<<"$TAG_OBJECT_JSON" > "$TAG_SIGNATURE"
+          if ! ssh-keygen -Y verify -q \
+            -f "$ALLOWED_SIGNERS" -I EvoRiseKsa -n git \
+            -s "$TAG_SIGNATURE" < "$TAG_PAYLOAD"; then
+            echo "::error::release_tag_not_signed_by_maintainer_root"
+            exit 1
+          fi
+          printf 'tag-object-sha=%s\n' "$TAG_OBJECT_SHA" >> "$GITHUB_OUTPUT"
+
+          CHECKS_JSON="$(api \
+            "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?filter=latest&per_page=100")"
+          if ! jq -e '
+            .total_count <= 100 and
+            .total_count == (.check_runs | length)
+          ' <<<"$CHECKS_JSON" >/dev/null; then
+            echo "::error::release_check_run_pagination_incomplete"
+            exit 1
+          fi
+          EXPECTED_CHECKS="$(printf '%s\t%s\t%s\n' \
+            'CodeQL' 57789 success \
+            analyze 15368 success \
+            blackbox-docker-e2e 15368 success \
+            e2e-runners 15368 success \
+            'fuzz (address)' 15368 success \
+            'fuzz (undefined)' 15368 success \
+            project-status 15368 success \
+            smoke 15368 success \
+            'test (3.10)' 15368 success \
+            'test (3.11)' 15368 success \
+            'test (3.12)' 15368 success | LC_ALL=C sort)"
+          ACTUAL_CHECKS="$(jq -r --argjson expected '{
+              "CodeQL": 57789,
+              "analyze": 15368,
+              "blackbox-docker-e2e": 15368,
+              "e2e-runners": 15368,
+              "fuzz (address)": 15368,
+              "fuzz (undefined)": 15368,
+              "project-status": 15368,
+              "smoke": 15368,
+              "test (3.10)": 15368,
+              "test (3.11)": 15368,
+              "test (3.12)": 15368
+            }' '
+              . as $document |
+              $expected | to_entries[] | . as $required |
+              ([
+                $document.check_runs[] |
+                select(
+                  .name == $required.key and
+                  .app.id == $required.value
+                )
+              ] | max_by(.id)) as $latest |
+              if $latest == null then
+                [$required.key, ($required.value | tostring), "missing"]
+              else
+                [$latest.name, ($latest.app.id | tostring),
+                 ($latest.conclusion // "")]
+              end | @tsv
+            ' <<<"$CHECKS_JSON" | LC_ALL=C sort)"
+          if [ "$ACTUAL_CHECKS" != "$EXPECTED_CHECKS" ]; then
+            echo "::error::release_required_checks_drift"
+            printf 'expected:\n%s\nactual:\n%s\n' \
+              "$EXPECTED_CHECKS" "$ACTUAL_CHECKS"
+            exit 1
+          fi
 
       - name: Receive the verified release assets
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -445,33 +623,119 @@ jobs:
       - name: Prepare the draft release and immutable asset set
         env:
           GH_TOKEN: ${{ github.token }}
+          CONTROL_PLANE_TOKEN: ${{ secrets.EVOGUARD_IMMUTABLE_RELEASES_READ_TOKEN }}
+          EXPECTED_TAG_OBJECT_SHA: ${{ steps.release-authority.outputs.tag-object-sha }}
         run: |
           set -euo pipefail
 
+          # Re-read every mutable authority input after asset verification and
+          # immediately before the first write. Commit and annotated-tag
+          # objects are content-addressed; their refs and all other live state
+          # must still match the already-verified objects.
+          control_api() {
+            GH_TOKEN="$CONTROL_PLANE_TOKEN" gh api \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2026-03-10' "$1"
+          }
+          [[ "$EXPECTED_TAG_OBJECT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          verify_mutable_authority() {
+            local immutability_json main_ref_json main_branch_json
+            local checks_json tag_ref_json
+            immutability_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/immutable-releases")"
+            jq -e \
+              '.enabled == true and (.enforced_by_owner | type == "boolean")' \
+              <<<"$immutability_json" >/dev/null || {
+              echo "::error::immutable_releases_required"
+              return 1
+            }
+            main_ref_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/git/ref/heads/main")"
+            jq -e --arg sha "$GITHUB_SHA" \
+              '.object.type == "commit" and .object.sha == $sha' \
+              <<<"$main_ref_json" >/dev/null || {
+              echo "::error::release_source_drift"
+              return 1
+            }
+            main_branch_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/branches/main")"
+            jq -e --arg sha "$GITHUB_SHA" '
+              .name == "main" and
+              .protected == true and
+              .commit.sha == $sha
+            ' <<<"$main_branch_json" >/dev/null || {
+              echo "::error::release_source_not_protected_main"
+              return 1
+            }
+            checks_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?filter=latest&per_page=100")"
+            if ! jq -e '
+              .total_count <= 100 and
+              .total_count == (.check_runs | length)
+            ' <<<"$checks_json" >/dev/null; then
+              echo "::error::release_check_run_pagination_incomplete"
+              return 1
+            fi
+            jq -e --argjson expected '{
+                "CodeQL": 57789,
+                "analyze": 15368,
+                "blackbox-docker-e2e": 15368,
+                "e2e-runners": 15368,
+                "fuzz (address)": 15368,
+                "fuzz (undefined)": 15368,
+                "project-status": 15368,
+                "smoke": 15368,
+                "test (3.10)": 15368,
+                "test (3.11)": 15368,
+                "test (3.12)": 15368
+              }' '
+                . as $document |
+                all($expected | to_entries[]; . as $required |
+                  ([
+                    $document.check_runs[] |
+                    select(
+                      .name == $required.key and
+                      .app.id == $required.value
+                    )
+                  ] | max_by(.id)) as $latest |
+                  $latest != null and $latest.conclusion == "success"
+                )
+              ' <<<"$checks_json" >/dev/null || {
+              echo "::error::release_required_checks_drift"
+              return 1
+            }
+            tag_ref_json="$(control_api \
+              "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG")"
+            jq -e --arg ref "refs/tags/$TAG" \
+              --arg object "$EXPECTED_TAG_OBJECT_SHA" '
+              .ref == $ref and
+              .object.type == "tag" and
+              .object.sha == $object
+            ' <<<"$tag_ref_json" >/dev/null || {
+              echo "::error::release_tag_drift"
+              return 1
+            }
+          }
+
           # A rerun must never retarget an existing tag/release or replace an
           # existing asset with bytes built from another commit.
-          TAG_SHA=""
-          set +e
-          TAG_REF_RESPONSE="$(gh api --include \
-            "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" 2>&1)"
-          TAG_REF_STATUS=$?
-          set -e
-          if [ "$TAG_REF_STATUS" -eq 0 ]; then
-            TAG_SHA="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
-          elif ! grep -Eq '^HTTP/[^ ]+ 404 ' <<<"$TAG_REF_RESPONSE"; then
-            echo "::error::release_tag_lookup_failed: could not determine whether $TAG already exists"
-            printf '%s\n' "$TAG_REF_RESPONSE" >&2
-            exit "$TAG_REF_STATUS"
-          fi
-          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
-            echo "::error::release_tag_target_mismatch: $TAG points to $TAG_SHA, expected $GITHUB_SHA"
-            exit 1
-          fi
+          verify_mutable_authority
 
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
+          set +e
+          RELEASE_LOOKUP="$(gh api --include \
+            "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" 2>&1)"
+          RELEASE_LOOKUP_STATUS=$?
+          set -e
+          if [ "$RELEASE_LOOKUP_STATUS" -ne 0 ] && \
+             ! grep -Eq '^HTTP/[^ ]+ 404 ' <<<"$RELEASE_LOOKUP"; then
+            echo "::error::release_lookup_failed"
+            printf '%s\n' "$RELEASE_LOOKUP" >&2
+            exit "$RELEASE_LOOKUP_STATUS"
+          fi
+          if [ "$RELEASE_LOOKUP_STATUS" -ne 0 ]; then
             gh release create "$TAG" \
               --draft \
-              --target "$GITHUB_SHA" \
+              --verify-tag \
               --title "$TAG" \
               --generate-notes
           fi
@@ -483,10 +747,6 @@ jobs:
           RELEASE_IS_DRAFT="$(jq -r .isDraft <<<"$RELEASE_JSON")"
           RELEASE_IS_IMMUTABLE="$(jq -r .isImmutable <<<"$RELEASE_JSON")"
           test "$RELEASE_TAG" = "$TAG"
-          if [ "$RELEASE_TARGET" != "$GITHUB_SHA" ]; then
-            echo "::error::release_target_commit_mismatch: $TAG targets $RELEASE_TARGET, expected $GITHUB_SHA"
-            exit 1
-          fi
           if [ "$RELEASE_IS_DRAFT" != "true" ] && [ "$RELEASE_IS_IMMUTABLE" != "true" ]; then
             echo "::error::release_not_immutable: published $TAG is not immutable"
             exit 1
@@ -529,6 +789,20 @@ jobs:
             printf 'expected:\n%s\nactual:\n%s\n' "$EXPECTED_ASSETS" "$FINAL_ASSETS"
             exit 1
           fi
+
+          # Re-read every mutable authority input and every asset after all
+          # uploads. This closes the within-job mutation window; publication
+          # remains the separately documented human boundary.
+          verify_mutable_authority
+          rm -rf final-release-assets
+          mkdir final-release-assets
+          gh release download "$TAG" --dir final-release-assets
+          for asset in evo-guard.pyz evo-guard.spdx.json SHA256SUMS; do
+            if ! cmp -s "dist/$asset" "final-release-assets/$asset"; then
+              echo "::error::release_asset_readback_mismatch: $asset"
+              exit 1
+            fi
+          done
 
           if [ "$RELEASE_IS_DRAFT" = "true" ]; then
             echo "Draft $TAG is ready with the exact verified asset set. Select the Marketplace checkbox and publish it in GitHub's web UI."

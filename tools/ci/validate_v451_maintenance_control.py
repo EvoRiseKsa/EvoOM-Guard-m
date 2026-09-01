@@ -98,7 +98,7 @@ RAW_ENTRY_PINS: dict[str, tuple[str, str]] = {
     ".evoguard.json": ("policy", "7988a6a7d6f1df0ebd14028eba29f2257b2b1d2c"),
     "security/release-pipeline-bootstrap.json": (
         "control",
-        "1f4a9d3382a66f7c11c9f77a27af8851b12cda83",
+        "44d4f0b87129f00aee1005d96830bc203013521e",
     ),
     "security/release-source-pack/pack.json": (
         "pack",

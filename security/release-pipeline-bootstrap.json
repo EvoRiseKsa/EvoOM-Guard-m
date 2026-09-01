@@ -10,7 +10,8 @@
     "bootstrap_state": "INERT_UNTIL_POST_MERGE_CONFIGURATION",
     "placeholder_rule": "Every POST_MERGE_REQUIRED value is intentionally invalid and must be resolved from the protected merged tree or reviewed GitHub control plane before any flag is true.",
     "legacy_release_workflow": "HARD_DISABLED",
-    "publication_mode": "READ_ONLY_APPROVAL_THEN_SINGLE_JOB_DRAFT_AND_IMMUTABLE_PUBLISH"
+    "publication_mode": "READ_ONLY_APPROVAL_THEN_SINGLE_JOB_DRAFT_AND_IMMUTABLE_PUBLISH",
+    "time_based_release_gates": "FORBIDDEN"
   },
   "activation_prerequisites": {
     "repository": {
@@ -196,33 +197,6 @@
       "release_tag_object_type": "tag",
       "github_verification_required": true,
       "private_key_in_actions": false
-    },
-    "minor_release_freeze": {
-      "declaration_path": "security/release-freezes/v4.7.0.json",
-      "schema_path": "tests/baseline/schema/minor-release-freeze-v1.schema.json",
-      "validator_path": "tools/ci/validate_minor_release_freeze.py",
-      "github_server_time_anchor_capture": "tools/ci/capture_minor_release_freeze_anchor.js",
-      "github_server_time_anchor_validator": "tools/ci/validate_release_freeze_github_anchor.py",
-      "git_commit_timestamp_role": "SANITY_CHECK_ONLY_NOT_TRUSTED_TIME",
-      "github_anchor_query": {
-        "branch": "main",
-        "event": "push",
-        "head_sha": "EVOGUARD_V470_FREEZE_DECLARATION_SHA",
-        "exclude_pull_requests": true,
-        "all_exact_head_runs": "ATTEMPT_1_TERMINAL_SUCCESS",
-        "server_time_relation": "max(created_at)<=started_at<=min(created_at)+3600s"
-      },
-      "EVOGUARD_V470_FREEZE_DECLARATION_SHA": "POST_MERGE_REQUIRED",
-      "EVOGUARD_V470_FREEZE_DECLARATION_TREE_SHA": "POST_MERGE_REQUIRED",
-      "EVOGUARD_V470_FREEZE_WINDOWS_WORKFLOW_ID": "POST_MERGE_REQUIRED",
-      "EVOGUARD_V470_FREEZE_CODEQL_WORKFLOW_ID": "POST_MERGE_REQUIRED",
-      "EVOGUARD_V470_FREEZE_CI_WORKFLOW_ID": "POST_MERGE_REQUIRED",
-      "EVOGUARD_V470_FREEZE_CFLITE_WORKFLOW_ID": "POST_MERGE_REQUIRED",
-      "stabilization_seconds": 1209600,
-      "candidate_promotion_policy": "exact-stable-promotion-scope-only",
-      "stabilization_window_allowed_changes": [
-        "release-record-corrections-only"
-      ]
     },
     "public_roots": {
       "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PUBLIC_KEY_B64": "POST_MERGE_REQUIRED",

@@ -14,6 +14,8 @@ RELEASE = ROOT / ".github" / "workflows" / "release.yml"
 CI = ROOT / ".github" / "workflows" / "ci.yml"
 WINDOWS = ROOT / ".github" / "workflows" / "windows.yml"
 WORKFLOWS = ROOT / ".github" / "workflows"
+MAINTAINER_ROOT = ROOT / "security" / "release-maintainer-roots" / "v4.7.0.json"
+MAINTAINER_KEY = ROOT / "security" / "release-maintainer-roots" / "v4.7.0.pub"
 
 
 def test_every_checkout_discards_persisted_credentials() -> None:
@@ -65,20 +67,43 @@ def test_release_assets_are_immutable_and_bound_to_the_tag_commit() -> None:
     for workflow in (RELEASE, CI):
         text = workflow.read_text(encoding="utf-8")
         assert "--clobber" not in text
-        assert "release_tag_target_mismatch" in text
+        if workflow == RELEASE:
+            assert "release_tag_signature_or_target_invalid" in text
+            assert "release_tag_drift" in text
+            assert "git/ref/tags/$TAG" in text
         assert "release_asset_immutable" in text
-        assert "commits/$" in text
         assert "cmp -s" in text
 
 
-def test_absent_release_tag_does_not_capture_api_error_json_as_a_sha() -> None:
+def test_missing_or_lightweight_release_tag_fails_before_draft_creation() -> None:
     text = RELEASE.read_text(encoding="utf-8")
     assert 'git/ref/tags/$TAG' in text
     assert '--jq .sha 2>/dev/null || true' not in text
-    assert 'TAG_SHA=""' in text
-    assert "TAG_REF_STATUS=$?" in text
-    assert "release_tag_lookup_failed" in text
-    assert "'^HTTP/[^ ]+ 404 '" in text
+    assert "signed_annotated_release_tag_required" in text
+    assert '.object.type == "tag"' in text
+    assert 'repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT_SHA' in text
+    assert "--verify-tag" in text
+    assert '--target "$GITHUB_SHA"' not in text
+
+
+def test_release_workflow_uses_the_exact_pinned_maintainer_key() -> None:
+    prepare = _job_block(RELEASE, "prepare-draft")
+    root = json.loads(MAINTAINER_ROOT.read_text(encoding="utf-8"))
+    public_key_bytes = MAINTAINER_KEY.read_bytes()
+    public_key = public_key_bytes.decode("utf-8").strip()
+    key_type, key_body, _comment = public_key.split(" ", maxsplit=2)
+
+    assert root["github_login"] == "EvoRiseKsa"
+    assert root["public_key_path"] == (
+        "security/release-maintainer-roots/v4.7.0.pub"
+    )
+    assert root["signature_namespace"] == "git"
+    assert root["public_key_sha256"] == hashlib.sha256(
+        public_key_bytes
+    ).hexdigest()
+    assert (
+        f'EvoRiseKsa namespaces="git" {key_type} {key_body}' in prepare
+    )
 
 
 def test_dispatch_tag_is_data_not_inline_shell_and_is_validated_before_output() -> None:
@@ -174,7 +199,9 @@ def test_release_validation_build_and_write_privileges_are_separated() -> None:
     assert '"versionInfo": os.environ["EXPECTED_VERSION"]' in attest
 
     assert "needs: [validate-test, attest-release-assets]" in prepare
+    assert "environment: evoguard-release-draft" in prepare
     assert "contents: write" in prepare
+    assert "EVOGUARD_IMMUTABLE_RELEASES_READ_TOKEN" in prepare
     assert (
         "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
         in prepare
@@ -203,6 +230,8 @@ def test_release_validation_build_and_write_privileges_are_separated() -> None:
     assert "'^[0-9a-f]{64}  evo-guard\\.spdx\\.json$'" in prepare
     assert "find dist -mindepth 1 -maxdepth 1" in prepare
     assert "-printf '%y\\t%f\\n'" in prepare
+    for unprivileged in (validate, release_e2e, release_windows, build, attest):
+        assert "EVOGUARD_IMMUTABLE_RELEASES_READ_TOKEN" not in unprivileged
 
 
 def test_future_release_artifact_and_sbom_are_attested_in_a_clean_job() -> None:
@@ -322,7 +351,76 @@ def test_release_is_manual_and_accepts_only_the_default_branch() -> None:
         "attest-release-assets",
         "prepare-draft",
     ):
-        assert default_branch_guard in _job_block(RELEASE, job)
+        block = _job_block(RELEASE, job)
+        assert default_branch_guard in block
+        assert "timeout-minutes:" in block
+
+
+def test_draft_write_requires_immediate_live_state_evidence() -> None:
+    prepare = _job_block(RELEASE, "prepare-draft")
+    mutation_at = prepare.index('gh release create "$TAG"')
+
+    assert "environment: evoguard-release-draft" in prepare
+    assert "repos/$GITHUB_REPOSITORY/immutable-releases" in prepare
+    assert ".enabled == true" in prepare
+    assert ".enforced_by_owner | type == \"boolean\"" in prepare
+    assert "immutable_releases_required" in prepare
+    assert "repos/$GITHUB_REPOSITORY/git/ref/heads/main" in prepare
+    assert ".object.sha == $sha" in prepare
+    assert "release_source_drift" in prepare
+    assert "repos/$GITHUB_REPOSITORY/branches/main" in prepare
+    assert ".protected == true" in prepare
+    assert "release_source_not_protected_main" in prepare
+    assert "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" in prepare
+    assert ".commit.verification.verified == true" in prepare
+    assert '.commit.verification.reason == "valid"' in prepare
+    assert "release_source_signature_invalid" in prepare
+    assert "release_tag_not_signed_by_maintainer_root" in prepare
+    assert "ssh-keygen -Y verify -q" in prepare
+    assert prepare.count("ssh-keygen -Y verify -q") == 1
+    assert 'namespaces="git" ssh-ed25519' in prepare
+    assert "AAAAC3NzaC1lZDI1NTE5AAAAIDZCepQbTxouwR5UwSKMF+4RvlK/MRQ+D9HE+fxJOKdi" in prepare
+    assert "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" in prepare
+    assert "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT_SHA" in prepare
+    assert ".object.sha == $sha" in prepare
+    assert "check-runs?filter=latest&per_page=100" in prepare
+    assert prepare.count("release_check_run_pagination_incomplete") == 2
+    assert prepare.count(".total_count == (.check_runs | length)") == 2
+    assert prepare.count(".total_count <= 100") == 2
+    assert "max_by(.id)" in prepare
+    assert '($latest.conclusion // "")' in prepare
+    assert '"missing"' in prepare
+    assert "release_required_checks_drift" in prepare
+    assert "57789" in prepare
+    assert "15368" in prepare
+    assert prepare.count("repos/$GITHUB_REPOSITORY/immutable-releases") == 2
+    assert prepare.count("repos/$GITHUB_REPOSITORY/git/ref/heads/main") >= 2
+    assert prepare.count("repos/$GITHUB_REPOSITORY/branches/main") == 2
+    assert prepare.count("check-runs?filter=latest&per_page=100") >= 2
+    assert "all($expected | to_entries[]" in prepare
+    assert "verify_mutable_authority()" in prepare
+    assert 'checks_json="$(control_api' in prepare
+
+    for evidence in (
+        "repos/$GITHUB_REPOSITORY/immutable-releases",
+        "repos/$GITHUB_REPOSITORY/git/ref/heads/main",
+        "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA",
+        "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG",
+        "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT_SHA",
+        "check-runs?filter=latest&per_page=100",
+    ):
+        assert prepare.index(evidence) < mutation_at
+
+    transferred_assets = prepare.index("Verify the transferred asset set")
+    state_rechecks = [
+        match.start()
+        for match in re.finditer(
+            r"^\s+verify_mutable_authority$", prepare, flags=re.MULTILINE
+        )
+    ]
+    assert len(state_rechecks) == 2
+    assert transferred_assets < state_rechecks[0] < mutation_at
+    assert prepare.index('gh release upload "$TAG"') < state_rechecks[1]
 
 
 def test_non_release_workflows_declare_their_read_only_baseline() -> None:
@@ -354,9 +452,14 @@ def test_release_workflow_prepares_a_draft_and_never_publishes_it() -> None:
     )
     assert create is not None
     assert "--draft" in create.group("args")
-    assert '--target "$GITHUB_SHA"' in create.group("args")
+    assert "--verify-tag" in create.group("args")
+    assert "--target" not in create.group("args")
+    assert text.index("immutable_releases_required") < create.start()
+    assert text.index("release_source_signature_invalid") < create.start()
+    assert text.index("release_tag_not_signed_by_maintainer_root") < create.start()
+    assert text.index("release_required_checks_drift") < create.start()
     assert "assets,isDraft,isImmutable,tagName,targetCommitish" in text
-    assert "release_target_commit_mismatch" in text
+    assert "release_tag_drift" in text
     assert "gh release edit" not in text
     assert "--draft=false" not in text
     assert "--draft false" not in text
@@ -376,6 +479,8 @@ def test_release_rerun_only_uploads_missing_assets_to_a_draft() -> None:
     assert 'cmp -s "dist/$asset" "existing-release-assets/$asset"' in text
     assert "unexpected existing assets" in text
     assert "final release asset set is not exact" in text
+    assert "release_asset_readback_mismatch" in text
+    assert "final-release-assets" in text
     assert "SHA256SUMS evo-guard.pyz evo-guard.spdx.json" in text
     assert "for asset in evo-guard.pyz evo-guard.spdx.json SHA256SUMS" in text
 

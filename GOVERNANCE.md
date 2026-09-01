@@ -51,20 +51,25 @@ production-supported version merely because its CI is green.
   create a product release. They are published through the protected default
   branch and, when necessary, an explicit erratum.
 - A minor release may add compatible behavior only after its intended scope is
-  frozen, all required CI and release-trust gates pass, migration/compatibility
-  effects are documented, and the candidate has remained unchanged except for
-  release-record corrections during a minimum 14-day stabilization window.
+  recorded, all required CI and release-trust gates pass, migration/compatibility
+  effects are documented, and the exact candidate and target are bound by the
+  release evidence. It must never be gated on dates, elapsed time, or a
+  stabilization window; relevant drift invalidates the evidence and requires an
+  immediate re-run instead of a calendar wait.
 - A major release is required for an intentional break in public CLI, schema,
   canonical-byte, signature-domain, policy, or verifier contract. It requires
   a migration guide and retained verification for the preceding stable line.
 - Published tags, assets, checksums, attestations, and release ledgers are
   immutable. A defect creates a new version or erratum; it never retargets or
   replaces a published object.
-- Starting with the next product release, the source release commit and
-  annotated release tag must carry a GitHub-verifiable maintainer signature in
-  addition to the existing protected workflow, artifact attestation, checksum,
-  and release-ledger controls. If signing authority is unavailable, the product
-  release is blocked rather than silently downgraded.
+- Starting with the next product release, the source release commit must be the
+  exact GitHub-verified protected-branch object with its required checks, and an
+  annotated release tag signed by the pinned maintainer key must bind that
+  object. The signed tag is the maintainer's release authorization; requiring
+  the local maintainer key on a GitHub-generated PR merge commit would make the
+  protected PR path inoperable without adding assurance. If tag-signing
+  authority is unavailable, the product release is blocked rather than silently
+  downgraded.
 
 This repository makes no general support-duration or service-level promise.
 Any commercial maintenance window or SLA is established by a separate written
