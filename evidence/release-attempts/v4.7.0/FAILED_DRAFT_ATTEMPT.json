@@ -108,7 +108,7 @@
     ]
   },
   "root_cause": "The workflow used tag-based release resolution while the release was still a draft. The immediate gh release download returned HTTP 404, the later published-release-by-tag REST lookup would also have returned 404, and a retry could have created a duplicate hidden draft.",
-  "corrective_action": "Release v4.7.1 uses paginated unique draft discovery, numeric release and asset IDs before publication, and a by-tag identity join only after immutable publication.",
+  "corrective_action": "The corrected workflow uses paginated unique draft discovery, numeric release and asset IDs before publication, and a by-tag identity join only after immutable publication. A future v4.7.1 candidate must complete its own dev0 evidence lane before stable promotion.",
   "cleanup": {
     "draft_release_id": 380414798,
     "status": "VERIFIED_DELETED_TAG_PRESERVED",

@@ -27,7 +27,7 @@ validated security service.
 ## Public repository map
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_CORE_RELEASE -->
-Source version `4.7.1` is a **release candidate** and is not yet a consumer release. The
+Source version `4.7.0` is a **release candidate** and is not yet a consumer release. The
 latest immutable consumer release recorded by the protected source tree is
 [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) at commit
 `d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4`. Its `evoguard-release-ledger-v2` ledger

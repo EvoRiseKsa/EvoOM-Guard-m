@@ -1,7 +1,7 @@
 # Release status
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_SUMMARY -->
-Source version `4.7.1` is a **release candidate** and is not yet a consumer release. The
+Source version `4.7.0` is a **release candidate** and is not yet a consumer release. The
 latest immutable consumer release recorded by the protected source tree is
 [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) at commit
 `d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4`. Its `evoguard-release-ledger-v2` ledger
@@ -31,7 +31,8 @@ consumer release. Its protected workflow stopped while reading the draft; no
 publication mutation or postpublication verifier ran. The exact bounded
 same-owner incident record is
 [`FAILED_DRAFT_ATTEMPT.json`](../evidence/release-attempts/v4.7.0/FAILED_DRAFT_ATTEMPT.json).
-The tag is not moved or reused; the corrected candidate is `v4.7.1`.
+The tag is not moved or reused. A future `v4.7.1` candidate must complete a
+fresh `4.7.1.dev0` evidence lane before stable-version promotion.
 
 For `v4.5.0`, after the signed ledger bytes were committed and independently revalidated,
 the exact temporary publication deploy key and publication Environment secret

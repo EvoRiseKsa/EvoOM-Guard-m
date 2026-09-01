@@ -51,7 +51,7 @@ def _load_failed_v470_attempt(raw: str) -> dict[str, object]:
     return value
 
 
-def test_failed_v470_attempt_is_bounded_and_v471_is_the_successor() -> None:
+def test_failed_v470_attempt_is_bounded_and_source_is_not_reused() -> None:
     raw = FAILED_V470_ATTEMPT.read_text(encoding="utf-8")
     assert "\r" not in raw
     assert raw.endswith("\n")
@@ -253,9 +253,10 @@ def test_failed_v470_attempt_is_bounded_and_v471_is_the_successor() -> None:
         "returned 404, and a retry could have created a duplicate hidden draft."
     )
     assert record["corrective_action"] == (
-        "Release v4.7.1 uses paginated unique draft discovery, numeric release "
-        "and asset IDs before publication, and a by-tag identity join only "
-        "after immutable publication."
+        "The corrected workflow uses paginated unique draft discovery, numeric "
+        "release and asset IDs before publication, and a by-tag identity join "
+        "only after immutable publication. A future v4.7.1 candidate must "
+        "complete its own dev0 evidence lane before stable promotion."
     )
     cleanup = record["cleanup"]
     assert cleanup == {
@@ -292,11 +293,11 @@ def test_failed_v470_attempt_is_bounded_and_v471_is_the_successor() -> None:
         "same_owner_operation": True,
         "independent_validation": False,
     }
-    assert '__version__ = "4.7.1"' in (
+    assert '__version__ = "4.7.0"' in (
         ROOT / "evoom_guard" / "__init__.py"
     ).read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert "## [4.7.1] — 2026-09-01" in changelog
+    assert "## Unreleased — draft-release recovery" in changelog
     assert "## [4.7.0] — 2026-08-31 (unpublished; withdrawn)" in changelog
 
 
