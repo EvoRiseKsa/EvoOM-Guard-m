@@ -97,22 +97,22 @@
     "role": "declared CI dependency lock",
     "sha256": "eb48c40f5a3a8bc041f9512a13da2f33ffbe39e710e2136075947b567e1f6b63"
   },
-  "engine_version": "4.7.0.dev0",
+  "engine_version": "4.7.1.dev0",
   "environment": {
-    "captured_at_utc": "2026-08-30T04:44:50.941200Z",
+    "captured_at_utc": "2026-09-01T13:13:15.770065Z",
     "case_interpreter": {
       "build": [
-        "main",
-        "Mar  3 2026 09:26:23"
+        "tags/v3.12.10:0cc8128",
+        "Apr  8 2025 12:21:36"
       ],
-      "cache_tag": "cpython-311",
-      "compiler": "GCC 13.3.0",
-      "executable_bytes": 6639992,
-      "executable_sha256": "f56a588548dd013906ae1dcd1b6faa417f4e204da634ff354840d9643e78ff9e",
-      "hexversion": 51056624,
-      "identity_sha256": "1b0e19c8c1938dd59541b7bcbb1db87c1f562bb1f4fd4203b0d0bf9d90773673",
+      "cache_tag": "cpython-312",
+      "compiler": "MSC v.1943 64 bit (AMD64)",
+      "executable_bytes": 104952,
+      "executable_sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+      "hexversion": 51120880,
+      "identity_sha256": "fd1da05b72ab772792e3627a003b7bfd51b2783f2d09506634a192da3b2f6ca3",
       "implementation": "CPython",
-      "version": "3.11.15"
+      "version": "3.12.10"
     },
     "case_python_flags": [
       "-I"
@@ -125,13 +125,18 @@
     },
     "execution_environment": {
       "all_non_allowlisted_parent_keys_removed": true,
-      "effective_environment_sha256": "94d8b4fd3f314c0cfe71b006ba1ee6b59127eccbf5301afe61bae61f8ba2fe4a",
+      "effective_environment_sha256": "140fdebf5f4eacada932754d82b2027f3006fdb91549c1bd56bb257b5c0b27bd",
       "effective_key_names": [
-        "LC_CTYPE",
+        "COMSPEC",
         "NO_COLOR",
         "PATH",
+        "PATHEXT",
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
-        "TZ"
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "TZ",
+        "WINDIR"
       ],
       "forced_value_sha256": {
         "NO_COLOR": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
@@ -144,117 +149,126 @@
         "TZ": "UTC"
       },
       "inherited_keys": [
-        "LC_CTYPE",
-        "PATH"
+        "COMSPEC",
+        "PATH",
+        "PATHEXT",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "WINDIR"
       ],
       "inherited_value_sha256": {
-        "LC_CTYPE": "99fed2d548c2eb1022f4067f97fe838a2c3ea60ee0e0f53086788505c3ababad",
-        "PATH": "804bb32eb41d2e0cb9614b84ab6d3958df84f811c17ed1874f93d3c4c9e7fcb4"
+        "COMSPEC": "56a79d121b8a0f187e172d87f06c86f8ae9bc3d047ba8505bf03e77030687ad4",
+        "PATH": "6c69f99ed5b9f880f41d428f7cdf42d8acf37362f7650d78a22fe12a217d6abb",
+        "PATHEXT": "a6e17897274808450499132f0802335799834f33795cbeca1c073278b006b650",
+        "SYSTEMROOT": "c2bb903d586d19ec0d6eb6a2a659a882fd51244d6a137cee3595a385fda042f1",
+        "TEMP": "c5064c1bae2b3a6b5888d275a10ba8ff5c0e9b6d4ef24a4cfafbe9bdfcc74024",
+        "TMP": "c5064c1bae2b3a6b5888d275a10ba8ff5c0e9b6d4ef24a4cfafbe9bdfcc74024",
+        "WINDIR": "c2bb903d586d19ec0d6eb6a2a659a882fd51244d6a137cee3595a385fda042f1"
       },
       "removed_influential_keys_present": [
-        "GIT_CONFIG_COUNT",
-        "VIRTUAL_ENV"
+        "GIT_CONFIG_COUNT"
       ],
       "schema_version": "evoguard-benchmark-environment-v2",
       "value_digest_privacy": "commitment_not_confidentiality"
     },
     "os": {
-      "cpu_count": 4,
-      "machine": "x86_64",
-      "name": "posix",
-      "platform": "Linux-6.18.44-fc-v22-x86_64-with-glibc2.39",
-      "release": "6.18.44-fc-v22",
-      "system": "Linux"
+      "cpu_count": 20,
+      "machine": "AMD64",
+      "name": "nt",
+      "platform": "Windows-11-10.0.26200-SP0",
+      "release": "11",
+      "system": "Windows"
     },
     "tools": {
       "git": {
         "available": true,
-        "executable_bytes": 4066232,
-        "executable_sha256": "2a8c18fbf43da9f692d75474c72bea9dfd796c260b0f3dfe456376abc3bbd668",
+        "executable_bytes": 46464,
+        "executable_sha256": "37c5725818d602e951ba2563b870d62763322956b73373da4c33a0b566a80bc9",
         "schema_version": "evoguard-benchmark-tool-identity-v2",
-        "version_line": "git version 2.43.0",
-        "version_line_sha256": "afe546045563315286ad2bcfb4a042a4e8e0aea3d76e2d31beeb1f549d19b865"
+        "version_line": "git version 2.53.0.windows.2",
+        "version_line_sha256": "853f9e43a7cdbe8f666e093174096f7b8aa9c58d58802694c021327fe3aba13b"
       },
       "patch": {
-        "available": true,
-        "executable_bytes": 186896,
-        "executable_sha256": "a7ae8b838a75711c06f86a2a8293dcad85a20b564670a120717e704c436e6f3a",
+        "available": false,
+        "executable_bytes": null,
+        "executable_sha256": null,
         "schema_version": "evoguard-benchmark-tool-identity-v2",
-        "version_line": "GNU patch 2.7.6",
-        "version_line_sha256": "b36a039a08b739293910a4b6dd551a9dd0e776bc1f5f5437c2b6f34671bd92e0"
+        "version_line": null,
+        "version_line_sha256": null
       },
       "pytest": {
         "available": true,
         "distribution": "pytest",
         "installed_environment_match_claim": false,
-        "runtime_bytes": 14015067,
+        "runtime_bytes": 13788436,
         "runtime_distributions": [
           {
-            "bytes": 179351,
-            "files": 32,
-            "files_sha256": "1f294b838c60ff228449a8549aff771048f65fd8780874fdcd7f3cf97f84b8d5",
+            "bytes": 169233,
+            "files": 31,
+            "files_sha256": "960e9705660187009bd566190193d60596467ebe1f327eb8af4ad1d70512fc3f",
             "name": "colorama",
             "version": "0.4.6"
           },
           {
-            "bytes": 101788,
+            "bytes": 97545,
             "files": 19,
-            "files_sha256": "bd7da34c98199e6fbe2a96d58bffc2f9683c9b7b58ad73e4d8f85916ee30aaab",
+            "files_sha256": "a756433c8b00cae916764a1dbcf283e7fe0b781f2610fcf23252d8b15a86d1f3",
             "name": "exceptiongroup",
             "version": "1.3.1"
           },
           {
-            "bytes": 39424,
-            "files": 16,
-            "files_sha256": "991c2f16402afaae4f0537bf43b6f6faf05d916a81153f0833682d154616812a",
+            "bytes": 37052,
+            "files": 15,
+            "files_sha256": "e7c30cfb45f3bc51d10356cf27db3440418659830f6cb8bff6ba7a503dbb2894",
             "name": "iniconfig",
             "version": "2.3.0"
           },
           {
-            "bytes": 809680,
-            "files": 49,
-            "files_sha256": "a31ea04d0af18d5431125c2230583f21e9380bcbb2b466c1b706ed6d4a031296",
+            "bytes": 995639,
+            "files": 53,
+            "files_sha256": "ad6f1e1f905efb25c11a3c613f436754bff0795cf441f163697b5628b06bd6ae",
             "name": "packaging",
-            "version": "26.2"
+            "version": "26.3"
           },
           {
-            "bytes": 144132,
-            "files": 24,
-            "files_sha256": "d7ab5f8a9ecd3c6dbac8c7b278f5f6ee7f105fe9734aebba14222ad915b099ff",
+            "bytes": 137298,
+            "files": 23,
+            "files_sha256": "ed161a0f8caef2b8d78e19dd5aafddb2c25af382f0244eeab9ac5df2a79282ae",
             "name": "pluggy",
             "version": "1.6.0"
           },
           {
-            "bytes": 8479042,
-            "files": 687,
-            "files_sha256": "6c1f6d4ed016dbc53a9b2a18ca178d12c7a2dafa99556861231bec6c072b8a65",
+            "bytes": 8490949,
+            "files": 686,
+            "files_sha256": "d789f42ba6c51b215051f8b1ba7c71ef3b833c48d1340a3208ed3bfb9897c411",
             "name": "pygments",
             "version": "2.20.0"
           },
           {
-            "bytes": 3162836,
+            "bytes": 3218981,
             "files": 174,
-            "files_sha256": "4cc8a0885d8943aed75144a19a620b91e4831ff478b822a152964122a4568df0",
+            "files_sha256": "fc2c1cc5dbf5b81fa3747f9f8c5b25cc22f4bb65f9cda931e2391450bc7166f0",
             "name": "pytest",
             "version": "9.1.1"
           },
           {
-            "bytes": 733113,
+            "bytes": 292172,
             "files": 21,
-            "files_sha256": "443fac73d0543428d0cc897f2be35c14eddfc541b4dc7e62468d6d654f186650",
+            "files_sha256": "8e1c87f5e1a4e77e623c185bc98a1df288348e4d84454176e703cbb6ca14e447",
             "name": "tomli",
             "version": "2.4.1"
           },
           {
-            "bytes": 365701,
+            "bytes": 349567,
             "files": 8,
-            "files_sha256": "2d0092771c4c9e64b72a8912cee59413a350a933f35a70e19eda24f6b82abb91",
+            "files_sha256": "39773c458aa6c34503c30006885d8752fa7761dddeced0e2e32323e5dd902e2b",
             "name": "typing-extensions",
             "version": "4.16.0"
           }
         ],
         "runtime_files": 1030,
-        "runtime_sha256": "2fd04d0e7f59d14704300bd2ce31dc9b557e53929e78e5b48a17fb659882682e",
+        "runtime_sha256": "2005b56c1db2382b5b1b39a1a32a8bf24e0edc0e91ed909a5625c74b7e5c806f",
         "schema_version": "evoguard-benchmark-tool-identity-v2",
         "version": "9.1.1"
       }
@@ -265,7 +279,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "e07f4d53d08e1a521e04e7c9552ba56df1f782f1",
+    "head": "cae883a15e4c86df0d10f8eaeaa5bdfa693a382c",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -316,7 +330,7 @@
     "evidence_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "d39fcaf2e121a80c9fb44c661980cbe1560cfa22",
+      "commit": "0df0c5c3a37021abe72bf8b46b68fec6d89b2145",
       "final_manifest_in_commit": false,
       "observation_point": "after results commit and before final manifest publication",
       "reason": "source_and_results_match_commit_final_manifest_excluded",
@@ -328,7 +342,7 @@
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "e07f4d53d08e1a521e04e7c9552ba56df1f782f1",
+      "commit": "cae883a15e4c86df0d10f8eaeaa5bdfa693a382c",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -340,13 +354,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14818,
+    "bytes": 14815,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "c07e716bec325bc9a57333bbba25c589c8a8cfc2fd9e535f7658add0eea0c104"
+    "sha256": "b0749f5eec101de2a65c5f36247d1d5d8de3782c9d34e627a59176ba9aaa206c"
   },
-  "run_id": "da7e03c5-31a2-4fbe-b041-2fd2b16fc550",
+  "run_id": "1012ce34-2d16-426d-8d79-84dfffdb56cf",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -490,7 +504,7 @@
       {
         "bytes": 1910,
         "path": "evoom_guard/__init__.py",
-        "sha256": "36684f43260cbe4ab9fc9db7b129202c919c6c3079ded7693205c22d52251185"
+        "sha256": "67cbe7d82f04ca233e1fe64b113027b7c1662e999ad69df3abf2cfa0c5ef9d1e"
       },
       {
         "bytes": 3069,
@@ -1477,13 +1491,13 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "07101ecfa606753d02468da8ded6dec7d4c77bd59a39dd1560e114a6f749302d",
+    "sha256": "4e8668990068e0b9bb61a31e8ae7721ce3bc14546da275a1c179ad5976259ac4",
     "total_bytes": 3193416
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.163,
-    "guard_full_run_median_s": 0.207,
-    "guard_full_run_p95_s": 0.264,
+    "controlled_direct_pytest_median_s": 0.178,
+    "guard_full_run_median_s": 0.282,
+    "guard_full_run_p95_s": 0.3,
     "pre_gate_only_median_s": 0.002,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }
