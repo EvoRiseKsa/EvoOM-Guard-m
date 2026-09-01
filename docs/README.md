@@ -12,10 +12,16 @@ product, `evo-guard` is the CLI, and `evoom_guard` is the Python package.
 
 ## Version boundary
 
-- **Latest published stable release:** [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0).
-- **Ledger-recorded consumer pin:** `v4.6.0`, or commit
-  `d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4` for the strictest immutable
-  identity. Its canonical signed ledger is
+- **Latest published stable release:** [`v4.7.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1).
+- **Consumer pin:** `v4.7.1`, or commit
+  `b222c7df0a3eaef6e89287cd1354625b88ac8b8b` for the strictest immutable
+  identity. Its maintained, detached-maintainer-signed
+  [`DIRECT_RELEASE.json`](../evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json)
+  and [detached signature](../evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json.sig)
+  records the successful `simple-release-v1` publication. This same-owner
+  record is not an A-through-H release ledger or independent review.
+- **Historical A-through-H evidence:** `v4.6.0` remains the newest validated
+  release of that archived lane, recorded by its canonical signed
   [`RELEASE_LEDGER.json`](../evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json).
 - **Repository source:** use the exact checked-out commit; its lifecycle is
   reported by the status authorities below.
@@ -30,9 +36,9 @@ product, `evo-guard` is the CLI, and `evoom_guard` is the Python package.
   does not invalidate or amend the signed release ledger.
 
 Repository documentation follows the source tree and may describe behavior
-absent from the latest ledger-recorded consumer release. Advanced pages state
-their implementation and evidence boundary. Use the immutable release tag or
-its full commit SHA in consumer repositories, and do not use `@main` as a
+absent from the latest consumer release. Advanced pages state their
+implementation and evidence boundary. Use the immutable release tag or its
+full commit SHA in consumer repositories, and do not use `@main` as a
 production channel.
 
 ## Pick a path

@@ -19,15 +19,15 @@ consumer release only:
 
 | Version | Status |
 | --- | --- |
-| [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) | Latest stable release; supported |
-| `4.7.1` | Release candidate; not a consumer release |
+| [`v4.7.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1) | Latest stable release; supported; maintained signed direct record, not an A-through-H ledger |
+| [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) | Historical latest validated A-through-H ledger; unsupported as the current consumer line |
 | Earlier published releases | Historical and unsupported; retained unchanged for reproducibility, verification, and rollback |
 | Unpublished draft candidates | Unsupported; never consumer releases |
 
 Users should reproduce a suspected issue on the latest stable release before
 reporting when practical. A report that affects an older release may still be
 useful, but a fix will be delivered in a new immutable release rather than by
-rewriting an existing tag, asset, checksum, or attestation.
+rewriting an existing tag, asset, checksum, attestation, or maintained record.
 <!-- END EVOGUARD_PROJECT_STATUS:SECURITY_SUPPORTED_VERSIONS -->
 
 The preserved `v4.7.0` tag was never published and is explicitly unsupported.
@@ -50,8 +50,8 @@ best-effort: there is no bug bounty or guaranteed response time. Genuine
 reports will be reviewed and, with the reporter's permission, credited when
 fixed.
 
-For non-sensitive independent-review coordination for the latest stable
-`v4.6.0` release, see the public
+For non-sensitive independent-review coordination for the historical latest
+A-through-H-ledger release `v4.6.0`, see the public
 [review request](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141).
 That request is not an audit result. The immutable
 [`review-v4.5.0-r1` companion](audit/v4.5.0/) remains a historical aid for the

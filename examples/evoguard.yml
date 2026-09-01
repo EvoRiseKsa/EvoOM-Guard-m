@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 0            # Guard needs the base commit to diff against
           persist-credentials: false
 
-      - uses: EvoRiseKsa/EvoOM-Guard-m@v4.6.0   # immutable release; use its full commit SHA for the strictest pin
+      - uses: EvoRiseKsa/EvoOM-Guard-m@v4.7.1   # immutable release; use its full commit SHA for the strictest pin
         with:
           comment: "false"          # explicit for older releases; use the job summary
           fail-on: "any-non-pass"   # required for pull_request security gating

@@ -2,13 +2,13 @@
 """Render reviewable project-status prose from one machine-readable source.
 
 ``PROJECT_STATUS.json`` contains only maintained state and explicit authority
-paths. Ledger-recorded release identity and assets are read from the newest
-immutable release ledger, while source identity is read from
-``evoom_guard.__version__``. A separately referenced, unsigned
-``published_unledgered`` exception may preserve bounded publication facts while
-development advances. It never supplies release identity, assets, attestations,
-or pipeline evidence in place of a valid signed ledger, and it does not imply
-that one can be issued later.
+paths. Source identity is read from ``evoom_guard.__version__``. Historical
+protected A-through-H release identity remains grounded in the newest immutable
+release ledger. Project-status v3 may instead select a hash-pinned, detached
+maintainer-signed ``simple-release-v1`` direct-release record for the current
+consumer release. That same-owner record is not a release ledger or independent
+review. Separately referenced ``published_unledgered`` exceptions preserve only
+bounded historical publication facts and never replace either authority type.
 """
 
 from __future__ import annotations
@@ -68,6 +68,14 @@ _KEY_DISPOSITION_PATH_RE = re.compile(
     r"evidence/release-operations/v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
     r"\.(?:0|[1-9][0-9]*))/LEDGER_KEY_DISPOSITION\.json\Z"
 )
+_DIRECT_RELEASE_PATH_RE = re.compile(
+    r"evidence/direct-releases/v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    r"\.(?:0|[1-9][0-9]*))/DIRECT_RELEASE\.json\Z"
+)
+_DIRECT_RELEASE_SIGNATURE_PATH_RE = re.compile(
+    r"evidence/direct-releases/v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    r"\.(?:0|[1-9][0-9]*))/DIRECT_RELEASE\.json\.sig\Z"
+)
 _LEDGER_DIRECTORY_RE = re.compile(
     r"v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
     r"\.(?:0|[1-9][0-9]*))\Z"
@@ -78,6 +86,38 @@ _MAX_LEDGER_DIRECTORIES = 128
 _MAX_PUBLISHED_UNLEDGERED_EXCEPTIONS = 128
 _MAX_UNSEALED_DEFECTS = 16
 _MAX_UNSEALED_AFFECTED_MATERIAL = 128
+_MAX_DIRECT_RELEASE_RECORD_BYTES = 1024 * 1024
+_MAX_DIRECT_RELEASE_SIGNATURE_BYTES = 16 * 1024
+_DIRECT_RELEASE_PUBLIC_KEY_PATH = "security/release-maintainer-roots/v4.7.0.pub"
+_DIRECT_RELEASE_PUBLIC_KEY_METADATA_PATH = (
+    "security/release-maintainer-roots/v4.7.0.json"
+)
+_DIRECT_RELEASE_PUBLIC_KEY_SHA256 = (
+    "f5a137810263756bcfbee4ebb020ca3c26a40d6876a5972ff2baa4d0ef7b0cab"
+)
+_DIRECT_RELEASE_PUBLIC_KEY_METADATA_SHA256 = (
+    "40af4936e093a06605a3ca9c42345cad23e59a3145b595639b62aa5c97828017"
+)
+_DIRECT_RELEASE_PUBLIC_KEY_FINGERPRINT = (
+    "SHA256:iCn7wa6HgKdu7luf/16rrKZzSk5FygJoA8EKNl3LJ24"
+)
+_DIRECT_RELEASE_JOBS = (
+    "validate-test",
+    "dispatch-ref-guard",
+    "release-e2e",
+    "release-windows-e2e",
+    "build-artifact",
+    "attest-release-assets",
+    "prepare-draft",
+    "publish-release",
+    "post-publication-verify / verify-published-release",
+)
+_DIRECT_RELEASE_NON_CLAIMS = (
+    "This maintained record is not evoguard-release-ledger-v2 and does not claim protected A-through-H, RSAE, or RAAE evidence for v4.7.1.",
+    "Publication and same-owner verification do not prove behavioral correctness, security, production readiness, deployment, or independent efficacy.",
+    "The record was created after immutable publication and is not part of the v4.7.1 tag, source tree, or release assets.",
+    "Provider-control observations are point-in-time workflow and API observations, not guarantees that mutable repository controls can never change later.",
+)
 _BEGIN_RE = re.compile(r"<!-- BEGIN EVOGUARD_PROJECT_STATUS:([A-Z0-9_]+) -->")
 _END_RE = re.compile(r"<!-- END EVOGUARD_PROJECT_STATUS:([A-Z0-9_]+) -->")
 _MARKER_LINE_RE = re.compile(
@@ -155,6 +195,10 @@ class Status:
     published_unledgered_key_disposition_path: str
     published_unledgered_authorities: tuple[PublishedUnledgeredAuthority, ...]
     pipeline_implementation: str
+    direct_release_record_path: str | None = None
+    direct_release_record_sha256: str | None = None
+    direct_release_signature_path: str | None = None
+    direct_release_signature_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -191,12 +235,35 @@ class PublishedUnledgeredRelease:
 
 
 @dataclass(frozen=True)
+class DirectRelease:
+    version: str
+    tag: str
+    commit_sha: str
+    tree_sha: str
+    tag_object_sha: str
+    release_url: str
+    artifacts: tuple[str, ...]
+    build_signer_workflow: str
+    build_provenance_subjects: tuple[str, ...]
+    sbom_subjects: tuple[str, ...]
+    release_attestation_subjects: tuple[str, ...]
+    record_path: str
+    record_sha256: str
+    signature_path: str
+    signature_sha256: str
+    release_id: int
+    release_body_sha256: str
+    workflow_run_id: int
+
+
+@dataclass(frozen=True)
 class Context:
     status: Status
     ledger: Ledger
     source_version: str
     published_unledgered: PublishedUnledgeredRelease
     published_unledgered_history: tuple[PublishedUnledgeredRelease, ...] = ()
+    direct_release: DirectRelease | None = None
 
 
 @dataclass(frozen=True)
@@ -599,6 +666,92 @@ def _resolve_git(root: Path) -> _TrustedGit:
     )
 
 
+def _resolve_host_tool(root: Path, basename: str) -> _TrustedGit:
+    if re.fullmatch(r"[a-z0-9-]+", basename) is None:
+        raise ProjectStatusError("trusted host-tool name is invalid")
+    blocked = (
+        _absolute(root),
+        _absolute(Path.cwd()),
+        _absolute(Path(tempfile.gettempdir())),
+    )
+    executable_name = f"{basename}.exe" if os.name == "nt" else basename
+    seen: set[str] = set()
+    for raw in os.environ.get("PATH", "").split(os.pathsep):
+        if not raw or raw != raw.strip() or raw.startswith('"') or raw.endswith('"'):
+            continue
+        directory = Path(raw)
+        if not directory.is_absolute():
+            continue
+        directory = _absolute(directory)
+        portable = os.path.normcase(os.fspath(directory))
+        if portable in seen or any(
+            _path_is_within(directory, item) or _path_is_within(item, directory)
+            for item in blocked
+        ):
+            continue
+        seen.add(portable)
+        candidate = directory / executable_name
+        try:
+            data, identity = _read_host_executable(candidate)
+        except ProjectStatusError:
+            continue
+        if os.name != "nt" and not os.access(candidate, os.X_OK):
+            continue
+        return _TrustedGit(
+            path=candidate,
+            data=data,
+            identity=identity,
+            parent_chain=_host_directory_chain(candidate.parent),
+            search_path=os.fspath(directory),
+        )
+    raise ProjectStatusError(
+        f"no trusted {basename} executable exists in an absolute host PATH directory"
+    )
+
+
+def _require_host_tool_unchanged(tool: _TrustedGit, label: str) -> None:
+    data, identity = _read_host_executable(tool.path)
+    if data != tool.data or identity != tool.identity:
+        raise ProjectStatusError(f"trusted {label} executable changed during validation")
+    for current, expected in tool.parent_chain.items():
+        try:
+            metadata = os.lstat(current)
+        except OSError as exc:
+            raise ProjectStatusError(
+                f"cannot re-inspect trusted {label} executable ancestry"
+            ) from exc
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or _is_reparse_point(metadata)
+            or not stat.S_ISDIR(metadata.st_mode)
+            or (metadata.st_dev, metadata.st_ino) != expected
+        ):
+            raise ProjectStatusError(f"trusted {label} executable ancestry changed")
+
+
+def _host_tool_environment(tool: _TrustedGit) -> dict[str, str]:
+    environment = {
+        key: os.environ[key]
+        for key in (
+            "PATHEXT",
+            "SystemRoot",
+            "SYSTEMROOT",
+            "WINDIR",
+            "COMSPEC",
+            "TEMP",
+            "TMP",
+        )
+        if key in os.environ
+    }
+    system_root = environment.get("SystemRoot") or environment.get("SYSTEMROOT")
+    if os.name == "nt" and system_root:
+        program_data = Path(system_root).anchor + "ProgramData"
+        environment["ProgramData"] = program_data
+        environment["PROGRAMDATA"] = program_data
+    environment.update({"PATH": tool.search_path, "LC_ALL": "C", "LANG": "C"})
+    return environment
+
+
 def _require_git_unchanged(git: _TrustedGit) -> None:
     data, identity = _read_host_executable(git.path)
     if data != git.data or identity != git.identity:
@@ -633,6 +786,11 @@ def _git_environment(git: _TrustedGit) -> dict[str, str]:
         )
         if key in os.environ
     }
+    system_root = environment.get("SystemRoot") or environment.get("SYSTEMROOT")
+    if os.name == "nt" and system_root:
+        program_data = Path(system_root).anchor + "ProgramData"
+        environment["ProgramData"] = program_data
+        environment["PROGRAMDATA"] = program_data
     environment.update(
         {
             "PATH": git.search_path,
@@ -725,7 +883,14 @@ def _safe_path(
     return path_absolute
 
 
-def _read_stable_bytes(root: Path, path: Path) -> tuple[bytes, _FileIdentity]:
+def _read_stable_bytes_internal(
+    root: Path,
+    path: Path,
+    *,
+    maximum_bytes: int | None = None,
+) -> tuple[bytes, _FileIdentity]:
+    if maximum_bytes is not None and maximum_bytes < 1:
+        raise ProjectStatusError("stable-read byte bound must be positive")
     safe = _safe_path(root, path, leaf="file")
     try:
         before_metadata = os.lstat(safe)
@@ -742,11 +907,17 @@ def _read_stable_bytes(root: Path, path: Path) -> tuple[bytes, _FileIdentity]:
             before_metadata,
         ):
             raise ProjectStatusError(f"file changed while opening: {safe}")
+        if maximum_bytes is not None and opened.st_size > maximum_bytes:
+            raise ProjectStatusError(f"file exceeds its byte bound: {safe}")
         chunks: list[bytes] = []
+        total = 0
         while True:
             chunk = os.read(descriptor, 1024 * 1024)
             if not chunk:
                 break
+            total += len(chunk)
+            if maximum_bytes is not None and total > maximum_bytes:
+                raise ProjectStatusError(f"file exceeds its byte bound: {safe}")
             chunks.append(chunk)
         after_read = os.fstat(descriptor)
         if _identity(after_read) != _identity(opened):
@@ -767,6 +938,22 @@ def _read_stable_bytes(root: Path, path: Path) -> tuple[bytes, _FileIdentity]:
     return b"".join(chunks), _identity(before_metadata)
 
 
+def _read_stable_bytes(root: Path, path: Path) -> tuple[bytes, _FileIdentity]:
+    return _read_stable_bytes_internal(root, path)
+
+
+def _read_bounded_stable_bytes(
+    root: Path,
+    path: Path,
+    maximum_bytes: int,
+) -> tuple[bytes, _FileIdentity]:
+    return _read_stable_bytes_internal(
+        root,
+        path,
+        maximum_bytes=maximum_bytes,
+    )
+
+
 def _duplicate_safe_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, value in pairs:
@@ -776,6 +963,10 @@ def _duplicate_safe_object(pairs: list[tuple[str, object]]) -> dict[str, object]
     return result
 
 
+def _reject_json_constant(value: str) -> object:
+    raise ProjectStatusError(f"non-finite JSON number is forbidden: {value}")
+
+
 def _load_json_bytes(raw: bytes, path: Path) -> object:
     if raw.startswith(b"\xef\xbb\xbf"):
         raise ProjectStatusError(f"UTF-8 BOM is forbidden: {path}")
@@ -783,7 +974,11 @@ def _load_json_bytes(raw: bytes, path: Path) -> object:
         text = raw.decode("utf-8")
         return cast(
             object,
-            json.loads(text, object_pairs_hook=_duplicate_safe_object),
+            json.loads(
+                text,
+                object_pairs_hook=_duplicate_safe_object,
+                parse_constant=_reject_json_constant,
+            ),
         )
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ProjectStatusError(f"invalid UTF-8 JSON: {path}") from exc
@@ -846,6 +1041,12 @@ def _bounded_text(
 def _positive_integer(value: object, where: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ProjectStatusError(f"{where} must be a positive integer")
+    return value
+
+
+def _nonnegative_integer(value: object, where: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ProjectStatusError(f"{where} must be a non-negative integer")
     return value
 
 
@@ -936,25 +1137,25 @@ def load_status(root: Path, *, raw: bytes | None = None) -> Status:
     if raw is None:
         raw, _ = _read_stable_bytes(root, status_path)
     top = _mapping(_load_json_bytes(raw, status_path), "PROJECT_STATUS.json")
-    _exact_keys(
-        top,
-        "PROJECT_STATUS.json",
-        {
-            "schema_version",
-            "source",
-            "published_release",
-            "release_exceptions",
-            "release_pipeline",
-        },
-    )
     schema_version = _enum(
-        top["schema_version"],
+        top.get("schema_version"),
         "PROJECT_STATUS.json.schema_version",
         {
             "evoguard-project-status-v1",
             "evoguard-project-status-v2",
+            "evoguard-project-status-v3",
         },
     )
+    top_keys = {
+        "schema_version",
+        "source",
+        "published_release",
+        "release_exceptions",
+        "release_pipeline",
+    }
+    if schema_version == "evoguard-project-status-v3":
+        top_keys.add("historical_evidence")
+    _exact_keys(top, "PROJECT_STATUS.json", top_keys)
 
     source = _mapping(top["source"], "source")
     _exact_keys(source, "source", {"lifecycle", "relation_to_latest_release", "architecture"})
@@ -969,7 +1170,60 @@ def load_status(root: Path, *, raw: bytes | None = None) -> Status:
         },
     )
     published = _mapping(top["published_release"], "published_release")
-    _exact_keys(published, "published_release", {"ledger"})
+    direct_record_path: str | None = None
+    direct_record_sha256: str | None = None
+    direct_signature_path: str | None = None
+    direct_signature_sha256: str | None = None
+    if schema_version == "evoguard-project-status-v3":
+        _exact_keys(
+            published,
+            "published_release",
+            {"record", "record_sha256", "signature", "signature_sha256"},
+        )
+        historical = _mapping(top["historical_evidence"], "historical_evidence")
+        _exact_keys(
+            historical,
+            "historical_evidence",
+            {"latest_validated_a_h_ledger"},
+        )
+        ledger_path = _string(
+            historical["latest_validated_a_h_ledger"],
+            "historical_evidence.latest_validated_a_h_ledger",
+        )
+        direct_record_path = _string(
+            published["record"],
+            "published_release.record",
+        )
+        direct_record_sha256 = _string(
+            published["record_sha256"],
+            "published_release.record_sha256",
+        )
+        direct_signature_path = _string(
+            published["signature"],
+            "published_release.signature",
+        )
+        direct_signature_sha256 = _string(
+            published["signature_sha256"],
+            "published_release.signature_sha256",
+        )
+        record_match = _DIRECT_RELEASE_PATH_RE.fullmatch(direct_record_path)
+        signature_match = _DIRECT_RELEASE_SIGNATURE_PATH_RE.fullmatch(
+            direct_signature_path
+        )
+        if (
+            record_match is None
+            or signature_match is None
+            or record_match.group(1) != signature_match.group(1)
+            or direct_signature_path != f"{direct_record_path}.sig"
+            or re.fullmatch(r"[0-9a-f]{64}", direct_record_sha256) is None
+            or re.fullmatch(r"[0-9a-f]{64}", direct_signature_sha256) is None
+        ):
+            raise ProjectStatusError(
+                "published_release direct record authority is not canonical"
+            )
+    else:
+        _exact_keys(published, "published_release", {"ledger"})
+        ledger_path = _string(published["ledger"], "published_release.ledger")
     exceptions = _mapping(top["release_exceptions"], "release_exceptions")
     _exact_keys(exceptions, "release_exceptions", {"published_unledgered"})
     raw_published_unledgered = exceptions["published_unledgered"]
@@ -987,7 +1241,7 @@ def load_status(root: Path, *, raw: bytes | None = None) -> Status:
             <= _MAX_PUBLISHED_UNLEDGERED_EXCEPTIONS
         ):
             raise ProjectStatusError(
-                "project-status v2 requires a bounded non-empty "
+                "project-status v2/v3 requires a bounded non-empty "
                 "published-unledgered list"
             )
         raw_authorities = raw_published_unledgered
@@ -1085,7 +1339,7 @@ def load_status(root: Path, *, raw: bytes | None = None) -> Status:
             "source.architecture.overall_refactor_program",
             {"in-progress", "complete"},
         ),
-        ledger_path=_string(published["ledger"], "published_release.ledger"),
+        ledger_path=ledger_path,
         published_unledgered_record_path=latest_authority.record_path,
         published_unledgered_record_sha256=latest_authority.record_sha256,
         published_unledgered_erratum_path=latest_authority.erratum_path,
@@ -1098,6 +1352,10 @@ def load_status(root: Path, *, raw: bytes | None = None) -> Status:
             "release_pipeline.implementation",
             {"scaffolded", "implemented"},
         ),
+        direct_release_record_path=direct_record_path,
+        direct_release_record_sha256=direct_record_sha256,
+        direct_release_signature_path=direct_signature_path,
+        direct_release_signature_sha256=direct_signature_sha256,
     )
     if (
         _V1_LEDGER_PATH_RE.fullmatch(status.ledger_path) is None
@@ -1108,6 +1366,11 @@ def load_status(root: Path, *, raw: bytes | None = None) -> Status:
         raise ProjectStatusError(
             "the current lifecycle schema supports only source descendants"
         )
+    if (
+        schema_version == "evoguard-project-status-v3"
+        and status.lifecycle != "release-line"
+    ):
+        raise ProjectStatusError("project-status v3 requires lifecycle release-line")
     return status
 
 
@@ -1139,6 +1402,991 @@ def _version_tuple(version: str, *, development: bool = False) -> tuple[int, int
         kind = "development" if development else "stable"
         raise ProjectStatusError(f"invalid canonical {kind} version: {version!r}")
     return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+
+
+def _canonical_sha1(value: object, where: str) -> str:
+    result = _string(value, where)
+    if re.fullmatch(r"[0-9a-f]{40}", result) is None:
+        raise ProjectStatusError(f"{where} must be a lowercase SHA-1")
+    return result
+
+
+def _canonical_sha256(value: object, where: str) -> str:
+    result = _string(value, where)
+    if re.fullmatch(r"[0-9a-f]{64}", result) is None:
+        raise ProjectStatusError(f"{where} must be a lowercase SHA-256")
+    return result
+
+
+def _exact_string_list(
+    value: object,
+    where: str,
+    expected: Sequence[str],
+) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        raise ProjectStatusError(f"{where} must be an array")
+    actual = tuple(_string(item, f"{where}[{index}]") for index, item in enumerate(value))
+    if actual != tuple(expected):
+        raise ProjectStatusError(f"{where} differs from the exact ordered contract")
+    return actual
+
+
+def _direct_release_bot(value: object, where: str) -> None:
+    actor = _mapping(value, where)
+    _exact_keys(actor, where, {"login", "id", "type"})
+    if (
+        actor["login"] != "github-actions[bot]"
+        or _positive_integer(actor["id"], f"{where}.id") != 41898282
+        or actor["type"] != "Bot"
+    ):
+        raise ProjectStatusError(f"{where} is not the recorded GitHub Actions bot")
+
+
+def _direct_release_owner(value: object, where: str) -> None:
+    actor = _mapping(value, where)
+    _exact_keys(actor, where, {"login", "id"})
+    if (
+        actor["login"] != "EvoRiseKsa"
+        or _positive_integer(actor["id"], f"{where}.id") != 231647061
+    ):
+        raise ProjectStatusError(f"{where} is not the recorded repository owner")
+
+
+def _ssh_public_key_fingerprint(public_key: bytes) -> str:
+    if public_key.startswith(b"\xef\xbb\xbf") or b"\r" in public_key:
+        raise ProjectStatusError("direct-release maintainer public key is not canonical")
+    fields = public_key.strip().split()
+    if len(fields) < 2 or fields[0] != b"ssh-ed25519":
+        raise ProjectStatusError("direct-release maintainer public key is not Ed25519")
+    try:
+        blob = base64.b64decode(fields[1], validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ProjectStatusError("direct-release maintainer public key is malformed") from exc
+    fingerprint = base64.b64encode(hashlib.sha256(blob).digest()).rstrip(b"=").decode("ascii")
+    return f"SHA256:{fingerprint}"
+
+
+def _verify_direct_release_signature(
+    root: Path,
+    record_bytes: bytes,
+    signature_bytes: bytes,
+    public_key_bytes: bytes,
+) -> None:
+    if not record_bytes or len(record_bytes) > _MAX_DIRECT_RELEASE_RECORD_BYTES:
+        raise ProjectStatusError("direct-release record exceeds its signature byte bound")
+    if (
+        b"\r" in signature_bytes
+        or not signature_bytes.startswith(b"-----BEGIN SSH SIGNATURE-----\n")
+        or not signature_bytes.endswith(b"-----END SSH SIGNATURE-----\n")
+        or len(signature_bytes) > _MAX_DIRECT_RELEASE_SIGNATURE_BYTES
+    ):
+        raise ProjectStatusError("direct-release detached signature is not canonical SSHSIG")
+    tool = _resolve_host_tool(root, "ssh-keygen")
+    _require_host_tool_unchanged(tool, "ssh-keygen")
+    with tempfile.TemporaryDirectory(prefix="evoguard-direct-release-") as temporary:
+        allowed_signers = Path(temporary) / "allowed_signers"
+        try:
+            with allowed_signers.open("xb") as stream:
+                stream.write(b"EvoRiseKsa " + public_key_bytes.strip() + b"\n")
+        except OSError as exc:
+            raise ProjectStatusError("cannot materialize direct-release allowed signers") from exc
+        signature = Path(temporary) / "DIRECT_RELEASE.json.sig"
+        try:
+            with signature.open("xb") as stream:
+                stream.write(signature_bytes)
+        except OSError as exc:
+            raise ProjectStatusError("cannot materialize direct-release signature") from exc
+        try:
+            result = subprocess.run(
+                [
+                    os.fspath(tool.path),
+                    "-Y",
+                    "verify",
+                    "-q",
+                    "-f",
+                    os.fspath(allowed_signers),
+                    "-I",
+                    "EvoRiseKsa",
+                    "-n",
+                    "git",
+                    "-s",
+                    os.fspath(signature),
+                ],
+                cwd=temporary,
+                input=record_bytes,
+                check=False,
+                capture_output=True,
+                timeout=30,
+                env=_host_tool_environment(tool),
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ProjectStatusError("direct-release signature verification could not complete") from exc
+        if len(result.stdout) + len(result.stderr) > 64 * 1024:
+            raise ProjectStatusError("direct-release signature verification produced excessive output")
+        if result.returncode != 0:
+            raise ProjectStatusError("direct-release detached maintainer signature is invalid")
+    _require_host_tool_unchanged(tool, "ssh-keygen")
+
+
+def _version_from_init_bytes(raw: bytes, where: str) -> str:
+    if raw.startswith(b"\xef\xbb\xbf") or b"\r" in raw:
+        raise ProjectStatusError(f"{where} is not canonical UTF-8 source")
+    try:
+        tree = ast.parse(raw.decode("utf-8"), filename=where)
+    except (UnicodeDecodeError, SyntaxError) as exc:
+        raise ProjectStatusError(f"cannot parse {where}") from exc
+    versions: list[str] = []
+    for statement in tree.body:
+        if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+        if not any(isinstance(target, ast.Name) and target.id == "__version__" for target in targets):
+            continue
+        value = statement.value
+        if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+            raise ProjectStatusError(f"{where} __version__ is not one literal string")
+        versions.append(value.value)
+    if len(versions) != 1:
+        raise ProjectStatusError(f"{where} must contain exactly one __version__")
+    return versions[0]
+
+
+def _verify_direct_release_git_bindings(
+    root: Path,
+    release: DirectRelease,
+    *,
+    trusted_head: str,
+    public_key_bytes: bytes,
+    workflow_blob_sha: str,
+    workflow_sha256: str,
+    verifier_blob_sha: str,
+    verifier_sha256: str,
+) -> None:
+    _git(root, "merge-base", "--is-ancestor", release.commit_sha, trusted_head)
+    tag_object = _git(root, "rev-parse", "--verify", f"refs/tags/{release.tag}")
+    tag_type = _git(root, "cat-file", "-t", tag_object)
+    tagged_commit = _git(
+        root,
+        "rev-parse",
+        "--verify",
+        f"refs/tags/{release.tag}^{{commit}}",
+    )
+    commit_tree = _git(root, "rev-parse", "--verify", f"{release.commit_sha}^{{tree}}")
+    if (
+        tag_object != release.tag_object_sha
+        or tag_type != "tag"
+        or tagged_commit != release.commit_sha
+        or commit_tree != release.tree_sha
+    ):
+        raise ProjectStatusError("direct-release source/tag identity differs from Git")
+    ssh_tool = _resolve_host_tool(root, "ssh-keygen")
+    _require_host_tool_unchanged(ssh_tool, "ssh-keygen")
+    with tempfile.TemporaryDirectory(prefix="evoguard-direct-tag-") as temporary:
+        allowed_signers = Path(temporary) / "allowed_signers"
+        try:
+            with allowed_signers.open("xb") as stream:
+                stream.write(b"EvoRiseKsa " + public_key_bytes.strip() + b"\n")
+        except OSError as exc:
+            raise ProjectStatusError(
+                "cannot materialize direct-release tag allowed signers"
+            ) from exc
+        _git(
+            root,
+            "-c",
+            "gpg.format=ssh",
+            "-c",
+            f"gpg.ssh.allowedSignersFile={allowed_signers}",
+            "-c",
+            f"gpg.ssh.program={ssh_tool.path}",
+            "verify-tag",
+            tag_object,
+        )
+    _require_host_tool_unchanged(ssh_tool, "ssh-keygen")
+    source_init = _git_bytes(root, "show", f"{release.commit_sha}:evoom_guard/__init__.py")
+    if _version_from_init_bytes(source_init, "direct-release source __init__.py") != release.version:
+        raise ProjectStatusError("direct-release version differs from its source commit")
+    for relative, expected_blob, expected_sha256 in (
+        (_RELEASE_SPEC.path, workflow_blob_sha, workflow_sha256),
+        (_RELEASE_PUBLISHED_VERIFY_PATH, verifier_blob_sha, verifier_sha256),
+    ):
+        blob = _git(root, "rev-parse", "--verify", f"{release.commit_sha}:{relative}")
+        data = _git_bytes(root, "show", f"{release.commit_sha}:{relative}")
+        if blob != expected_blob or hashlib.sha256(data).hexdigest() != expected_sha256:
+            raise ProjectStatusError(f"direct-release workflow identity differs from Git: {relative}")
+    if _git(root, "ls-tree", release.commit_sha, "--", release.record_path):
+        raise ProjectStatusError("direct-release record unexpectedly exists in its release tag")
+    if _git(root, "ls-tree", release.commit_sha, "--", release.signature_path):
+        raise ProjectStatusError("direct-release signature unexpectedly exists in its release tag")
+
+
+def _load_direct_release(
+    root: Path,
+    status: Status,
+    source_version: str,
+    *,
+    verify_git: bool,
+    trusted_head: str | None = None,
+) -> DirectRelease:
+    record_relative = status.direct_release_record_path
+    record_expected_sha256 = status.direct_release_record_sha256
+    signature_relative = status.direct_release_signature_path
+    signature_expected_sha256 = status.direct_release_signature_sha256
+    if (
+        status.schema_version != "evoguard-project-status-v3"
+        or record_relative is None
+        or record_expected_sha256 is None
+        or signature_relative is None
+        or signature_expected_sha256 is None
+    ):
+        raise ProjectStatusError("direct-release authority requires project-status v3")
+    if verify_git and (
+        trusted_head is None or re.fullmatch(r"[0-9a-f]{40}", trusted_head) is None
+    ):
+        raise ProjectStatusError("direct-release Git verification requires a frozen HEAD")
+
+    record_path = root / record_relative
+    signature_path = root / signature_relative
+    record_bytes, _ = _read_bounded_stable_bytes(
+        root,
+        record_path,
+        _MAX_DIRECT_RELEASE_RECORD_BYTES,
+    )
+    signature_bytes, _ = _read_bounded_stable_bytes(
+        root,
+        signature_path,
+        _MAX_DIRECT_RELEASE_SIGNATURE_BYTES,
+    )
+    if hashlib.sha256(record_bytes).hexdigest() != record_expected_sha256:
+        raise ProjectStatusError("direct-release record bytes differ from PROJECT_STATUS.json")
+    if hashlib.sha256(signature_bytes).hexdigest() != signature_expected_sha256:
+        raise ProjectStatusError("direct-release signature bytes differ from PROJECT_STATUS.json")
+
+    record = _mapping(_load_json_bytes(record_bytes, record_path), "direct-release record")
+    _exact_keys(
+        record,
+        "direct-release record",
+        {
+            "schema_version",
+            "recorded_utc",
+            "record_scope",
+            "maintainer_signature_contract",
+            "repository",
+            "source",
+            "tag",
+            "release",
+            "assets",
+            "workflow",
+            "prepublication",
+            "verification_observations",
+            "provider_control_observation",
+            "historical_evidence",
+            "trust_boundary",
+        },
+    )
+    if record["schema_version"] != "evoguard-direct-release-record-v1":
+        raise ProjectStatusError("direct-release record has unsupported schema")
+    if record["record_scope"] != (
+        "Maintained same-owner post-publication record for simple-release-v1; "
+        "not a release ledger, independent review, or substitute for either."
+    ):
+        raise ProjectStatusError("direct-release record overstates its scope")
+    recorded_utc = _canonical_utc(record["recorded_utc"], "direct-release recorded_utc")
+
+    signature_contract = _mapping(
+        record["maintainer_signature_contract"],
+        "direct-release maintainer_signature_contract",
+    )
+    _exact_keys(
+        signature_contract,
+        "direct-release maintainer_signature_contract",
+        {
+            "purpose",
+            "identity",
+            "namespace",
+            "signature_path",
+            "public_key_path",
+            "public_key_metadata_path",
+            "public_key_sha256",
+            "public_key_metadata_sha256",
+            "public_key_fingerprint",
+        },
+    )
+    if signature_contract != {
+        "purpose": (
+            "Authenticate the exact maintained post-publication record bytes without "
+            "upgrading same-owner observations into independent release evidence."
+        ),
+        "identity": "EvoRiseKsa",
+        "namespace": "git",
+        "signature_path": signature_relative,
+        "public_key_path": _DIRECT_RELEASE_PUBLIC_KEY_PATH,
+        "public_key_metadata_path": _DIRECT_RELEASE_PUBLIC_KEY_METADATA_PATH,
+        "public_key_sha256": _DIRECT_RELEASE_PUBLIC_KEY_SHA256,
+        "public_key_metadata_sha256": _DIRECT_RELEASE_PUBLIC_KEY_METADATA_SHA256,
+        "public_key_fingerprint": _DIRECT_RELEASE_PUBLIC_KEY_FINGERPRINT,
+    }:
+        raise ProjectStatusError("direct-release maintainer signature contract differs")
+
+    public_key_path = root / _DIRECT_RELEASE_PUBLIC_KEY_PATH
+    public_key_metadata_path = root / _DIRECT_RELEASE_PUBLIC_KEY_METADATA_PATH
+    public_key_bytes, _ = _read_bounded_stable_bytes(
+        root,
+        public_key_path,
+        16 * 1024,
+    )
+    public_key_metadata_bytes, _ = _read_bounded_stable_bytes(
+        root,
+        public_key_metadata_path,
+        64 * 1024,
+    )
+    if hashlib.sha256(public_key_bytes).hexdigest() != _DIRECT_RELEASE_PUBLIC_KEY_SHA256:
+        raise ProjectStatusError("direct-release public key bytes differ from the contract")
+    if (
+        hashlib.sha256(public_key_metadata_bytes).hexdigest()
+        != _DIRECT_RELEASE_PUBLIC_KEY_METADATA_SHA256
+    ):
+        raise ProjectStatusError("direct-release public-key metadata differs from the contract")
+    if _ssh_public_key_fingerprint(public_key_bytes) != _DIRECT_RELEASE_PUBLIC_KEY_FINGERPRINT:
+        raise ProjectStatusError("direct-release public-key fingerprint differs")
+    public_key_metadata = _mapping(
+        _load_json_bytes(public_key_metadata_bytes, public_key_metadata_path),
+        "direct-release public-key metadata",
+    )
+    _exact_keys(
+        public_key_metadata,
+        "direct-release public-key metadata",
+        {
+            "format",
+            "version",
+            "github_login",
+            "github_user_id",
+            "key_type",
+            "public_key_path",
+            "public_key_sha256",
+            "provided_source_file_sha256_crlf",
+            "public_key_fingerprint",
+            "signature_namespace",
+            "private_key_location",
+            "github_verification_required",
+        },
+    )
+    if (
+        public_key_metadata["format"] != "EVOGUARD_RELEASE_MAINTAINER_SIGNING_ROOT_V1"
+        or public_key_metadata["version"] != "4.7.0"
+        or public_key_metadata["github_login"] != "EvoRiseKsa"
+        or public_key_metadata["github_user_id"] != 231647061
+        or public_key_metadata["key_type"] != "ssh-ed25519"
+        or public_key_metadata["public_key_path"] != _DIRECT_RELEASE_PUBLIC_KEY_PATH
+        or public_key_metadata["public_key_sha256"] != _DIRECT_RELEASE_PUBLIC_KEY_SHA256
+        or re.fullmatch(
+            r"[0-9a-f]{64}",
+            _string(
+                public_key_metadata["provided_source_file_sha256_crlf"],
+                "direct-release public-key metadata provided digest",
+            ),
+        )
+        is None
+        or public_key_metadata["public_key_fingerprint"]
+        != _DIRECT_RELEASE_PUBLIC_KEY_FINGERPRINT
+        or public_key_metadata["signature_namespace"] != "git"
+        or public_key_metadata["private_key_location"]
+        != "OUTSIDE_REPOSITORY_AND_GITHUB_ACTIONS"
+        or public_key_metadata["github_verification_required"] is not True
+    ):
+        raise ProjectStatusError("direct-release public-key metadata is inconsistent")
+    _verify_direct_release_signature(
+        root,
+        record_bytes,
+        signature_bytes,
+        public_key_bytes,
+    )
+
+    repository = _mapping(record["repository"], "direct-release repository")
+    _exact_keys(
+        repository,
+        "direct-release repository",
+        {"name", "repository_id", "owner_login", "owner_id"},
+    )
+    if (
+        repository["name"] != "EvoRiseKsa/EvoOM-Guard-m"
+        or _positive_integer(repository["repository_id"], "direct-release repository_id")
+        != 1293651176
+        or repository["owner_login"] != "EvoRiseKsa"
+        or _positive_integer(repository["owner_id"], "direct-release owner_id")
+        != 231647061
+    ):
+        raise ProjectStatusError("direct-release repository identity differs")
+
+    source = _mapping(record["source"], "direct-release source")
+    _exact_keys(
+        source,
+        "direct-release source",
+        {"version", "commit_sha", "tree_sha", "ref", "github_verification"},
+    )
+    version = _string(source["version"], "direct-release source.version")
+    _version_tuple(version)
+    record_match = _DIRECT_RELEASE_PATH_RE.fullmatch(record_relative)
+    if record_match is None or record_match.group(1) != version:
+        raise ProjectStatusError("direct-release path version differs from source")
+    commit_sha = _canonical_sha1(source["commit_sha"], "direct-release source.commit_sha")
+    tree_sha = _canonical_sha1(source["tree_sha"], "direct-release source.tree_sha")
+    source_verification = _mapping(
+        source["github_verification"],
+        "direct-release source.github_verification",
+    )
+    _exact_keys(
+        source_verification,
+        "direct-release source.github_verification",
+        {"verified", "reason"},
+    )
+    if (
+        source["ref"] != "refs/heads/main"
+        or source_verification != {"verified": True, "reason": "valid"}
+    ):
+        raise ProjectStatusError("direct-release source verification is not valid")
+
+    tag_object = _mapping(record["tag"], "direct-release tag")
+    _exact_keys(
+        tag_object,
+        "direct-release tag",
+        {
+            "name",
+            "object_type",
+            "object_sha",
+            "target_type",
+            "target_sha",
+            "github_verification",
+            "maintainer_key_fingerprint",
+        },
+    )
+    tag = _string(tag_object["name"], "direct-release tag.name")
+    tag_object_sha = _canonical_sha1(
+        tag_object["object_sha"],
+        "direct-release tag.object_sha",
+    )
+    tag_verification = _mapping(
+        tag_object["github_verification"],
+        "direct-release tag.github_verification",
+    )
+    _exact_keys(
+        tag_verification,
+        "direct-release tag.github_verification",
+        {"verified", "reason"},
+    )
+    if (
+        tag != f"v{version}"
+        or tag_object["object_type"] != "tag"
+        or tag_object["target_type"] != "commit"
+        or tag_object["target_sha"] != commit_sha
+        or tag_verification != {"verified": True, "reason": "valid"}
+        or tag_object["maintainer_key_fingerprint"]
+        != _DIRECT_RELEASE_PUBLIC_KEY_FINGERPRINT
+    ):
+        raise ProjectStatusError("direct-release tag identity is not cross-bound")
+
+    release_object = _mapping(record["release"], "direct-release release")
+    _exact_keys(
+        release_object,
+        "direct-release release",
+        {
+            "release_id",
+            "name",
+            "tag",
+            "target_commit_sha",
+            "draft",
+            "prerelease",
+            "immutable",
+            "created_utc",
+            "created_utc_semantics",
+            "published_utc",
+            "release_url",
+            "body_sha256",
+            "body_sha256_semantics",
+            "author",
+        },
+    )
+    release_id = _positive_integer(release_object["release_id"], "direct-release release_id")
+    created_utc = _canonical_utc(release_object["created_utc"], "direct-release created_utc")
+    published_utc = _canonical_utc(
+        release_object["published_utc"],
+        "direct-release published_utc",
+    )
+    release_url = _string(release_object["release_url"], "direct-release release_url")
+    release_body_sha256 = _canonical_sha256(
+        release_object["body_sha256"],
+        "direct-release release.body_sha256",
+    )
+    body_sha256_semantics = (
+        "SHA-256 of the exact release body encoded as a canonical JSON string followed "
+        "by LF, matching the workflow output-digest contract; not the hash of raw body "
+        "text alone."
+    )
+    if (
+        release_object["name"] != tag
+        or release_object["tag"] != tag
+        or release_object["target_commit_sha"] != commit_sha
+        or release_object["draft"] is not False
+        or release_object["prerelease"] is not False
+        or release_object["immutable"] is not True
+        or release_object["created_utc_semantics"]
+        != (
+            "Exact GitHub Releases API created_at value; target-commit metadata, not "
+            "draft creation or publication time."
+        )
+        or release_url
+        != f"https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/{tag}"
+        or release_object["body_sha256_semantics"] != body_sha256_semantics
+        or created_utc > published_utc
+        or published_utc > recorded_utc
+    ):
+        raise ProjectStatusError("direct-release publication identity is inconsistent")
+    _direct_release_bot(release_object["author"], "direct-release release.author")
+
+    raw_assets = record["assets"]
+    if not isinstance(raw_assets, list) or len(raw_assets) != len(_PIPELINE_ASSETS):
+        raise ProjectStatusError("direct-release assets must be the exact ordered set")
+    asset_ids: list[int] = []
+    asset_digests: list[str] = []
+    for index, raw_asset in enumerate(raw_assets):
+        where = f"direct-release assets[{index}]"
+        asset = _mapping(raw_asset, where)
+        _exact_keys(
+            asset,
+            where,
+            {
+                "name",
+                "asset_id",
+                "size",
+                "sha256",
+                "content_type",
+                "label",
+                "state",
+                "uploader",
+                "url",
+            },
+        )
+        name = _string(asset["name"], f"{where}.name")
+        asset_id = _positive_integer(asset["asset_id"], f"{where}.asset_id")
+        _positive_integer(asset["size"], f"{where}.size")
+        digest = _canonical_sha256(asset["sha256"], f"{where}.sha256")
+        if (
+            name != _PIPELINE_ASSETS[index]
+            or asset["content_type"] != "application/octet-stream"
+            or asset["label"] != ""
+            or asset["state"] != "uploaded"
+            or asset["url"]
+            != (
+                "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/"
+                f"{tag}/{name}"
+            )
+        ):
+            raise ProjectStatusError(f"{where} identity is inconsistent")
+        _direct_release_bot(asset["uploader"], f"{where}.uploader")
+        asset_ids.append(asset_id)
+        asset_digests.append(digest)
+    if len(set(asset_ids)) != len(asset_ids) or len(set(asset_digests)) != len(asset_digests):
+        raise ProjectStatusError("direct-release asset IDs and digests must be unique")
+
+    workflow = _mapping(record["workflow"], "direct-release workflow")
+    _exact_keys(
+        workflow,
+        "direct-release workflow",
+        {
+            "contract",
+            "run_id",
+            "run_attempt",
+            "workflow_id",
+            "workflow_path",
+            "workflow_blob_sha",
+            "workflow_sha256",
+            "verifier_path",
+            "verifier_blob_sha",
+            "verifier_sha256",
+            "event",
+            "ref",
+            "head_sha",
+            "actor",
+            "triggering_actor",
+            "conclusion",
+            "jobs",
+            "deployments",
+        },
+    )
+    workflow_run_id = _positive_integer(workflow["run_id"], "direct-release workflow.run_id")
+    _positive_integer(workflow["run_attempt"], "direct-release workflow.run_attempt")
+    _positive_integer(workflow["workflow_id"], "direct-release workflow.workflow_id")
+    workflow_blob_sha = _canonical_sha1(
+        workflow["workflow_blob_sha"],
+        "direct-release workflow.workflow_blob_sha",
+    )
+    workflow_sha256 = _canonical_sha256(
+        workflow["workflow_sha256"],
+        "direct-release workflow.workflow_sha256",
+    )
+    verifier_blob_sha = _canonical_sha1(
+        workflow["verifier_blob_sha"],
+        "direct-release workflow.verifier_blob_sha",
+    )
+    verifier_sha256 = _canonical_sha256(
+        workflow["verifier_sha256"],
+        "direct-release workflow.verifier_sha256",
+    )
+    if (
+        workflow["contract"] != "simple-release-v1"
+        or workflow["run_attempt"] != 1
+        or workflow["workflow_path"] != _RELEASE_SPEC.path
+        or workflow_sha256 != _RELEASE_SPEC.reviewed_sha256
+        or workflow["verifier_path"] != _RELEASE_PUBLISHED_VERIFY_PATH
+        or verifier_sha256 != _RELEASE_PUBLISHED_VERIFY_SHA256
+        or workflow["event"] != "workflow_dispatch"
+        or workflow["ref"] != "refs/heads/main"
+        or workflow["head_sha"] != commit_sha
+        or workflow["conclusion"] != "success"
+    ):
+        raise ProjectStatusError("direct-release workflow identity is inconsistent")
+    _direct_release_owner(workflow["actor"], "direct-release workflow.actor")
+    _direct_release_owner(
+        workflow["triggering_actor"],
+        "direct-release workflow.triggering_actor",
+    )
+    raw_jobs = workflow["jobs"]
+    if not isinstance(raw_jobs, list) or len(raw_jobs) != len(_DIRECT_RELEASE_JOBS):
+        raise ProjectStatusError("direct-release jobs must be the exact ordered job set")
+    job_ids: list[int] = []
+    for index, raw_job in enumerate(raw_jobs):
+        where = f"direct-release workflow.jobs[{index}]"
+        job = _mapping(raw_job, where)
+        _exact_keys(job, where, {"name", "job_id", "conclusion"})
+        if job["name"] != _DIRECT_RELEASE_JOBS[index] or job["conclusion"] != "success":
+            raise ProjectStatusError(f"{where} differs from the successful workflow contract")
+        job_ids.append(_positive_integer(job["job_id"], f"{where}.job_id"))
+    if len(set(job_ids)) != len(job_ids):
+        raise ProjectStatusError("direct-release workflow job IDs are not unique")
+    raw_deployments = workflow["deployments"]
+    expected_environments = (
+        "evoguard-release-draft",
+        "evoguard-release-publication",
+    )
+    if not isinstance(raw_deployments, list) or len(raw_deployments) != 2:
+        raise ProjectStatusError("direct-release deployments must be the exact environment pair")
+    deployment_ids: list[int] = []
+    environment_ids: list[int] = []
+    status_ids: list[int] = []
+    for index, raw_deployment in enumerate(raw_deployments):
+        where = f"direct-release workflow.deployments[{index}]"
+        deployment = _mapping(raw_deployment, where)
+        _exact_keys(
+            deployment,
+            where,
+            {
+                "environment",
+                "environment_id",
+                "deployment_id",
+                "terminal_status_id",
+                "terminal_state",
+            },
+        )
+        if (
+            deployment["environment"] != expected_environments[index]
+            or deployment["terminal_state"] != "success"
+        ):
+            raise ProjectStatusError(f"{where} is not the expected successful deployment")
+        environment_ids.append(
+            _positive_integer(deployment["environment_id"], f"{where}.environment_id")
+        )
+        deployment_ids.append(
+            _positive_integer(deployment["deployment_id"], f"{where}.deployment_id")
+        )
+        status_ids.append(
+            _positive_integer(
+                deployment["terminal_status_id"],
+                f"{where}.terminal_status_id",
+            )
+        )
+    if any(len(set(values)) != len(values) for values in (environment_ids, deployment_ids, status_ids)):
+        raise ProjectStatusError("direct-release deployment identities are not unique")
+
+    prepublication = _mapping(record["prepublication"], "direct-release prepublication")
+    _exact_keys(prepublication, "direct-release prepublication", {"tag_ci", "action_smoke"})
+    prepublication_run_ids: list[int] = []
+    for name in ("tag_ci", "action_smoke"):
+        where = f"direct-release prepublication.{name}"
+        observation = _mapping(prepublication[name], where)
+        _exact_keys(
+            observation,
+            where,
+            {
+                "run_id",
+                "workflow_id",
+                "head_sha",
+                "ref",
+                "run_attempt",
+                "conclusion",
+                "successful_jobs",
+                "total_jobs",
+            },
+        )
+        run_id = _positive_integer(observation["run_id"], f"{where}.run_id")
+        _positive_integer(observation["workflow_id"], f"{where}.workflow_id")
+        _positive_integer(observation["run_attempt"], f"{where}.run_attempt")
+        successful_jobs = _positive_integer(
+            observation["successful_jobs"],
+            f"{where}.successful_jobs",
+        )
+        total_jobs = _positive_integer(observation["total_jobs"], f"{where}.total_jobs")
+        if (
+            observation["head_sha"] != commit_sha
+            or observation["ref"] != f"refs/tags/{tag}"
+            or observation["run_attempt"] != 1
+            or observation["conclusion"] != "success"
+            or successful_jobs != total_jobs
+        ):
+            raise ProjectStatusError(f"{where} is not cross-bound to the release")
+        prepublication_run_ids.append(run_id)
+    if len(set(prepublication_run_ids + [workflow_run_id])) != 3:
+        raise ProjectStatusError("direct-release workflow run IDs are not unique")
+
+    observations = _mapping(
+        record["verification_observations"],
+        "direct-release verification_observations",
+    )
+    _exact_keys(
+        observations,
+        "direct-release verification_observations",
+        {"release_attestation", "provider_attestation_job", "post_publication_byte_readback"},
+    )
+    release_attestation = _mapping(
+        observations["release_attestation"],
+        "direct-release release_attestation",
+    )
+    _exact_keys(
+        release_attestation,
+        "direct-release release_attestation",
+        {"verified", "command", "subjects"},
+    )
+    release_subjects = _exact_string_list(
+        release_attestation["subjects"],
+        "direct-release release_attestation.subjects",
+        _PIPELINE_ASSETS,
+    )
+    if (
+        release_attestation["verified"] is not True
+        or release_attestation["command"]
+        != f"gh release verify {tag} --repo EvoRiseKsa/EvoOM-Guard-m"
+    ):
+        raise ProjectStatusError("direct-release release attestation is not verified")
+    provider_attestation = _mapping(
+        observations["provider_attestation_job"],
+        "direct-release provider_attestation_job",
+    )
+    _exact_keys(
+        provider_attestation,
+        "direct-release provider_attestation_job",
+        {"conclusion", "build_provenance_subjects", "sbom_subjects", "signer_workflow"},
+    )
+    build_subjects = _exact_string_list(
+        provider_attestation["build_provenance_subjects"],
+        "direct-release build_provenance_subjects",
+        ("evo-guard.pyz",),
+    )
+    sbom_subjects = _exact_string_list(
+        provider_attestation["sbom_subjects"],
+        "direct-release sbom_subjects",
+        ("evo-guard.pyz",),
+    )
+    if (
+        provider_attestation["conclusion"] != "success"
+        or provider_attestation["signer_workflow"] != _RELEASE_SPEC.path
+    ):
+        raise ProjectStatusError("direct-release provider attestation is inconsistent")
+    readback = _mapping(
+        observations["post_publication_byte_readback"],
+        "direct-release post_publication_byte_readback",
+    )
+    _exact_keys(
+        readback,
+        "direct-release post_publication_byte_readback",
+        {
+            "verified",
+            "release_id",
+            "release_body_sha256",
+            "release_body_sha256_semantics",
+            "asset_ids",
+            "asset_sha256",
+            "sha256sums_lines",
+        },
+    )
+    if not isinstance(readback["asset_ids"], list) or any(
+        isinstance(value, bool) or not isinstance(value, int)
+        for value in readback["asset_ids"]
+    ):
+        raise ProjectStatusError("direct-release readback asset IDs must be integers")
+    readback_digests = _exact_string_list(
+        readback["asset_sha256"],
+        "direct-release readback asset_sha256",
+        asset_digests,
+    )
+    expected_sums_lines = (
+        f"{asset_digests[0]}  {_PIPELINE_ASSETS[0]}",
+        f"{asset_digests[1]}  {_PIPELINE_ASSETS[1]}",
+    )
+    _exact_string_list(
+        readback["sha256sums_lines"],
+        "direct-release readback sha256sums_lines",
+        expected_sums_lines,
+    )
+    expected_sums_bytes = ("\n".join(expected_sums_lines) + "\n").encode("utf-8")
+    if hashlib.sha256(expected_sums_bytes).hexdigest() != asset_digests[2]:
+        raise ProjectStatusError(
+            "direct-release SHA256SUMS bytes do not match the recorded asset digest"
+        )
+    if (
+        readback["verified"] is not True
+        or readback["release_id"] != release_id
+        or readback["release_body_sha256"] != release_body_sha256
+        or readback["release_body_sha256_semantics"] != body_sha256_semantics
+        or tuple(readback["asset_ids"]) != tuple(asset_ids)
+        or readback_digests != tuple(asset_digests)
+    ):
+        raise ProjectStatusError("direct-release byte readback is not cross-bound")
+
+    controls = _mapping(
+        record["provider_control_observation"],
+        "direct-release provider_control_observation",
+    )
+    _exact_keys(
+        controls,
+        "direct-release provider_control_observation",
+        {"observed_utc", "immutable_releases_enabled", "main_ruleset", "tag_ruleset"},
+    )
+    observed_utc = _canonical_utc(controls["observed_utc"], "direct-release controls.observed_utc")
+    main_ruleset = _mapping(controls["main_ruleset"], "direct-release main_ruleset")
+    _exact_keys(main_ruleset, "direct-release main_ruleset", {"id", "name", "enforcement", "bypass_actor_count"})
+    tag_ruleset = _mapping(controls["tag_ruleset"], "direct-release tag_ruleset")
+    _exact_keys(
+        tag_ruleset,
+        "direct-release tag_ruleset",
+        {"id", "name", "enforcement", "bypass_actor_type", "active_deploy_key_count"},
+    )
+    if (
+        controls["immutable_releases_enabled"] is not True
+        or observed_utc < published_utc
+        or observed_utc > recorded_utc
+        or _positive_integer(main_ruleset["id"], "direct-release main_ruleset.id") != 21771015
+        or main_ruleset["name"] != "EvoOM Guard main signed-source authority"
+        or main_ruleset["enforcement"] != "active"
+        or _nonnegative_integer(
+            main_ruleset["bypass_actor_count"],
+            "direct-release main_ruleset.bypass_actor_count",
+        )
+        != 0
+        or _positive_integer(tag_ruleset["id"], "direct-release tag_ruleset.id") != 21997528
+        or tag_ruleset["name"] != "EvoOM Guard release tag authority"
+        or tag_ruleset["enforcement"] != "active"
+        or tag_ruleset["bypass_actor_type"] != "DeployKey"
+        or _nonnegative_integer(
+            tag_ruleset["active_deploy_key_count"],
+            "direct-release tag_ruleset.active_deploy_key_count",
+        )
+        != 0
+    ):
+        raise ProjectStatusError("direct-release point-in-time controls are inconsistent")
+
+    historical = _mapping(record["historical_evidence"], "direct-release historical_evidence")
+    _exact_keys(
+        historical,
+        "direct-release historical_evidence",
+        {"latest_validated_a_h_ledger", "applies_to_this_release"},
+    )
+    if (
+        historical["latest_validated_a_h_ledger"] != status.ledger_path
+        or historical["applies_to_this_release"] is not False
+    ):
+        raise ProjectStatusError("direct-release historical ledger boundary is inconsistent")
+
+    trust = _mapping(record["trust_boundary"], "direct-release trust_boundary")
+    _exact_keys(
+        trust,
+        "direct-release trust_boundary",
+        {
+            "same_owner_operation",
+            "independent_review",
+            "record_included_in_release_tag",
+            "record_included_in_release_assets",
+            "non_claims",
+        },
+    )
+    _exact_string_list(
+        trust["non_claims"],
+        "direct-release trust_boundary.non_claims",
+        _DIRECT_RELEASE_NON_CLAIMS,
+    )
+    if (
+        trust["same_owner_operation"] is not True
+        or trust["independent_review"] is not False
+        or trust["record_included_in_release_tag"] is not False
+        or trust["record_included_in_release_assets"] is not False
+    ):
+        raise ProjectStatusError("direct-release trust boundary is contradictory")
+
+    result = DirectRelease(
+        version=version,
+        tag=tag,
+        commit_sha=commit_sha,
+        tree_sha=tree_sha,
+        tag_object_sha=tag_object_sha,
+        release_url=release_url,
+        artifacts=tuple(_PIPELINE_ASSETS),
+        build_signer_workflow=_RELEASE_SPEC.path,
+        build_provenance_subjects=build_subjects,
+        sbom_subjects=sbom_subjects,
+        release_attestation_subjects=release_subjects,
+        record_path=record_relative,
+        record_sha256=record_expected_sha256,
+        signature_path=signature_relative,
+        signature_sha256=signature_expected_sha256,
+        release_id=release_id,
+        release_body_sha256=release_body_sha256,
+        workflow_run_id=workflow_run_id,
+    )
+    if source_version != version:
+        raise ProjectStatusError("release-line source version must equal the direct release")
+    if verify_git:
+        assert trusted_head is not None
+        for relative, raw in (
+            (record_relative, record_bytes),
+            (signature_relative, signature_bytes),
+        ):
+            _verify_tracked_bytes(root, relative, raw, revision=trusted_head)
+        for relative, raw in (
+            (_DIRECT_RELEASE_PUBLIC_KEY_PATH, public_key_bytes),
+            (_DIRECT_RELEASE_PUBLIC_KEY_METADATA_PATH, public_key_metadata_bytes),
+        ):
+            _verify_tracked_bytes(root, relative, raw, revision=result.commit_sha)
+        _verify_direct_release_git_bindings(
+            root,
+            result,
+            trusted_head=trusted_head,
+            public_key_bytes=public_key_bytes,
+            workflow_blob_sha=workflow_blob_sha,
+            workflow_sha256=workflow_sha256,
+            verifier_blob_sha=verifier_blob_sha,
+            verifier_sha256=verifier_sha256,
+        )
+    for path, expected, maximum_bytes in (
+        (record_path, record_bytes, _MAX_DIRECT_RELEASE_RECORD_BYTES),
+        (signature_path, signature_bytes, _MAX_DIRECT_RELEASE_SIGNATURE_BYTES),
+        (public_key_path, public_key_bytes, 16 * 1024),
+        (public_key_metadata_path, public_key_metadata_bytes, 64 * 1024),
+    ):
+        current, _ = _read_bounded_stable_bytes(
+            root,
+            path,
+            maximum_bytes,
+        )
+        if current != expected:
+            raise ProjectStatusError(f"direct-release authority changed during validation: {path}")
+    return result
 
 
 def _verify_published_unledgered_git_bindings(
@@ -2262,13 +3510,22 @@ def _validate_published_unledgered_chain(
                 and recovery_in_inventory
             )
     elif status.lifecycle == "release-line":
-        relation_is_valid = (
-            latest_exception_version
-            < latest_recovery_version
-            <= ledger_version
-            == source_stable_version
-            and recovery_in_inventory
-        )
+        if status.schema_version == "evoguard-project-status-v3":
+            relation_is_valid = (
+                latest_exception_version
+                < latest_recovery_version
+                <= ledger_version
+                < source_stable_version
+                and recovery_in_inventory
+            )
+        else:
+            relation_is_valid = (
+                latest_exception_version
+                < latest_recovery_version
+                <= ledger_version
+                == source_stable_version
+                and recovery_in_inventory
+            )
     else:
         relation_is_valid = False
     if not relation_is_valid:
@@ -2978,7 +4235,12 @@ def _load_ledger(root: Path, status: Status, *, verify_git: bool) -> Ledger:
     return loaded[configured_safe]
 
 
-def _verify_source_relation(status: Status, ledger: Ledger, source_version: str) -> None:
+def _verify_source_relation(
+    status: Status,
+    ledger: Ledger,
+    source_version: str,
+    direct_release: DirectRelease | None = None,
+) -> None:
     published = _version_tuple(ledger.version)
     if status.lifecycle == "unreleased-development":
         source = _version_tuple(source_version, development=True)
@@ -2986,6 +4248,17 @@ def _verify_source_relation(status: Status, ledger: Ledger, source_version: str)
         source = _version_tuple(source_version)
     if status.relation != "descendant":
         raise ProjectStatusError(f"unsupported source relation: {status.relation}")
+    if status.schema_version == "evoguard-project-status-v3":
+        if (
+            status.lifecycle != "release-line"
+            or direct_release is None
+            or source != _version_tuple(direct_release.version)
+            or published >= source
+        ):
+            raise ProjectStatusError(
+                "project-status v3 must bind a newer direct release on the source line"
+            )
+        return
     if status.lifecycle == "release-line":
         if source != published:
             raise ProjectStatusError(
@@ -3427,7 +4700,18 @@ def _load_context_with_trusted_git(root: Path, *, verify_git: bool) -> Context:
             raise ProjectStatusError("PROJECT_STATUS.json changed during validation")
     ledger = _load_ledger(root, status, verify_git=verify_git)
     source_version = _extract_source_version(root)
-    _verify_source_relation(status, ledger, source_version)
+    direct_release = (
+        _load_direct_release(
+            root,
+            status,
+            source_version,
+            verify_git=verify_git,
+            trusted_head=trusted_head,
+        )
+        if status.schema_version == "evoguard-project-status-v3"
+        else None
+    )
+    _verify_source_relation(status, ledger, source_version, direct_release)
     published_unledgered_history = tuple(
         _load_published_unledgered(
             root,
@@ -3479,6 +4763,22 @@ def _load_context_with_trusted_git(root: Path, *, verify_git: bool) -> Context:
                     authority_bytes,
                     revision=trusted_head,
                 )
+        if direct_release is not None:
+            final_direct_release = _load_direct_release(
+                root,
+                status,
+                source_version,
+                verify_git=True,
+                trusted_head=trusted_head,
+            )
+            if final_direct_release != direct_release:
+                raise ProjectStatusError(
+                    "direct-release authority changed during project-status validation"
+                )
+        # Keep the status authority and Git reference snapshot as the final
+        # observations. In particular, direct-release verification executes
+        # external signature/Git subprocesses and must not create a late window
+        # in which a changed status or ref can escape the closure check.
         final_status_bytes, _ = _read_stable_bytes(root, root / _STATUS_PATH)
         if final_status_bytes != status_bytes:
             raise ProjectStatusError("PROJECT_STATUS.json changed during validation")
@@ -3505,6 +4805,7 @@ def _load_context_with_trusted_git(root: Path, *, verify_git: bool) -> Context:
         source_version,
         published_unledgered,
         published_unledgered_history,
+        direct_release,
     )
 
 
@@ -3517,6 +4818,27 @@ def load_context(root: Path = _ROOT, *, verify_git: bool = True) -> Context:
 
 def _release_summary(context: Context) -> str:
     ledger = context.ledger
+    direct = context.direct_release
+    if direct is not None:
+        artifacts = "`, `".join(direct.artifacts)
+        release_subjects = "`, `".join(direct.release_attestation_subjects)
+        build_subjects = "`, `".join(direct.build_provenance_subjects)
+        return _wrap(
+            f"Source version `{context.source_version}` is on the **maintained direct "
+            f"release line**. The latest immutable consumer release selected by the "
+            f"protected source tree is [`{direct.tag}`]({direct.release_url}) at commit "
+            f"`{direct.commit_sha}`. Detached-maintainer-signed record "
+            f"`{direct.record_path}` binds the published asset observations "
+            f"`{artifacts}`. It records successful release-attestation verification for "
+            f"`{release_subjects}` and a provider-attestation job whose build-provenance "
+            f"subject is `{build_subjects}` under `{direct.build_signer_workflow}`. The "
+            f"record is a same-owner post-publication observation created after the tag; "
+            f"it is not part of the release, a protected A-through-H ledger, independent "
+            f"review, or proof of correctness, security, deployment, or efficacy. The "
+            f"latest historical validated A-through-H ledger remains "
+            f"`{context.status.ledger_path}` for `{ledger.tag}` and does not apply to "
+            f"`{direct.tag}`."
+        )
     exception = context.published_unledgered
     lifecycle: str | None
     if context.status.lifecycle == "published-unledgered":
@@ -3601,6 +4923,25 @@ def _pipeline_summary(context: Context) -> str:
     }.get(context.status.pipeline_implementation)
     if implementation is None:
         raise ProjectStatusError("unsupported rendered release-pipeline enum")
+    if context.direct_release is not None:
+        direct = context.direct_release
+        return _wrap(
+            "Releases ship through the manually dispatched protected-release workflow "
+            "(`.github/workflows/release.yml`): tag-equals-version validation, the "
+            "full test suite, Linux and Windows end-to-end checks, a reproducible "
+            "artifact build with checksums, and asset attestation. It prepares a "
+            "byte-verified draft, then a distinct protected Environment approval "
+            "authorizes a no-checkout job to revalidate live source, tag-ruleset, "
+            "signed-tag, and asset authority, publish, and prove exact immutable "
+            "readback. No release step is gated on dates, elapsed time, or "
+            "stabilization windows. The detached-maintainer-signed direct record for "
+            f"`{direct.tag}` records successful workflow run `{direct.workflow_run_id}` "
+            "and post-publication byte readback. Its signature authenticates the exact "
+            "maintained record bytes, but the evidence remains a same-owner observation, "
+            "not independent validation or a protected A-through-H ledger. The archived "
+            f"A-H signed lane is {implementation} but inert with every activation flag "
+            "false; it is a design reference, not the current release path."
+        )
     if context.ledger.pipeline_operational_evidence_recorded:
         operational = (
             "The externally anchored signed v2 ledger records a completed protected "
@@ -3647,7 +4988,329 @@ def _wrap(text: str) -> str:
     )
 
 
+def _direct_release_blocks(context: Context) -> dict[str, str]:
+    direct = context.direct_release
+    if direct is None:
+        raise ProjectStatusError("direct-release rendering requires direct authority")
+    ledger = context.ledger
+    architecture = context.status
+    release = _release_summary(context)
+    pipeline = _pipeline_summary(context)
+    tag = direct.tag
+    version = direct.version
+    commit_sha = direct.commit_sha
+    release_link = f"[`{tag}`]({direct.release_url})"
+    asset_names = "`, `".join(direct.artifacts)
+    release_subject_names = "`, `".join(direct.release_attestation_subjects)
+    build_subject_names = "`, `".join(direct.build_provenance_subjects)
+    download_patterns = " \\\n".join(
+        f"  --pattern {name}" for name in direct.artifacts
+    )
+    attestation_command = textwrap.dedent(
+        f"""\
+        ```bash
+        gh attestation verify ./evo-guard.pyz \\
+          --repo EvoRiseKsa/EvoOM-Guard-m \\
+          --signer-workflow EvoRiseKsa/EvoOM-Guard-m/{direct.build_signer_workflow} \\
+          --source-ref refs/heads/main \\
+          --source-digest {commit_sha} \\
+          --cert-oidc-issuer https://token.actions.githubusercontent.com \\
+          --deny-self-hosted-runners \\
+          --format json
+        ```"""
+    )
+    security_support = (
+        "Security fixes are provided on a best-effort basis for the latest stable\n"
+        "consumer release only:\n\n"
+        "| Version | Status |\n"
+        "| --- | --- |\n"
+        f"| {release_link} | Latest stable release; supported; maintained signed "
+        "direct record, not an A-through-H ledger |\n"
+        f"| [`{ledger.tag}`]({ledger.release_url}) | Historical latest validated "
+        "A-through-H ledger; unsupported as the current consumer line |\n"
+        "| Earlier published releases | Historical and unsupported; retained "
+        "unchanged for reproducibility, verification, and rollback |\n"
+        "| Unpublished draft candidates | Unsupported; never consumer releases |\n\n"
+        "Users should reproduce a suspected issue on the latest stable release before\n"
+        "reporting when practical. A report that affects an older release may still be\n"
+        "useful, but a fix will be delivered in a new immutable release rather than by\n"
+        "rewriting an existing tag, asset, checksum, attestation, or maintained record."
+    )
+    changelog_support = (
+        f"- {release_link} is the latest stable and supported consumer release. Its\n"
+        "  detached-maintainer-signed direct record is a same-owner post-publication\n"
+        "  observation, not an A-through-H ledger or independent review.\n"
+        f"- [`{ledger.tag}`]({ledger.release_url}) remains the latest historical release\n"
+        "  with a validated protected A-through-H ledger; that ledger does not apply to\n"
+        f"  `{tag}`.\n"
+        "- Earlier published versions are historical and unsupported. Their tags,\n"
+        "  release assets, checksums, attestations, and records remain available\n"
+        "  unchanged for reproducibility, verification, and rollback.\n"
+        "- Draft candidates that were never published are labelled explicitly below\n"
+        "  and are not supported releases."
+    )
+    attestation_scope = _wrap(
+        f"Historical `v3.7.0` has a GitHub release attestation but no GitHub Actions "
+        f"build-artifact attestation. For `{tag}`, the maintained direct record reports "
+        f"that release-attestation verification binds `{release_subject_names}`. It "
+        f"also records a successful provider-attestation job whose build-provenance and "
+        f"SBOM subjects are both `{build_subject_names}` under "
+        f"`{direct.build_signer_workflow}`. It does not claim build provenance for the "
+        f"SPDX release asset itself. The record and its detached maintainer signature "
+        f"authenticate maintained same-owner observations; they are not a release "
+        f"ledger, independent review, an EvoOM Guard verdict, artifact-admission "
+        f"decision, or proof of deployment. See "
+        f"[`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`]"
+        f"(docs/GITHUB_ARTIFACT_ATTESTATIONS.md) for the bounded procedure."
+    )
+    consumer_pin = _wrap(
+        f"Consumer usage should use maintained immutable release `{tag}` only when "
+        f"aligned with the acceptance policy; pin commit `{commit_sha}` for the "
+        f"strictest source identity. `evo-guard init` requires `--ref` explicitly: "
+        f"supply `{tag}` or that full commit SHA. It refuses a moving branch and does "
+        f"not guess a latest release. The maintained signed direct record is not an "
+        f"A-through-H ledger or independent review."
+    )
+    direct_record_status = _wrap(
+        f"The protected source tree selects detached-maintainer-signed direct record "
+        f"`{direct.record_path}` (SHA-256 `{direct.record_sha256}`) and signature "
+        f"`{direct.signature_path}` (SHA-256 `{direct.signature_sha256}`) for release "
+        f"`{tag}` at commit `{commit_sha}`. It records immutable publication and exact "
+        f"post-publication readback observations for assets `{asset_names}`. This is a "
+        f"same-owner record created after the tag and excluded from its source tree and "
+        f"assets. It is not a protected A-through-H release ledger, correctness verdict, "
+        f"production-readiness claim, independent review, or deployment authorization. "
+        f"The latest historical validated A-through-H ledger is "
+        f"`{context.status.ledger_path}` for `{ledger.tag}` and does not apply to `{tag}`."
+    )
+    evidence_rows = _wrap(
+        f"Release evidence: signed direct record `{direct.record_path}` records `{tag}` "
+        f"assets `{asset_names}` and exact post-publication byte readback. Its recorded "
+        f"release-attestation verification binds `{release_subject_names}`; its provider "
+        f"attestation job records build-provenance and SBOM subjects "
+        f"`{build_subject_names}` under `{direct.build_signer_workflow}`. The detached "
+        f"signature authenticates the maintained record bytes. These are bounded "
+        f"same-owner observations, not an A-through-H ledger, independent validation, "
+        f"correctness, security, deployment, or efficacy evidence."
+    )
+    verification = (
+        "Download the exact direct-recorded asset set and verify its checksum\n"
+        "manifest:\n\n"
+        "```bash\n"
+        f"gh release download {tag} --repo EvoRiseKsa/EvoOM-Guard-m \\\n"
+        f"{download_patterns}\n"
+        "sha256sum --check SHA256SUMS\n"
+        f"gh release verify {tag} --repo EvoRiseKsa/EvoOM-Guard-m\n"
+        "```\n\n"
+        "Verify the recorded provider statement for its sole build-provenance and\n"
+        "SBOM subject against the exact workflow and source commit:\n\n"
+        f"{attestation_command}\n\n"
+        "The release command and artifact command are complementary. Neither\n"
+        "substitutes for checksum verification. The provider statement covers the\n"
+        "zipapp; the direct record does not claim build provenance for the SPDX release\n"
+        "asset. For offline verification, retain provider bundles and use their\n"
+        "trusted-root procedure; a copied JSON document is not a trust root. The\n"
+        "maintainer signature authenticates the direct record, not the truth or\n"
+        "independence of the same-owner observations inside it."
+    )
+    architecture_version_state = "is on the maintained direct release line"
+    return {
+        "SECURITY_SUPPORTED_VERSIONS": security_support,
+        "CHANGELOG_RELEASE_SUPPORT": changelog_support,
+        "README_RELEASE_CHANNEL": release + "\n\n" + pipeline,
+        "README_QUICKSTART_PIN": textwrap.dedent(
+            f"""\
+            ```bash
+            pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@{tag}"   # maintained immutable release; pin a SHA for strictest CI
+
+            # From the branch you want checked (the diff is reverse-applied to a
+            # throwaway copy; your working tree is never modified):
+            git diff main...HEAD | evo-guard guard --diff - --no-config --test-command "python -m pytest -q"
+            ```"""
+        ),
+        "README_INIT_PIN": textwrap.dedent(
+            f"""\
+            ```bash
+            evo-guard init --ref {tag} --test-command "python -m pytest -q"
+            ```"""
+        ),
+        "README_ACTION_PIN": textwrap.dedent(
+            f"""\
+            ```yaml
+            permissions:
+              contents: read
+
+            steps:
+              - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+                with:
+                  fetch-depth: 0
+                  persist-credentials: false
+              - uses: EvoRiseKsa/EvoOM-Guard-m@{tag}   # maintained immutable release; pin a SHA for strictest CI
+                with:
+                  comment: "false"   # explicit for older releases; candidate jobs never comment
+                  fail-on: "any-non-pass"
+            ```"""
+        ),
+        "README_ATTESTATION_SCOPE": attestation_scope,
+        "RELEASE_STATUS_SUMMARY": release + "\n\n" + pipeline,
+        "RELEASE_STATUS_CONSUMER_PIN": consumer_pin,
+        "RELEASE_STATUS_CURRENT_LEDGER": direct_record_status,
+        "PROJECT_STATUS_CORE_RELEASE": release,
+        "PROJECT_STATUS_RELEASE_PIPELINE": pipeline,
+        "PROJECT_STATUS_RELEASE_EVIDENCE_ROWS": evidence_rows,
+        "ROADMAP_LATEST_RELEASE": release,
+        "ROADMAP_CURRENT_PIPELINE": pipeline,
+        "SBOM_EXACT_STATUS": release,
+        "SBOM_PIPELINE": _wrap(
+            pipeline
+            + f" The deterministic SPDX generator exists in source. The `{tag}` direct "
+            "record reports the SPDX asset in the immutable release and exact byte "
+            "readback, while the provider SBOM attestation subject is only the zipapp. "
+            "The direct record does not claim provenance for the SPDX asset itself."
+        ),
+        "ATTESTATIONS_RELEASE_STATUS": release,
+        "ATTESTATIONS_CONSUMER_VERIFICATION": verification,
+        "ATTESTATIONS_FUTURE_PIPELINE": pipeline,
+        "RELEASE_TRUST_PIPELINE_STATUS": pipeline,
+        "REFACTOR_PROGRAM_STATUS": _wrap(
+            f"Machine-readable status: behavior-preserving R2 is "
+            f"**{architecture.behavior_r2}**; CLI handler extraction is "
+            f"**{architecture.cli_extraction}**; the overall refactor program is "
+            f"**{architecture.refactor_program}**. Source version "
+            f"`{context.source_version}` {architecture_version_state}."
+        ),
+        "ADOPTION_CURRENT_RELEASE": textwrap.dedent(
+            f"""\
+            {release_link} is the latest maintained immutable consumer release selected by
+            the protected source tree, at commit `{commit_sha}`. For stricter CI, pin that
+            full commit SHA. Its signed direct record is same-owner evidence, not an
+            A-through-H ledger or independent review.
+
+            From the repository you want to protect:
+
+            ```bash
+            pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@{tag}"
+            evo-guard init --ref {tag} --test-command "python -m pytest -q"
+            git add .github/workflows/evoguard.yml .evoguard.json
+            git commit -m "ci: add EvoOM Guard policy" && git push
+            ```
+
+            The no-Action alternative is `git diff | evo-guard guard --diff -`.
+            Use `evo-guard init --ref {tag} --stdout` to review the workflow first."""
+        ),
+        "GUARD_CURRENT_RELEASE": textwrap.dedent(
+            f"""\
+            > **Release availability.** {release_link} is the latest maintained immutable
+            > consumer release selected by the protected source tree. For strict CI, pin
+            > commit `{commit_sha}` rather than a tag. Its direct record is not an
+            > A-through-H ledger or independent review.
+
+            EvoOM Guard is not published to PyPI. Obtain it from this repository.
+
+            **GitHub Action:**
+
+            ```yaml
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+              with:
+                fetch-depth: 0
+                persist-credentials: false
+            - uses: EvoRiseKsa/EvoOM-Guard-m@{tag}
+            ```
+
+            **CLI:**
+
+            ```bash
+            pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@{tag}"
+            pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@{commit_sha}"
+            evo-guard guard --diff - --no-config --test-command "python -m pytest -q" < pr.diff
+            ```
+
+            Pin the full commit for the strictest source identity. The maintained
+            immutable tag is the named consumer release. Do not use `@main` for a gate
+            you depend on."""
+        ),
+        "GUARD_ACTION_EXAMPLE": textwrap.dedent(
+            f"""\
+            A composite action ships at the repository root
+            ([`action.yml`](../action.yml)). Copy
+            [`examples/evoguard.yml`](../examples/evoguard.yml) to
+            `.github/workflows/evoguard.yml` in the repository you want to protect:
+
+            ```yaml
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+              with:
+                fetch-depth: 0
+                persist-credentials: false
+            - uses: EvoRiseKsa/EvoOM-Guard-m@{tag}
+              with:
+                comment: "false"
+                fail-on: "any-non-pass"
+            ```"""
+        ),
+        "GUARD_NO_ACTION_EXAMPLE": textwrap.dedent(
+            f"""\
+            ```yaml
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+              with:
+                fetch-depth: 0
+                persist-credentials: false
+            - run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@{tag}"
+            - run: |
+                BASE="${{{{ github.event.pull_request.base.sha }}}}"
+                git fetch --no-tags origin "$BASE"
+                git show "$BASE:.evoguard.json" > "$RUNNER_TEMP/evoguard-base-policy.json" \\
+                  || printf '{{}}\\n' > "$RUNNER_TEMP/evoguard-base-policy.json"
+                git diff "$BASE...HEAD" | evo-guard guard --diff - \\
+                  --config "$RUNNER_TEMP/evoguard-base-policy.json" \\
+                  --report "$GITHUB_STEP_SUMMARY"
+            ```"""
+        ),
+        "EVIDENCE_BUNDLES_RELEASE_PIN": textwrap.dedent(
+            f"""\
+            Install the signing extra from maintained immutable release `{tag}` and
+            generate an Ed25519 key once:
+
+            ```bash
+            pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@{tag}"
+            evo-guard keygen --key judge.pem --pub judge.pub
+            ```"""
+        ),
+        "SIGNED_VERDICTS_RELEASE_PIN": textwrap.dedent(
+            f"""\
+            Requires the `sign` extra (the core gate stays stdlib-only). Install it from
+            maintained immutable release `{tag}`:
+
+            ```bash
+            pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@{tag}"
+            ```"""
+        ),
+        "TRUSTED_FINALIZER_RELEASE_PIN": textwrap.dedent(
+            f"""\
+            They are not enforced as required merge gates by default in this repository.
+            Each consumer must apply its own branch protection, Environment/reviewer
+            controls, protected Guard-artifact digest, and audit.
+
+            The repository-level implementation-ready workflow copies download
+            maintained immutable release `{tag}`. Before enabling those copies, download
+            that release's `evo-guard.pyz` and `SHA256SUMS`, verify the manifest and
+            release attestation, and copy the reviewed runtime digest into protected
+            variable `EVOGUARD_GUARD_ARTIFACT_SHA256`. The workflow must not derive its
+            trust root from the downloaded executable or a mutable URL.
+
+            The `examples/trusted-finalizer/` pair remains a frozen v3.7.0 reference and
+            must not be silently rewritten. The packaged no-clobber deployment kit
+            remains byte-bound to release `v4.5.0`; `finalizer-init` does not silently
+            upgrade that kit. New deployments built directly from the repository-level
+            workflow copies should use `{tag}` (version `{version}`) or its exact commit
+            pin and complete the audit before enforcement. The direct release record is
+            not an A-through-H ledger or independent authorization."""
+        ),
+    }
+
+
 def _blocks(context: Context) -> dict[str, str]:
+    if context.direct_release is not None:
+        return _direct_release_blocks(context)
     release = _release_summary(context)
     pipeline = _pipeline_summary(context)
     architecture = context.status

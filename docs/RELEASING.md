@@ -126,9 +126,23 @@ performed by one fail-closed job instead of an unbound web-UI click.
    need correction, edit the still-unpublished draft and rerun the workflow so
    the corrected body is captured and reviewed afresh. Approval, rather than a
    separate Publish click, authorizes the guarded transition.
-6. **Record.** After publication, update the release record docs
-   (`ops/render_project_status.py --write`) on a follow-up commit so the
-   maintained status blocks reflect the published tag.
+6. **Record the exact published result.** On a follow-up commit, create
+   `evidence/direct-releases/vX.Y.Z/DIRECT_RELEASE.json` from the immutable
+   provider readback. The record must bind the source and annotated tag,
+   numeric release/asset/run/job/deployment identities, exact asset bytes,
+   workflow blobs, postpublication verification, point-in-time controls, and
+   the explicit same-owner/non-independent trust boundary. Authenticate those
+   exact JSON bytes with the pinned EvoRiseKsa maintainer key as the detached
+   `DIRECT_RELEASE.json.sig`, using SSH identity `EvoRiseKsa` and namespace
+   `git`. Pin both lowercase SHA-256 digests in `PROJECT_STATUS.json`, retain
+   the newest validated A-through-H ledger only as historical evidence, then
+   run `python -I ops/render_project_status.py --write`. The renderer verifies
+   the byte pins, detached signature, record cross-bindings, historical
+   boundary, and generated status blocks before the follow-up commit is
+   reviewable. This maintained direct record is not an A-through-H release
+   ledger, independent review, RSAE/RAAE evidence, or a substitute for any of
+   them; do not fabricate a ledger, unsealed-status exception, erratum, or key
+   disposition for a successful `simple-release-v1` publication.
 
 The automated claim now ends at a published immutable release with exact tag,
 metadata, digest, and byte readback. GitHub exposes no conditional/CAS form of
@@ -162,6 +176,10 @@ is gone as a process, but its non-negotiables remain policy:
 - **Honest claims.** Release notes state what the evidence shows and carry
   the project's non-claims where they apply (see
   [ASSURANCE.md](ASSURANCE.md)).
+- **Authenticated records remain bounded records.** A detached maintainer
+  signature authenticates the exact postpublication record bytes and signer;
+  same-owner signing does not turn the record into independent validation or
+  into an A-through-H release ledger.
 
 ## What was deliberately removed
 

@@ -1,6 +1,22 @@
 {
+  "schema_version": "evoguard-project-status-v3",
+  "source": {
+    "lifecycle": "release-line",
+    "relation_to_latest_release": "descendant",
+    "architecture": {
+      "behavior_preserving_r2": "complete",
+      "cli_handler_extraction": "complete",
+      "overall_refactor_program": "in-progress"
+    }
+  },
   "published_release": {
-    "ledger": "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json"
+    "record": "evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json",
+    "record_sha256": "eaa7e4f640db8a777ad2632322351825307d123a6664097e544063ef361fa4c6",
+    "signature": "evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json.sig",
+    "signature_sha256": "e7e67ef35f760c2c86c522587b4436409a96028016a8f35652827edf73b1a5bb"
+  },
+  "historical_evidence": {
+    "latest_validated_a_h_ledger": "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json"
   },
   "release_exceptions": {
     "published_unledgered": [
@@ -24,15 +40,5 @@
     "evidence_scope": "durable-repository-record",
     "implementation": "implemented",
     "legacy_workflow": "archived-inert"
-  },
-  "schema_version": "evoguard-project-status-v2",
-  "source": {
-    "architecture": {
-      "behavior_preserving_r2": "complete",
-      "cli_handler_extraction": "complete",
-      "overall_refactor_program": "in-progress"
-    },
-    "lifecycle": "release-candidate",
-    "relation_to_latest_release": "descendant"
   }
 }

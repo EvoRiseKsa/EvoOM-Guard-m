@@ -74,9 +74,10 @@ code.
 ## Install
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:GUARD_CURRENT_RELEASE -->
-> **Release availability.** [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) is the latest immutable
-> consumer release recorded by the protected source tree. For strict CI,
-> pin commit `d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4` rather than a tag.
+> **Release availability.** [`v4.7.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1) is the latest maintained immutable
+> consumer release selected by the protected source tree. For strict CI, pin
+> commit `b222c7df0a3eaef6e89287cd1354625b88ac8b8b` rather than a tag. Its direct record is not an
+> A-through-H ledger or independent review.
 
 EvoOM Guard is not published to PyPI. Obtain it from this repository.
 
@@ -87,19 +88,20 @@ EvoOM Guard is not published to PyPI. Obtain it from this repository.
   with:
     fetch-depth: 0
     persist-credentials: false
-- uses: EvoRiseKsa/EvoOM-Guard-m@v4.6.0
+- uses: EvoRiseKsa/EvoOM-Guard-m@v4.7.1
 ```
 
 **CLI:**
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.6.0"
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.7.1"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@b222c7df0a3eaef6e89287cd1354625b88ac8b8b"
 evo-guard guard --diff - --no-config --test-command "python -m pytest -q" < pr.diff
 ```
 
-Pin the full commit for the strictest reviewed identity. The ledger-recorded
-tag is the named consumer release. Do not use `@main` for a gate you depend on.
+Pin the full commit for the strictest source identity. The maintained
+immutable tag is the named consumer release. Do not use `@main` for a gate
+you depend on.
 <!-- END EVOGUARD_PROJECT_STATUS:GUARD_CURRENT_RELEASE -->
 
 ## CLI
@@ -345,7 +347,7 @@ A composite action ships at the repository root
   with:
     fetch-depth: 0
     persist-credentials: false
-- uses: EvoRiseKsa/EvoOM-Guard-m@v4.6.0
+- uses: EvoRiseKsa/EvoOM-Guard-m@v4.7.1
   with:
     comment: "false"
     fail-on: "any-non-pass"
@@ -365,7 +367,7 @@ default it writes the minimal `local` (subprocess) policy. `--profile` scaffolds
 a container-isolated policy instead:
 
 ```bash
-evo-guard init --ref v4.6.0 --profile hostile \
+evo-guard init --ref v4.7.1 --profile hostile \
   --test-command "python -I -B -m pytest -q -p no:cacheprovider"
 ```
 
@@ -533,7 +535,7 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
   with:
     fetch-depth: 0
     persist-credentials: false
-- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.6.0"
+- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.7.1"
 - run: |
     BASE="${{ github.event.pull_request.base.sha }}"
     git fetch --no-tags origin "$BASE"
@@ -554,16 +556,17 @@ workflow itself cannot be removed or replaced to bypass the check.
 
 ## External black-box judge & assurance policy
 
-**`v4.6.0` release contract:** for a named, fail-closed combination of these
+**`v4.7.1` release contract:** for a named, fail-closed combination of these
 controls, use
 `--operating-profile local|protected|hostile`. The profile is included in the
 effective policy and its digest only when explicitly selected. `protected`
 requires a pinned black-box-only verifier inside Docker/gVisor with no candidate
 network; `hostile` requires gVisor and an active memory limit. See
 [`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for the exact contract and key
-custody rules. Confirm the exact ledger-recorded `v4.6.0` artifact before
-consumer use. Its release ledger binds the artifact and protected publication
-chain, not the delivered isolation facts of a particular run; see
+custody rules. Confirm the exact immutable `v4.7.1` artifact before consumer
+use. Its detached-maintainer-signed, same-owner direct record binds the exact
+postpublication readback, not the delivered isolation facts of a particular
+run or an independent review; see
 [`RELEASE_STATUS.md`](RELEASE_STATUS.md).
 
 The default judge runs the candidate in the **same process** as the report writer,

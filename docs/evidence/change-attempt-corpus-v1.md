@@ -22,8 +22,8 @@ false-positive, false-negative, generalization, security, production-readiness,
 or independent-validation claim.
 
 The Guard source used here reports `4.5.0.dev0`. It is unreleased development,
-not the latest consumer release. The latest ledger-recorded consumer release
-remains the one identified in [release status](../RELEASE_STATUS.md).
+not the latest consumer release. The current consumer release and its evidence
+boundary are identified in [release status](../RELEASE_STATUS.md).
 
 ## Frozen identities
 
