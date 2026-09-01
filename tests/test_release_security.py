@@ -260,8 +260,37 @@ def test_failed_v470_attempt_is_bounded_and_v471_is_the_successor() -> None:
     cleanup = record["cleanup"]
     assert cleanup == {
         "draft_release_id": 380414798,
-        "status": "PENDING_EXACT_DELETE_AFTER_PUBLIC_BRANCH_CAPTURE",
+        "status": "VERIFIED_DELETED_TAG_PRESERVED",
+        "public_branch_capture": {
+            "commit_sha": "8e2a518ecaee611897871a6abec1b9584c8f3a7b",
+            "evidence_blob_sha": "670c78549de31f190d9c00d9bf7b9ce3c9f8087d",
+            "evidence_sha256": (
+                "e6cb5ed59a8bd29364b956dad56fed7236b3722726fff9567d44c582901281b1"
+            ),
+            "evidence_bytes": 4384,
+        },
+        "delete_method": "REST_DELETE_NUMERIC_RELEASE_ID_ONLY",
+        "delete_actor": "MANA-awam",
+        "delete_observed_github_server_utc": "2026-09-01T11:50:14Z",
+        "release_get_http_after_delete": 404,
+        "release_tag_matches_after_delete": 0,
+        "tag_object_sha_after_delete": (
+            "026d9f86e167efe7728c4fd5feb89cc9b6a0ad7c"
+        ),
+        "tag_target_commit_sha_after_delete": (
+            "06c3fd7744a22b94a194124731046241fa219db3"
+        ),
+        "tag_github_verification_after_delete": {
+            "verified": True,
+            "reason": "valid",
+        },
+        "main_commit_sha_after_delete": (
+            "06c3fd7744a22b94a194124731046241fa219db3"
+        ),
+        "deploy_keys_after_delete": 0,
         "tag_delete_forbidden": True,
+        "same_owner_operation": True,
+        "independent_validation": False,
     }
     assert '__version__ = "4.7.1"' in (
         ROOT / "evoom_guard" / "__init__.py"
