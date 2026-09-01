@@ -20,7 +20,7 @@ retained evidence say so.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 - [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) is the latest stable and supported consumer release.
-- Source `4.7.1.dev0`: unreleased development source; not a consumer release.
+- Source `4.7.1`: release candidate; not a consumer release.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
@@ -28,7 +28,7 @@ retained evidence say so.
   are not supported releases.
 <!-- END EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 
-## [4.7.1] — Unreleased
+## [4.7.1] — 2026-09-01
 
 ### Fixed
 
@@ -48,8 +48,8 @@ retained evidence say so.
   signed annotated tag remains unchanged as an audit record; the failed draft
   and exact asset/run descriptors are recorded under
   `evidence/release-attempts/v4.7.0/FAILED_DRAFT_ATTEMPT.json`. The old tag is
-  not moved or reused. A future `v4.7.1` candidate must first complete its own
-  `4.7.1.dev0` evidence lane before stable-version promotion.
+  not moved or reused. The `v4.7.1` candidate completed its exact
+  `4.7.1.dev0` evidence lane before this stable-only version promotion.
 
 ## [4.7.0] — 2026-08-31 (unpublished; withdrawn)
 

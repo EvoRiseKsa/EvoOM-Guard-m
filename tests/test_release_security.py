@@ -293,11 +293,11 @@ def test_failed_v470_attempt_is_bounded_and_source_is_not_reused() -> None:
         "same_owner_operation": True,
         "independent_validation": False,
     }
-    assert '__version__ = "4.7.1.dev0"' in (
+    assert '__version__ = "4.7.1"' in (
         ROOT / "evoom_guard" / "__init__.py"
     ).read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert "## [4.7.1] — Unreleased" in changelog
+    assert "## [4.7.1] — 2026-09-01" in changelog
     assert "## [4.7.0] — 2026-08-31 (unpublished; withdrawn)" in changelog
 
 
