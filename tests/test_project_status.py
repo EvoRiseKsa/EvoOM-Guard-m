@@ -327,8 +327,8 @@ class ProjectStatusTests(unittest.TestCase):
         self.assertIn(
             (context.status.lifecycle, context.source_version),
             {
-                ("unreleased-development", "4.7.0.dev0"),
-                ("release-candidate", "4.7.0"),
+                ("unreleased-development", "4.7.1.dev0"),
+                ("release-candidate", "4.7.1"),
             },
         )
         self.assertEqual(context.status.relation, "descendant")
@@ -559,8 +559,8 @@ class ProjectStatusTests(unittest.TestCase):
         self.assertIn(
             (context.status.lifecycle, context.source_version),
             {
-                ("unreleased-development", "4.7.0.dev0"),
-                ("release-candidate", "4.7.0"),
+                ("unreleased-development", "4.7.1.dev0"),
+                ("release-candidate", "4.7.1"),
             },
         )
         self.assertEqual(context.ledger.version, "4.6.0")
