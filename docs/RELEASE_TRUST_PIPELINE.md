@@ -31,16 +31,17 @@ asset attestation. It prepares a byte-verified draft, then a distinct protected
 Environment approval authorizes a no-checkout job to revalidate live source,
 tag-ruleset, signed-tag, and asset authority, publish, and prove exact immutable
 readback. No release step is gated on dates, elapsed time, or stabilization windows. The
-archived A-H signed lane is implemented in source but inert with every activation flag
-false; it is a design reference, not a release path. The externally anchored signed v2
-ledger records a completed protected A-H operation. That validated ledger also records
-the resulting publication. An admitted release is contracted to exactly `evo-guard.pyz`,
-`evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not evidence that those
-assets were published.
+detached-maintainer-signed direct record for `v4.7.1` records successful workflow run
+`33532737067` and post-publication byte readback. Its signature authenticates the exact
+maintained record bytes, but the evidence remains a same-owner observation, not
+independent validation or a protected A-through-H ledger. The archived A-H signed lane
+is implemented in source but inert with every activation flag false; it is a design
+reference, not the current release path.
 <!-- END EVOGUARD_PROJECT_STATUS:RELEASE_TRUST_PIPELINE_STATUS -->
 
-`v4.6.0` is the latest ledger-recorded release selected by
-`PROJECT_STATUS.json`. Its canonical signed
+`v4.6.0` is the latest historical A-through-H ledger referenced by
+`PROJECT_STATUS.json`; the current consumer release is direct-recorded
+`v4.7.1`. The historical ledger's canonical signed
 [`release-ledger-v2`](../evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json)
 records the exact protected A-through-H operation and resulting publication.
 The previous signed

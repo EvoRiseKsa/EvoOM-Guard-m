@@ -554,6 +554,15 @@ class ProjectStatusTests(unittest.TestCase):
                 ]["asset_ids"].reverse(),
             ),
             (
+                "SHA256SUMS asset digest",
+                lambda value: (
+                    value["assets"][2].__setitem__("sha256", "1" * 64),
+                    value["verification_observations"][
+                        "post_publication_byte_readback"
+                    ]["asset_sha256"].__setitem__(2, "1" * 64),
+                ),
+            ),
+            (
                 "historical applicability",
                 lambda value: value["historical_evidence"].__setitem__(
                     "applies_to_this_release", True
@@ -2091,6 +2100,60 @@ class ProjectStatusTests(unittest.TestCase):
             self.assertRaisesRegex(
                 render_project_status.ProjectStatusError,
                 "Git references changed during validation",
+            ),
+        ):
+            render_project_status._load_context_with_trusted_git(
+                ROOT,
+                verify_git=True,
+            )
+
+        original_direct_load = render_project_status._load_direct_release
+        direct_loads = 0
+        final_direct_returned = False
+
+        def observe_direct_load(*args: object, **kwargs: object) -> object:
+            nonlocal direct_loads, final_direct_returned
+            result = original_direct_load(*args, **kwargs)
+            direct_loads += 1
+            if direct_loads >= 2:
+                final_direct_returned = True
+            return result
+
+        def replace_status_after_final_direct(
+            root: Path,
+            path: Path,
+        ) -> tuple[bytes, render_project_status._FileIdentity]:
+            raw, identity = original_read(root, path)
+            if final_direct_returned and path.resolve() == status_path:
+                return attacker_status_bytes, identity
+            return raw, identity
+
+        with (
+            mock.patch.object(
+                render_project_status,
+                "_load_direct_release",
+                side_effect=observe_direct_load,
+            ),
+            mock.patch.object(
+                render_project_status,
+                "_read_stable_bytes",
+                side_effect=replace_status_after_final_direct,
+            ),
+            mock.patch.object(render_project_status, "_verify_tracked_bytes"),
+            mock.patch.object(render_project_status, "_verify_git"),
+            mock.patch.object(render_project_status, "_verify_direct_release_signature"),
+            mock.patch.object(
+                render_project_status,
+                "_verify_direct_release_git_bindings",
+            ),
+            mock.patch.object(
+                render_project_status,
+                "_ssh_public_key_fingerprint",
+                return_value="SHA256:iCn7wa6HgKdu7luf/16rrKZzSk5FygJoA8EKNl3LJ24",
+            ),
+            self.assertRaisesRegex(
+                render_project_status.ProjectStatusError,
+                "PROJECT_STATUS.json changed during validation",
             ),
         ):
             render_project_status._load_context_with_trusted_git(

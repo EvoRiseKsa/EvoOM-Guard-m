@@ -2235,6 +2235,11 @@ def _load_direct_release(
         "direct-release readback sha256sums_lines",
         expected_sums_lines,
     )
+    expected_sums_bytes = ("\n".join(expected_sums_lines) + "\n").encode("utf-8")
+    if hashlib.sha256(expected_sums_bytes).hexdigest() != asset_digests[2]:
+        raise ProjectStatusError(
+            "direct-release SHA256SUMS bytes do not match the recorded asset digest"
+        )
     if (
         readback["verified"] is not True
         or readback["release_id"] != release_id
@@ -4758,6 +4763,22 @@ def _load_context_with_trusted_git(root: Path, *, verify_git: bool) -> Context:
                     authority_bytes,
                     revision=trusted_head,
                 )
+        if direct_release is not None:
+            final_direct_release = _load_direct_release(
+                root,
+                status,
+                source_version,
+                verify_git=True,
+                trusted_head=trusted_head,
+            )
+            if final_direct_release != direct_release:
+                raise ProjectStatusError(
+                    "direct-release authority changed during project-status validation"
+                )
+        # Keep the status authority and Git reference snapshot as the final
+        # observations. In particular, direct-release verification executes
+        # external signature/Git subprocesses and must not create a late window
+        # in which a changed status or ref can escape the closure check.
         final_status_bytes, _ = _read_stable_bytes(root, root / _STATUS_PATH)
         if final_status_bytes != status_bytes:
             raise ProjectStatusError("PROJECT_STATUS.json changed during validation")
@@ -4778,18 +4799,6 @@ def _load_context_with_trusted_git(root: Path, *, verify_git: bool) -> Context:
             raise ProjectStatusError(
                 "project-status Git references changed during validation"
             )
-        if direct_release is not None:
-            final_direct_release = _load_direct_release(
-                root,
-                status,
-                source_version,
-                verify_git=True,
-                trusted_head=trusted_head,
-            )
-            if final_direct_release != direct_release:
-                raise ProjectStatusError(
-                    "direct-release authority changed during project-status validation"
-                )
     return Context(
         status,
         ledger,

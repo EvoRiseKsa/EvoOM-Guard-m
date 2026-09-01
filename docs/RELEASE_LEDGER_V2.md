@@ -39,8 +39,9 @@ in the separately signed
 [`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json)
 receipt. The immutable ledger remains unchanged.
 
-`v4.6.0` is the latest ledger-recorded release selected by
-[`PROJECT_STATUS.json`](../PROJECT_STATUS.json). Its canonical signed
+`v4.6.0` is the latest historical A-through-H ledger referenced by
+[`PROJECT_STATUS.json`](../PROJECT_STATUS.json); the current consumer release
+is direct-recorded `v4.7.1`. The historical ledger's canonical signed
 [`RELEASE_LEDGER.json`](../evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json)
 binds release commit `d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4`, its sole admitted parent,
 the protected A–H run chain, the exact three-asset publication, attestations,

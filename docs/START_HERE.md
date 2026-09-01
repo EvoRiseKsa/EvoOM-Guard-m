@@ -52,8 +52,8 @@ Using named profiles from `v4.7.1`?                   → verify runtime evidenc
 Need a signed PR admission record with separated key?  → Trusted Finalizer
 ```
 
-A future/external VM-class provider is a separate deployment boundary; the
-The `v4.7.1` `hostile` contract implements gVisor only,
+A future/external VM-class provider is a separate deployment boundary. The
+`v4.7.1` `hostile` contract implements gVisor only,
 and release-bound hostile evidence remains open. See
 [`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for that contract.
 

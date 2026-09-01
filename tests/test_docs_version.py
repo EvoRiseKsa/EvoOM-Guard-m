@@ -181,7 +181,7 @@ class DocsVersionDriftTests(unittest.TestCase):
                 re.compile(
                     rf"latest\s+immutable\s+consumer\s+release.*"
                     rf"\[`v{re.escape(consumer_version)}`\]",
-                    re.IGNORECASE,
+                    re.IGNORECASE | re.DOTALL,
                 ),
                 f"{relative} must identify the protected-tree recorded release",
             )
@@ -212,7 +212,10 @@ class DocsVersionDriftTests(unittest.TestCase):
             self.assertIn("same-owner", release_status)
             self.assertRegex(
                 release_status,
-                re.compile(r"not (?:an? )?(?:A-through-H )?release ledger", re.I),
+                re.compile(
+                    r"not\s+(?:an?\s+)?(?:A-through-H\s+)?release\s+ledger",
+                    re.I,
+                ),
             )
         else:
             self.assertEqual(state, "ledger-recorded")
@@ -310,7 +313,7 @@ class DocsVersionDriftTests(unittest.TestCase):
                 text,
                 f"{relative} must identify the validated feature-evidence boundary",
             )
-            if state in {"ledger-recorded", "direct-recorded"}:
+            if state == "ledger-recorded":
                 self.assertIn(
                     source_line,
                     text,
@@ -352,7 +355,10 @@ class DocsVersionDriftTests(unittest.TestCase):
             if "--operating-profile" not in line:
                 continue
             context = " ".join(lines[max(0, lineno - 2) : lineno + 3])
-            self.assertIn(assurance_version, context)
+            expected_boundary = (
+                consumer_version if state == "direct-recorded" else assurance_version
+            )
+            self.assertIn(expected_boundary, context)
             if state not in {"ledger-recorded", "direct-recorded"}:
                 self.assertRegex(
                     context,

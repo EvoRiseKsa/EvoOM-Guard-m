@@ -48,7 +48,7 @@ directly from GitHub and run the gate on your current branch:
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_QUICKSTART_PIN -->
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.6.0"   # ledger-recorded release; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.7.1"   # maintained immutable release; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a
 # throwaway copy; your working tree is never modified):
@@ -62,10 +62,10 @@ or full commit SHA; a moving branch is not a release channel (see
 [Release channel and accountability](#release-channel-and-accountability)).
 
 For a no-install path, download
-[`evo-guard.pyz`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.6.0/evo-guard.pyz),
-[`evo-guard.spdx.json`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.6.0/evo-guard.spdx.json),
-and [`SHA256SUMS`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.6.0/SHA256SUMS)
-from the [`v4.6.0` release](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0).
+[`evo-guard.pyz`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.7.1/evo-guard.pyz),
+[`evo-guard.spdx.json`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.7.1/evo-guard.spdx.json),
+and [`SHA256SUMS`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.7.1/SHA256SUMS)
+from the [`v4.7.1` release](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1).
 Run `sha256sum -c SHA256SUMS`, then `python -I evo-guard.pyz ...`. The core is
 stdlib-only, so no clone and no install are needed.
 
@@ -205,7 +205,7 @@ Generate a workflow and a base-owned `.evoguard.json` policy:
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_INIT_PIN -->
 ```bash
-evo-guard init --ref v4.6.0 --test-command "python -m pytest -q"
+evo-guard init --ref v4.7.1 --test-command "python -m pytest -q"
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:README_INIT_PIN -->
 
@@ -225,7 +225,7 @@ steps:
     with:
       fetch-depth: 0
       persist-credentials: false
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v4.6.0   # ledger-recorded release; pin a SHA for strictest CI
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v4.7.1   # maintained immutable release; pin a SHA for strictest CI
     with:
       comment: "false"   # explicit for older releases; candidate jobs never comment
       fail-on: "any-non-pass"
@@ -238,17 +238,17 @@ A candidate job should not receive secrets or PR-write permissions. If comments
 are required, use a separate metadata-only job that never checks out or
 executes candidate code.
 
-### Stage a new rollout safely (current source)
+### Stage a new rollout safely
 
-Repository source after `v4.6.0` adds a static readiness command and explicit
-workflow presets. Confirm they exist in the exact installed build before use:
+Release `v4.7.1` includes the static readiness command and explicit workflow
+presets. Confirm the exact installed version before use:
 
 ```bash
 git clone https://github.com/EvoRiseKsa/EvoOM-Guard-m.git
 cd EvoOM-Guard-m
 git checkout <reviewed-40-hex-SHA>
 python -m pip install .
-evo-guard version  # expect 4.7.1 on this reviewed release-candidate source
+evo-guard version  # expect 4.7.1
 evo-guard preflight . --strict --json
 evo-guard init --ref <immutable-release-tag-or-40-hex-SHA> --preset advisory \
   --path <workflow-path> --policy-path <trusted-policy-path>
@@ -274,7 +274,7 @@ with the same `--ref`, `--path`, and `--policy-path` plus
 | Add organization-owned checks outside the candidate tree | Verifier pack | [`VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) |
 | Judge a CLI through an external report channel | Black-box, preferably `--blackbox-only` | [`BLACKBOX.md`](docs/BLACKBOX.md) |
 | Add a delivered container or gVisor boundary | Isolated execution | [`BLACKBOX.md`](docs/BLACKBOX.md#boundary-evidence-is-observed-never-inferred-from-policy) |
-| Evaluate named assurance profiles in ledger-recorded `v4.6.0` | `v4.6.0` profiles (verify runtime evidence) | [`OPERATING_PROFILES.md`](docs/OPERATING_PROFILES.md) |
+| Evaluate named assurance profiles in current `v4.7.1` | `v4.7.1` profiles (verify runtime evidence; first ledger-recorded in `v4.6.0`) | [`OPERATING_PROFILES.md`](docs/OPERATING_PROFILES.md) |
 | Produce portable, authenticated evidence | Signed verdict or evidence bundle | [`SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) |
 | Separate re-verification, signing, and final admission | Trusted Finalizer | [`TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) |
 | Project signed `ALLOW` and `DENY` attempts for advisory analysis | Change Attempt Observation V1 *(included in v4.5.0)* | [`CHANGE_ATTEMPT_OBSERVATION.md`](docs/CHANGE_ATTEMPT_OBSERVATION.md) |
@@ -359,15 +359,20 @@ Use an immutable release tag or full commit SHA in consumer repositories; do
 not treat a moving branch as a production release channel.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
-Source version `4.7.1` is a **release candidate** and is not yet a consumer release. The
-latest immutable consumer release recorded by the protected source tree is
-[`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) at commit
-`d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4`. Its `evoguard-release-ledger-v2` ledger
-records the release assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
-release attestation binds `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`, while
-its build-provenance attestation binds `evo-guard.pyz`. The ledger records the SPDX SBOM
-release asset and its provenance. Canonical ledger:
-`evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json`.
+Source version `4.7.1` is on the **maintained direct release line**. The latest
+immutable consumer release selected by the protected source tree is
+[`v4.7.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1) at commit
+`b222c7df0a3eaef6e89287cd1354625b88ac8b8b`. Detached-maintainer-signed record
+`evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json` binds the published asset
+observations `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. It records successful
+release-attestation verification for `evo-guard.pyz`, `evo-guard.spdx.json`,
+`SHA256SUMS` and a provider-attestation job whose build-provenance subject is
+`evo-guard.pyz` under `.github/workflows/release.yml`. The record is a same-owner
+post-publication observation created after the tag; it is not part of the release, a
+protected A-through-H ledger, independent review, or proof of correctness, security,
+deployment, or efficacy. The latest historical validated A-through-H ledger remains
+`evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json` for `v4.6.0` and does not apply to
+`v4.7.1`.
 
 Releases ship through the manually dispatched protected-release workflow
 (`.github/workflows/release.yml`): tag-equals-version validation, the full test suite,
@@ -376,12 +381,12 @@ asset attestation. It prepares a byte-verified draft, then a distinct protected
 Environment approval authorizes a no-checkout job to revalidate live source,
 tag-ruleset, signed-tag, and asset authority, publish, and prove exact immutable
 readback. No release step is gated on dates, elapsed time, or stabilization windows. The
-archived A-H signed lane is implemented in source but inert with every activation flag
-false; it is a design reference, not a release path. The externally anchored signed v2
-ledger records a completed protected A-H operation. That validated ledger also records
-the resulting publication. An admitted release is contracted to exactly `evo-guard.pyz`,
-`evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not evidence that those
-assets were published.
+detached-maintainer-signed direct record for `v4.7.1` records successful workflow run
+`33532737067` and post-publication byte readback. Its signature authenticates the exact
+maintained record bytes, but the evidence remains a same-owner observation, not
+independent validation or a protected A-through-H ledger. The archived A-H signed lane
+is implemented in source but inert with every activation flag false; it is a design
+reference, not the current release path.
 <!-- END EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
 
 The two post-publication correction records are
@@ -391,11 +396,12 @@ The two post-publication correction records are
 missing release ledgers. `v4.4.1` is the later exception.
 
 The repository documentation follows the repository source and may describe
-features not present in the latest ledger-recorded consumer release. Confirm
+features not present in the latest consumer release. Confirm
 each page's version and evidence boundary before copying a command.
 
 The open [independent-review request](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141)
-targets the immutable `v4.6.0` release. It is a request for external review,
+targets the historical latest A-through-H-ledger release, immutable `v4.6.0`.
+It is a request for external review,
 not evidence that such a review has occurred. The immutable
 [`review-v4.5.0-r1` reviewer companion](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/review-v4.5.0-r1)
 remains a historical review aid for the now-unsupported `v4.5.0` release and
@@ -431,12 +437,14 @@ without crowding this landing page.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_ATTESTATION_SCOPE -->
 Historical `v3.7.0` has a GitHub release attestation but no GitHub Actions
-build-artifact attestation. The validated `v4.6.0` ledger records build provenance whose
-subject is `evo-guard.pyz` under
-`.github/workflows/evoguard-build-release-artifact.yml`. Its release attestation
-separately binds `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS` and records SPDX
-SBOM provenance. Provider attestations are provenance evidence, not an EvoOM Guard
-verdict, artifact-admission decision, or proof of deployment. See
+build-artifact attestation. For `v4.7.1`, the maintained direct record reports that
+release-attestation verification binds `evo-guard.pyz`, `evo-guard.spdx.json`,
+`SHA256SUMS`. It also records a successful provider-attestation job whose
+build-provenance and SBOM subjects are both `evo-guard.pyz` under
+`.github/workflows/release.yml`. It does not claim build provenance for the SPDX release
+asset itself. The record and its detached maintainer signature authenticate maintained
+same-owner observations; they are not a release ledger, independent review, an EvoOM
+Guard verdict, artifact-admission decision, or proof of deployment. See
 [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md) for the
 bounded procedure.
 <!-- END EVOGUARD_PROJECT_STATUS:README_ATTESTATION_SCOPE -->
