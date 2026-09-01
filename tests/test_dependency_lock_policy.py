@@ -16,6 +16,11 @@ CI = ROOT / ".github" / "workflows" / "ci.yml"
 RELEASE = ROOT / ".github" / "workflows" / "release.yml"
 WINDOWS = ROOT / ".github" / "workflows" / "windows.yml"
 ACTION_SMOKE = ROOT / ".github" / "workflows" / "action-resolver-free-smoke.yml"
+CODEQL = ROOT / ".github" / "workflows" / "codeql.yml"
+SCORECARD = ROOT / ".github" / "workflows" / "scorecard.yml"
+SOURCE_REVERIFY = ROOT / ".github" / "workflows" / "evoguard-release-source-reverify.yml"
+SOURCE_RECEIPT = ROOT / ".github" / "workflows" / "evoguard-produce-release-source-receipt.yml"
+BUILD_RELEASE = ROOT / ".github" / "workflows" / "evoguard-build-release-artifact.yml"
 PYPROJECT = ROOT / "pyproject.toml"
 CI_INPUT = ROOT / "requirements" / "ci.in"
 CI_LOCK = ROOT / "requirements" / "ci.lock"
@@ -180,6 +185,34 @@ def test_action_smoke_neutralizes_host_git_credential_helpers() -> None:
     assert 'GIT_CONFIG_NOSYSTEM: "1"' in text
     assert "GIT_CONFIG_GLOBAL: ${{ steps.candidate-git.outputs.global-config }}" in text
     assert 'GIT_TERMINAL_PROMPT: "0"' in text
+
+
+def test_reviewed_github_action_update_pins_are_exact() -> None:
+    checkout = "3d3c42e5aac5ba805825da76410c181273ba90b1"
+    attest = "1e69f48acb82d1966a394da916b4c1698aa569d6"
+    codeql = "cdf488f595d80d6e07e03d4674febd5ab45fa938"
+
+    source_reverify = SOURCE_REVERIFY.read_text(encoding="utf-8")
+    source_receipt = SOURCE_RECEIPT.read_text(encoding="utf-8")
+    build_release = BUILD_RELEASE.read_text(encoding="utf-8")
+    codeql_workflow = CODEQL.read_text(encoding="utf-8")
+    scorecard = SCORECARD.read_text(encoding="utf-8")
+
+    assert source_reverify.count(f"actions/checkout@{checkout}") == 3
+    assert source_receipt.count(f"actions/attest@{attest}") == 1
+    assert build_release.count(f"actions/attest@{attest}") == 3
+    assert codeql_workflow.count(f"github/codeql-action/init@{codeql}") == 1
+    assert codeql_workflow.count(f"github/codeql-action/analyze@{codeql}") == 1
+    assert scorecard.count(f"github/codeql-action/upload-sarif@{codeql}") == 1
+
+
+def test_published_release_workflow_retains_its_signed_record_pin() -> None:
+    historical_attest = "508db95dd578ae2727ebd6217d5ba78e4fbda05d"
+    reviewed_attest = "1e69f48acb82d1966a394da916b4c1698aa569d6"
+    release = RELEASE.read_text(encoding="utf-8")
+
+    assert release.count(f"actions/attest@{historical_attest}") == 2
+    assert f"actions/attest@{reviewed_attest}" not in release
 
 
 def test_trusted_dependency_inputs_are_codeowner_protected() -> None:

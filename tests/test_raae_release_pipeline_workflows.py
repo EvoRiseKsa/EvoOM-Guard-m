@@ -1115,7 +1115,7 @@ def test_e_build_and_attestation_are_capability_separated() -> None:
     assert "docker run" not in attest
     assert "python -I ${{ runner.temp }}/e-output/evo-guard.pyz" not in attest
     assert attest.count(
-        "actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d"
+        "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"
     ) == 3
     assert attest.count(
         "subject-path: ${{ runner.temp }}/e-output/evo-guard.pyz"
