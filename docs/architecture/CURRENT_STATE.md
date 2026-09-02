@@ -72,9 +72,12 @@ a runtime change.
   only return immutable ordered shape errors. Their measured facade hotspots
   fall from C901 26, 24, and 17 to 1 each; the current repository inventory
   falls from 94 through 93 and 92 to 91.
-- The broader program is still in progress: release engineering,
-  repository-wide strict typing, independent external red-team evidence, and
-  the end-to-end protected build-to-admission chain are not all complete.
+- The broader program is still in progress: cohesive evidence/finalizer
+  package extraction, release engineering, repository-wide strict typing,
+  independent external red-team evidence, and the end-to-end protected
+  build-to-admission chain are not all complete. A zero unclassified-module
+  ratchet records reviewed ownership; it does not claim that every mixed
+  compatibility facade has already moved into its final package boundary.
 
 For the time-ordered implementation record, see
 [`REFACTOR_PROGRAM.md`](REFACTOR_PROGRAM.md). For the enforced dependency
