@@ -221,7 +221,7 @@ class DocsVersionDriftTests(unittest.TestCase):
             self.assertIn(__version__, release_status)
             self.assertRegex(
                 release_status,
-                re.compile(r"unreleased|not (?:yet )?a consumer release", re.I),
+                re.compile(r"unreleased|not (?:yet )?a\s+consumer release", re.I),
             )
         elif state == "published-unledgered":
             self.assertNotEqual(consumer_version, __version__)

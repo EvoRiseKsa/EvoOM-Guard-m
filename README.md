@@ -266,7 +266,7 @@ git clone https://github.com/EvoRiseKsa/EvoOM-Guard-m.git
 cd EvoOM-Guard-m
 git checkout <reviewed-40-hex-SHA>
 python -m pip install .
-evo-guard version  # expect 4.8.0.dev0 on this development source line
+evo-guard version  # expect 4.8.0 on this reviewed release-candidate source
 evo-guard preflight . --strict --json
 evo-guard init --ref <immutable-release-tag-or-40-hex-SHA> --preset advisory \
   --path <workflow-path> --policy-path <trusted-policy-path>
@@ -377,11 +377,10 @@ Use an immutable release tag or full commit SHA in consumer repositories; do
 not treat a moving branch as a production release channel.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
-Source version `4.8.0.dev0` is **unreleased development**; it is unsupported and is not
-a consumer release. The latest immutable consumer release selected by the protected
-source tree remains
-[`v4.7.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1) at commit
-`b222c7df0a3eaef6e89287cd1354625b88ac8b8b`. Detached-maintainer-signed record
+Source version `4.8.0` is a **release candidate**; it is unsupported and is not yet a
+consumer release. The latest immutable consumer release selected by the protected source
+tree remains [`v4.7.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1)
+at commit `b222c7df0a3eaef6e89287cd1354625b88ac8b8b`. Detached-maintainer-signed record
 `evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json` binds the published asset
 observations `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. It records successful
 release-attestation verification for `evo-guard.pyz`, `evo-guard.spdx.json`,
