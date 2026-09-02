@@ -345,4 +345,4 @@ tested, and documented security boundary.**
 - Isolation claims must reflect the boundary actually delivered.
 - A passing verdict does not prove complete software correctness.
 
-<!-- Temporary v4.8.0 Reverify bootstrap smoke candidate. Do not merge. -->
+> Temporary v4.8.0 Reverify bootstrap smoke candidate. Do not merge.
