@@ -115,6 +115,8 @@ def test_release_assets_are_deterministic_and_bound() -> None:
         import os
         import pathlib
         import stat
+        import subprocess
+        import sys
         import tempfile
         import unicodedata
         import warnings
@@ -127,6 +129,12 @@ def test_release_assets_are_deterministic_and_bound() -> None:
         MAX_TOTAL_MEMBER_BYTES = 64 * 1024 * 1024
         PACKAGE_ID = "SPDXRef-Package-evoom-guard"
         LICENSE_ID = "LicenseRef-EvoRise-Source-Available-1.0"
+        GOVERNING_DOCUMENTS = (
+            "LICENSE",
+            "LICENSE-APACHE",
+            "LICENSING.md",
+            "NOTICE",
+        )
         SHEBANG = b"#!/usr/bin/env python3\\n"
 
         def require(condition, message):
@@ -317,16 +325,19 @@ def test_release_assets_are_deterministic_and_bound() -> None:
                     ):
                         data = data.replace(b"\\r\\n", b"\\n").replace(b"\\r", b"\\n")
                     expected_contents[name] = data
-            license_path = pathlib.Path("LICENSE")
-            license_metadata = license_path.lstat()
-            require(
-                not stat.S_ISLNK(license_metadata.st_mode)
-                and stat.S_ISREG(license_metadata.st_mode),
-                "LICENSE is not a regular source file",
-            )
-            expected_contents["LICENSE"] = (
-                license_path.read_bytes().replace(b"\\r\\n", b"\\n").replace(b"\\r", b"\\n")
-            )
+            for document in GOVERNING_DOCUMENTS:
+                document_path = pathlib.Path(document)
+                document_metadata = document_path.lstat()
+                require(
+                    not stat.S_ISLNK(document_metadata.st_mode)
+                    and stat.S_ISREG(document_metadata.st_mode),
+                    f"{document} is not a regular source file",
+                )
+                expected_contents[document] = (
+                    document_path.read_bytes()
+                    .replace(b"\\r\\n", b"\\n")
+                    .replace(b"\\r", b"\\n")
+                )
             require(set(contents) == set(expected_contents), "PYZ members do not equal source")
             for name, data in expected_contents.items():
                 require(contents[name] == data, f"PYZ member differs from source: {name}")
@@ -431,12 +442,55 @@ def test_release_assets_are_deterministic_and_bound() -> None:
                 newline="\\n",
             )
 
-        def must_reject(label, pyz_path, sbom_path, version):
+        def must_reject(
+            label, pyz_path, sbom_path, version, expected_message=None
+        ):
             try:
                 verify(pyz_path, sbom_path, version)
-            except (AssertionError, KeyError, TypeError, UnicodeError, ValueError, zipfile.BadZipFile):
+            except (
+                AssertionError,
+                KeyError,
+                TypeError,
+                UnicodeError,
+                ValueError,
+                zipfile.BadZipFile,
+            ) as error:
+                if expected_message is not None and str(error) != expected_message:
+                    raise AssertionError(
+                        f"mutation {label} was rejected for the wrong reason: {error}"
+                    ) from error
                 return
             raise AssertionError(f"mutation was accepted: {label}")
+
+        def write_canonical_pyz(path, members):
+            with pathlib.Path(path).open("wb") as raw:
+                raw.write(SHEBANG)
+                with zipfile.ZipFile(raw, "w", allowZip64=False) as output:
+                    for info, data in members:
+                        output.writestr(info, data)
+
+        def generate_mutation_sbom(pyz_path, sbom_path, version):
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "ops/generate_spdx_sbom.py",
+                    str(pyz_path),
+                    "--version",
+                    version,
+                    "--created",
+                    "2026-01-01T00:00:00Z",
+                    "--output",
+                    str(sbom_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            require(
+                completed.returncode == 0,
+                f"could not generate mutation SBOM: {completed.stderr}",
+            )
 
         pyz = pathlib.Path(os.environ["PYZ"])
         sbom_path = pathlib.Path(os.environ["SBOM"])
@@ -464,7 +518,58 @@ def test_release_assets_are_deterministic_and_bound() -> None:
 
             with zipfile.ZipFile(pyz) as source:
                 source_infos = source.infolist()
-                source_contents = [(info.filename, source.read(info)) for info in source_infos]
+                source_members = [
+                    (copy.copy(info), source.read(info)) for info in source_infos
+                ]
+                source_contents = [
+                    (info.filename, data) for info, data in source_members
+                ]
+
+            missing_notice = [
+                (info, data)
+                for info, data in source_members
+                if info.filename != "NOTICE"
+            ]
+            require(
+                len(missing_notice) == len(source_members) - 1,
+                "release fixture does not contain exactly one NOTICE",
+            )
+            write_canonical_pyz(root / "missing-notice.pyz", missing_notice)
+            generate_mutation_sbom(
+                root / "missing-notice.pyz",
+                root / "missing-notice.spdx.json",
+                version,
+            )
+            must_reject(
+                "missing-governing-document",
+                root / "missing-notice.pyz",
+                root / "missing-notice.spdx.json",
+                version,
+                expected_message="PYZ members do not equal source",
+            )
+
+            extra_info = zipfile.ZipInfo("LICENSE-EXTRA", date_time=(1980, 1, 1, 0, 0, 0))
+            extra_info.compress_type = zipfile.ZIP_STORED
+            extra_info.create_system = 3
+            extra_info.external_attr = 0o100644 << 16
+            extra_members = sorted(
+                [*source_members, (extra_info, b"unexpected governing terms\\n")],
+                key=lambda item: item[0].filename,
+            )
+            write_canonical_pyz(root / "extra-governing.pyz", extra_members)
+            generate_mutation_sbom(
+                root / "extra-governing.pyz",
+                root / "extra-governing.spdx.json",
+                version,
+            )
+            must_reject(
+                "extra-governing-document",
+                root / "extra-governing.pyz",
+                root / "extra-governing.spdx.json",
+                version,
+                expected_message="PYZ members do not equal source",
+            )
+
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", UserWarning)
                 with (root / "duplicate.pyz").open("wb") as raw:
