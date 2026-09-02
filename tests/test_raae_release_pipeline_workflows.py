@@ -578,7 +578,7 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
         ),
         "id": "evoom-guard-release-source-protocol",
         "target_type": "cli",
-        "version": "1.0.1",
+        "version": "1.0.2",
     }
     assert policy["policy_id"] == "evoom-guard-protected-release-source"
     assert policy["policy_version"] == "2"
@@ -658,6 +658,21 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert "package.get(\"versionInfo\") == expected_version" in pack_test
     assert "static release version does not match CLI/SPDX" in pack_test
     assert "mutation was accepted" in pack_test
+    for governing_document in (
+        "LICENSE",
+        "LICENSE-APACHE",
+        "LICENSING.md",
+        "NOTICE",
+    ):
+        assert f'            "{governing_document}",' in pack_test
+    assert "for document in GOVERNING_DOCUMENTS:" in pack_test
+    assert "expected_contents[document]" in pack_test
+    assert 'expected_contents["LICENSE"]' not in pack_test
+    assert '"missing-governing-document"' in pack_test
+    assert '"extra-governing-document"' in pack_test
+    assert "write_canonical_pyz" in pack_test
+    assert "generate_mutation_sbom" in pack_test
+    assert pack_test.count('expected_message="PYZ members do not equal source"') == 2
     assert 'doctor_status="$?"' in pack_test
     assert 'test "$doctor_status" -eq 1' in pack_test
     assert "object_pairs_hook=reject_duplicate_keys" in pack_test
