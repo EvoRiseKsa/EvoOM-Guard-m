@@ -31,8 +31,8 @@ asset attestation. It prepares a byte-verified draft, then a distinct protected
 Environment approval authorizes a no-checkout job to revalidate live source,
 tag-ruleset, signed-tag, and asset authority, publish, and prove exact immutable
 readback. No release step is gated on dates, elapsed time, or stabilization windows. The
-detached-maintainer-signed direct record for `v4.7.1` records successful workflow run
-`33532737067` and post-publication byte readback. Its signature authenticates the exact
+detached-maintainer-signed direct record for `v4.8.0` records successful workflow run
+`33642398535` and post-publication byte readback. Its signature authenticates the exact
 maintained record bytes, but the evidence remains a same-owner observation, not
 independent validation or a protected A-through-H ledger. The archived A-H signed lane
 is implemented in source but inert with every activation flag false; it is a design

@@ -10,11 +10,11 @@
 ## Status and exact scope
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:ATTESTATIONS_RELEASE_STATUS -->
-Source version `4.8.0` is a **release candidate**; it is unsupported and is not yet a
-consumer release. The latest immutable consumer release selected by the protected source
-tree remains [`v4.7.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1)
-at commit `b222c7df0a3eaef6e89287cd1354625b88ac8b8b`. Detached-maintainer-signed record
-`evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json` binds the published asset
+Source version `4.8.0` is on the **maintained direct release line**. The latest
+immutable consumer release selected by the protected source tree is
+[`v4.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0) at commit
+`07e361cb9a75cc1822cd905ca65df42235b3b910`. Detached-maintainer-signed record
+`evidence/direct-releases/v4.8.0/DIRECT_RELEASE.json` binds the published asset
 observations `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. It records successful
 release-attestation verification for `evo-guard.pyz`, `evo-guard.spdx.json`,
 `SHA256SUMS` and a provider-attestation job whose build-provenance subject is
@@ -23,7 +23,7 @@ post-publication observation created after the tag; it is not part of the releas
 protected A-through-H ledger, independent review, or proof of correctness, security,
 deployment, or efficacy. The latest historical validated A-through-H ledger remains
 `evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json` for `v4.6.0` and does not apply to
-`v4.7.1`.
+`v4.8.0`.
 <!-- END EVOGUARD_PROJECT_STATUS:ATTESTATIONS_RELEASE_STATUS -->
 
 The separate unsigned
@@ -64,12 +64,12 @@ Download the exact direct-recorded asset set and verify its checksum
 manifest:
 
 ```bash
-gh release download v4.7.1 --repo EvoRiseKsa/EvoOM-Guard-m \
+gh release download v4.8.0 --repo EvoRiseKsa/EvoOM-Guard-m \
   --pattern evo-guard.pyz \
   --pattern evo-guard.spdx.json \
   --pattern SHA256SUMS
 sha256sum --check SHA256SUMS
-gh release verify v4.7.1 --repo EvoRiseKsa/EvoOM-Guard-m
+gh release verify v4.8.0 --repo EvoRiseKsa/EvoOM-Guard-m
 ```
 
 Verify the recorded provider statement for its sole build-provenance and
@@ -80,7 +80,7 @@ gh attestation verify ./evo-guard.pyz \
   --repo EvoRiseKsa/EvoOM-Guard-m \
   --signer-workflow EvoRiseKsa/EvoOM-Guard-m/.github/workflows/release.yml \
   --source-ref refs/heads/main \
-  --source-digest b222c7df0a3eaef6e89287cd1354625b88ac8b8b \
+  --source-digest 07e361cb9a75cc1822cd905ca65df42235b3b910 \
   --cert-oidc-issuer https://token.actions.githubusercontent.com \
   --deny-self-hosted-runners \
   --format json
@@ -105,8 +105,8 @@ asset attestation. It prepares a byte-verified draft, then a distinct protected
 Environment approval authorizes a no-checkout job to revalidate live source,
 tag-ruleset, signed-tag, and asset authority, publish, and prove exact immutable
 readback. No release step is gated on dates, elapsed time, or stabilization windows. The
-detached-maintainer-signed direct record for `v4.7.1` records successful workflow run
-`33532737067` and post-publication byte readback. Its signature authenticates the exact
+detached-maintainer-signed direct record for `v4.8.0` records successful workflow run
+`33642398535` and post-publication byte readback. Its signature authenticates the exact
 maintained record bytes, but the evidence remains a same-owner observation, not
 independent validation or a protected A-through-H ledger. The archived A-H signed lane
 is implemented in source but inert with every activation flag false; it is a design

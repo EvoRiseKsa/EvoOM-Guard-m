@@ -54,7 +54,7 @@ directly from GitHub and run the gate on your current branch:
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_QUICKSTART_PIN -->
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.7.1"   # maintained immutable release; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.8.0"   # maintained immutable release; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a
 # throwaway copy; your working tree is never modified):
@@ -223,7 +223,7 @@ Generate a workflow and a base-owned `.evoguard.json` policy:
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_INIT_PIN -->
 ```bash
-evo-guard init --ref v4.7.1 --test-command "python -m pytest -q"
+evo-guard init --ref v4.8.0 --test-command "python -m pytest -q"
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:README_INIT_PIN -->
 
@@ -243,7 +243,7 @@ steps:
     with:
       fetch-depth: 0
       persist-credentials: false
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v4.7.1   # maintained immutable release; pin a SHA for strictest CI
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v4.8.0   # maintained immutable release; pin a SHA for strictest CI
     with:
       comment: "false"   # explicit for older releases; candidate jobs never comment
       fail-on: "any-non-pass"
@@ -377,11 +377,11 @@ Use an immutable release tag or full commit SHA in consumer repositories; do
 not treat a moving branch as a production release channel.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
-Source version `4.8.0` is a **release candidate**; it is unsupported and is not yet a
-consumer release. The latest immutable consumer release selected by the protected source
-tree remains [`v4.7.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1)
-at commit `b222c7df0a3eaef6e89287cd1354625b88ac8b8b`. Detached-maintainer-signed record
-`evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json` binds the published asset
+Source version `4.8.0` is on the **maintained direct release line**. The latest
+immutable consumer release selected by the protected source tree is
+[`v4.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0) at commit
+`07e361cb9a75cc1822cd905ca65df42235b3b910`. Detached-maintainer-signed record
+`evidence/direct-releases/v4.8.0/DIRECT_RELEASE.json` binds the published asset
 observations `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. It records successful
 release-attestation verification for `evo-guard.pyz`, `evo-guard.spdx.json`,
 `SHA256SUMS` and a provider-attestation job whose build-provenance subject is
@@ -390,7 +390,7 @@ post-publication observation created after the tag; it is not part of the releas
 protected A-through-H ledger, independent review, or proof of correctness, security,
 deployment, or efficacy. The latest historical validated A-through-H ledger remains
 `evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json` for `v4.6.0` and does not apply to
-`v4.7.1`.
+`v4.8.0`.
 
 Releases ship through the manually dispatched protected-release workflow
 (`.github/workflows/release.yml`): tag-equals-version validation, the full test suite,
@@ -399,8 +399,8 @@ asset attestation. It prepares a byte-verified draft, then a distinct protected
 Environment approval authorizes a no-checkout job to revalidate live source,
 tag-ruleset, signed-tag, and asset authority, publish, and prove exact immutable
 readback. No release step is gated on dates, elapsed time, or stabilization windows. The
-detached-maintainer-signed direct record for `v4.7.1` records successful workflow run
-`33532737067` and post-publication byte readback. Its signature authenticates the exact
+detached-maintainer-signed direct record for `v4.8.0` records successful workflow run
+`33642398535` and post-publication byte readback. Its signature authenticates the exact
 maintained record bytes, but the evidence remains a same-owner observation, not
 independent validation or a protected A-through-H ledger. The archived A-H signed lane
 is implemented in source but inert with every activation flag false; it is a design
@@ -455,7 +455,7 @@ without crowding this landing page.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_ATTESTATION_SCOPE -->
 Historical `v3.7.0` has a GitHub release attestation but no GitHub Actions
-build-artifact attestation. For `v4.7.1`, the maintained direct record reports that
+build-artifact attestation. For `v4.8.0`, the maintained direct record reports that
 release-attestation verification binds `evo-guard.pyz`, `evo-guard.spdx.json`,
 `SHA256SUMS`. It also records a successful provider-attestation job whose
 build-provenance and SBOM subjects are both `evo-guard.pyz` under

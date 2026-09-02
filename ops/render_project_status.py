@@ -113,6 +113,16 @@ _DIRECT_RELEASE_WORKFLOW_CONTRACTS: dict[
         ".github/workflows/release-published-verify.yml",
         "20f9f759bd9f14ae16e697894d62e6eb0eb82d6a26333d41a025cbbb81ea4478",
     ),
+    "4.8.0": (
+        ".github/workflows/release.yml",
+        "c1a404466c4bc98e98f43113fb636ac838bd7130726fe027cc5dc9eb8294b026",
+        ".github/workflows/release-published-verify.yml",
+        "20f9f759bd9f14ae16e697894d62e6eb0eb82d6a26333d41a025cbbb81ea4478",
+    ),
+}
+_DIRECT_RELEASE_HISTORY_CONTRACTS = {
+    "4.7.1": "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json",
+    "4.8.0": "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json",
 }
 _DIRECT_RELEASE_JOBS = (
     "validate-test",
@@ -125,12 +135,20 @@ _DIRECT_RELEASE_JOBS = (
     "publish-release",
     "post-publication-verify / verify-published-release",
 )
-_DIRECT_RELEASE_NON_CLAIMS = (
-    "This maintained record is not evoguard-release-ledger-v2 and does not claim protected A-through-H, RSAE, or RAAE evidence for v4.7.1.",
-    "Publication and same-owner verification do not prove behavioral correctness, security, production readiness, deployment, or independent efficacy.",
-    "The record was created after immutable publication and is not part of the v4.7.1 tag, source tree, or release assets.",
-    "Provider-control observations are point-in-time workflow and API observations, not guarantees that mutable repository controls can never change later.",
-)
+_DIRECT_RELEASE_NON_CLAIM_CONTRACTS = {
+    "4.7.1": (
+        "This maintained record is not evoguard-release-ledger-v2 and does not claim protected A-through-H, RSAE, or RAAE evidence for v4.7.1.",
+        "Publication and same-owner verification do not prove behavioral correctness, security, production readiness, deployment, or independent efficacy.",
+        "The record was created after immutable publication and is not part of the v4.7.1 tag, source tree, or release assets.",
+        "Provider-control observations are point-in-time workflow and API observations, not guarantees that mutable repository controls can never change later.",
+    ),
+    "4.8.0": (
+        "This maintained record is not evoguard-release-ledger-v2 and does not claim protected A-through-H, RSAE, or RAAE evidence for v4.8.0.",
+        "Publication and same-owner verification support only advisory-first Public Beta release availability; they do not prove behavioral correctness, security, production readiness, deployment, Core GA, hostile-code production suitability, or independent efficacy.",
+        "The record was created after immutable publication and is not part of the v4.8.0 tag, source tree, or release assets.",
+        "Provider-control observations are point-in-time workflow and API observations, not guarantees that mutable repository controls can never change later.",
+    ),
+}
 _BEGIN_RE = re.compile(r"<!-- BEGIN EVOGUARD_PROJECT_STATUS:([A-Z0-9_]+) -->")
 _END_RE = re.compile(r"<!-- END EVOGUARD_PROJECT_STATUS:([A-Z0-9_]+) -->")
 _MARKER_LINE_RE = re.compile(
@@ -1852,6 +1870,10 @@ def _load_direct_release(
     historical_contract = _DIRECT_RELEASE_WORKFLOW_CONTRACTS.get(version)
     if historical_contract is None:
         raise ProjectStatusError("direct-release workflow contract is not reviewed")
+    historical_ledger_contract = _DIRECT_RELEASE_HISTORY_CONTRACTS.get(version)
+    non_claim_contract = _DIRECT_RELEASE_NON_CLAIM_CONTRACTS.get(version)
+    if historical_ledger_contract is None or non_claim_contract is None:
+        raise ProjectStatusError("direct-release history and non-claim contracts are not reviewed")
     (
         historical_workflow_path,
         historical_workflow_sha256,
@@ -2332,7 +2354,8 @@ def _load_direct_release(
         {"latest_validated_a_h_ledger", "applies_to_this_release"},
     )
     if (
-        historical["latest_validated_a_h_ledger"] != status.ledger_path
+        historical["latest_validated_a_h_ledger"] != historical_ledger_contract
+        or historical["latest_validated_a_h_ledger"] != status.ledger_path
         or historical["applies_to_this_release"] is not False
     ):
         raise ProjectStatusError("direct-release historical ledger boundary is inconsistent")
@@ -2352,7 +2375,7 @@ def _load_direct_release(
     _exact_string_list(
         trust["non_claims"],
         "direct-release trust_boundary.non_claims",
-        _DIRECT_RELEASE_NON_CLAIMS,
+        non_claim_contract,
     )
     if (
         trust["same_owner_operation"] is not True

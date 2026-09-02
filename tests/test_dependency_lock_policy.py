@@ -264,6 +264,65 @@ def test_published_release_record_retains_its_historical_workflow_pin() -> None:
     assert f"actions/attest@{reviewed_attest}" not in text
 
 
+def test_v480_direct_record_pins_its_release_history_and_nonclaims() -> None:
+    source_commit = "07e361cb9a75cc1822cd905ca65df42235b3b910"
+    workflow_path = ".github/workflows/release.yml"
+    workflow_blob_sha = "dc24c9ff17cc55ddf689dc0dc2dd61a568117d72"
+    workflow_sha256 = (
+        "c1a404466c4bc98e98f43113fb636ac838bd7130726fe027cc5dc9eb8294b026"
+    )
+    verifier_path = ".github/workflows/release-published-verify.yml"
+    verifier_blob_sha = "67e95bae6c650a2e3606a24fae0967bab649b7d5"
+    verifier_sha256 = (
+        "20f9f759bd9f14ae16e697894d62e6eb0eb82d6a26333d41a025cbbb81ea4478"
+    )
+    record = json.loads(
+        (ROOT / "evidence/direct-releases/v4.8.0/DIRECT_RELEASE.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    workflow = record["workflow"]
+    assert record["source"]["commit_sha"] == source_commit
+    assert workflow["workflow_blob_sha"] == workflow_blob_sha
+    assert workflow["verifier_blob_sha"] == verifier_blob_sha
+    assert render_project_status._DIRECT_RELEASE_WORKFLOW_CONTRACTS["4.8.0"] == (
+        workflow_path,
+        workflow_sha256,
+        verifier_path,
+        verifier_sha256,
+    )
+    assert render_project_status._DIRECT_RELEASE_HISTORY_CONTRACTS["4.8.0"] == (
+        "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json"
+    )
+    assert tuple(record["trust_boundary"]["non_claims"]) == (
+        render_project_status._DIRECT_RELEASE_NON_CLAIM_CONTRACTS["4.8.0"]
+    )
+
+    with render_project_status._trusted_git_session(ROOT):
+        release = render_project_status._git_bytes(
+            ROOT,
+            "show",
+            "--end-of-options",
+            f"{source_commit}:{workflow_path}",
+        )
+        verifier = render_project_status._git_bytes(
+            ROOT,
+            "show",
+            "--end-of-options",
+            f"{source_commit}:{verifier_path}",
+        )
+    assert hashlib.sha256(release).hexdigest() == workflow_sha256
+    assert hashlib.sha256(verifier).hexdigest() == verifier_sha256
+    assert hashlib.sha1(
+        f"blob {len(release)}\0".encode("ascii") + release,
+        usedforsecurity=False,
+    ).hexdigest() == workflow_blob_sha
+    assert hashlib.sha1(
+        f"blob {len(verifier)}\0".encode("ascii") + verifier,
+        usedforsecurity=False,
+    ).hexdigest() == verifier_blob_sha
+
+
 def test_trusted_dependency_inputs_are_codeowner_protected() -> None:
     codeowners = CODEOWNERS.read_text(encoding="utf-8")
     for path in (
@@ -282,5 +341,6 @@ def test_trusted_dependency_inputs_are_codeowner_protected() -> None:
         "/docs/EVIDENCE_BUNDLES.md",
         "/docs/GUARD.md",
         "/docs/SBOM.md",
+        "/evidence/direct-releases/",
     ):
         assert f"{path} @MANA-awam" in codeowners
