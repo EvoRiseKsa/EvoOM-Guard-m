@@ -45,9 +45,11 @@ production channel.
 
 | You want to… | Start here | Then read |
 |---|---|---|
+| Decide whether the product fits your repository | [`PRODUCT_CONTRACT.md`](PRODUCT_CONTRACT.md) | [`PUBLIC_BETA.md`](PUBLIC_BETA.md) |
 | Evaluate the product quickly | [`START_HERE.md`](START_HERE.md) | [`ASSURANCE.md`](ASSURANCE.md) |
 | Add the gate to a repository | [`ADOPTION.md`](ADOPTION.md) | [`GUARD.md`](GUARD.md) |
 | Check readiness and stage a non-blocking rollout | [`PREFLIGHT.md`](PREFLIGHT.md) | [`ADOPTION.md`](ADOPTION.md) |
+| Join the bounded external adoption pilot | [`PUBLIC_BETA.md`](PUBLIC_BETA.md) | [`EXTERNAL_AGENT_GATE_PILOT.md`](EXTERNAL_AGENT_GATE_PILOT.md) |
 | Judge a CLI externally | [`BLACKBOX.md`](BLACKBOX.md) | [`VERIFIER_PACKS.md`](VERIFIER_PACKS.md) |
 | Design a production deployment | [`PRODUCTION_BLUEPRINT.md`](PRODUCTION_BLUEPRINT.md) | [`PRODUCTION_OPERATIONS.md`](PRODUCTION_OPERATIONS.md) |
 | Review security claims | [`ASSURANCE.md`](ASSURANCE.md) | [`REWARD_HACKING_CATALOG.md`](REWARD_HACKING_CATALOG.md) |
@@ -59,6 +61,11 @@ production channel.
 
 ## Getting started
 
+- [`PRODUCT_CONTRACT.md`](PRODUCT_CONTRACT.md) — the one product question,
+  intended users, supported Beta profiles, deployment obligations, and
+  explicit non-products.
+- [`PUBLIC_BETA.md`](PUBLIC_BETA.md) — advisory-first rollout, evidence-based
+  promotion, cohort measures, incident handling, and GA exit criteria.
 - [`START_HERE.md`](START_HERE.md) — choose the basic, black-box, isolated, or
   Trusted Finalizer path.
 - [`ADOPTION.md`](ADOPTION.md) — install, configure, and interpret the gate in a

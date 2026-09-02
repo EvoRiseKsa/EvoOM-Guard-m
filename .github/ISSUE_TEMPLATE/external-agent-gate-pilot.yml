@@ -1,5 +1,5 @@
 name: External Agent Gate pilot
-description: Volunteer a repository for the bounded Agent Gate adoption pilot.
+description: Volunteer a repository for the advisory-first Public Beta pilot.
 title: "[agent-gate-pilot] "
 labels:
   - enhancement
@@ -8,7 +8,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        This form is public. Do not paste credentials, private source, private prompts, or an undisclosed vulnerability. The pilot measures external installation and operation; it is not automatically an independent efficacy study.
+        This form is public. Do not paste credentials, private source, private prompts, or an undisclosed vulnerability. The pilot starts advisory, requires at least 10 recorded attempts before blocking promotion, and is not automatically an independent efficacy study.
   - type: input
     id: repository
     attributes:
@@ -71,7 +71,7 @@ body:
     attributes:
       label: Pilot prerequisites
       options:
-        - label: The default branch is protected and EvoOM Guard can be configured as a required pull-request check.
+        - label: The default branch is protected and EvoOM Guard can start as a non-required advisory check before any blocking promotion.
           required: true
         - label: The policy and judge configuration will be owned by the protected base branch.
           required: true
@@ -86,6 +86,8 @@ body:
         - label: The participating team is authorized to retain the bounded records, including operator, change-author, receipt-verifier, relationship, and conflict-of-interest roles.
           required: true
         - label: I read docs/EXTERNAL_AGENT_GATE_PILOT.md and understand that this pilot does not itself prove independent efficacy.
+          required: true
+        - label: I will preregister and retain at least 10 attempts on one pinned Guard version and policy before requesting blocking promotion.
           required: true
   - type: textarea
     id: constraints
