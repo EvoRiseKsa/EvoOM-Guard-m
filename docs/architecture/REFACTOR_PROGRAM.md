@@ -619,11 +619,24 @@ remain in their established facades.
   classified verifier owner adds no cycle, private import, layer violation, or
   unclassified debt; the seven mixed facades remain explicit debt and neither
   schema nor verdict behavior changes.
+- The bounded finalizer ownership slice moves only the raw-Git subprocess
+  lifecycle from `finalizer_derivation.py::_run_git_command` into the
+  effect-injected `finalizer/git_command.py` owner. The branch-free historical
+  facade resolves its existing process, thread, clock, environment, limit,
+  exception, and cleanup seams on every call. Existing characterization binds
+  bare/worktree commands, closed pinned-executable environments, concurrent
+  bounded pipe draining, deadlines, exact-`True` cleanup proof, POSIX
+  post-completion cleanup, partial reader starts, primary exception identity,
+  ordered bounded cleanup notes, error bytes/messages, and executable-pin
+  stability. The owner imports no facade and no extracted helper exceeds the
+  C901 threshold; removing the former complexity-37 hotspot lowers the current
+  repository inventory from 90 to 89. This changes no raw object, verdict,
+  schema, canonical byte, signature, admission, or publication behavior.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction
-is **complete**; the overall refactor program is **in-progress**. Source version `4.7.1`
-is on the maintained direct release line.
+is **complete**; the overall refactor program is **in-progress**. Source version
+`4.8.0.dev0` is unreleased development and is not a consumer release.
 <!-- END EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. The

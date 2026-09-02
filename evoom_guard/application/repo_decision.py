@@ -58,6 +58,10 @@ OUTCOME_REASON_POLICY: Mapping[str, tuple[str, str]] = MappingProxyType(
             ERROR,
             REASON_ASSURANCE_REQUIREMENT_NOT_MET,
         ),
+        "structured_verdict_unavailable": (
+            ERROR,
+            REASON_ASSURANCE_REQUIREMENT_NOT_MET,
+        ),
         "runtime_identity_unavailable": (
             ERROR,
             REASON_ASSURANCE_REQUIREMENT_NOT_MET,

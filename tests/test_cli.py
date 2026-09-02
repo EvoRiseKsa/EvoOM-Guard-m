@@ -243,6 +243,18 @@ def test_guard_parser_accepts_docker_network():
     assert args.docker_network == "mynet"
 
 
+def test_guard_parser_accepts_structured_verdict_floor():
+    parser = cli.build_parser()
+
+    default_args = parser.parse_args(["guard", ".", "--patch", "-"])
+    strict_args = parser.parse_args(
+        ["guard", ".", "--patch", "-", "--require-structured-verdict"]
+    )
+
+    assert default_args.require_structured_verdict is False
+    assert strict_args.require_structured_verdict is True
+
+
 def test_trusted_config_forwards_full_runtime_policy_to_guard(tmp_path, monkeypatch):
     """Policy knobs omitted from CLI flags still reach the trusted judge call."""
     from evoom_guard.guard import PASS, GuardResult
@@ -278,7 +290,15 @@ def test_trusted_config_forwards_full_runtime_policy_to_guard(tmp_path, monkeypa
         )
 
     monkeypatch.setattr("evoom_guard.guard.guard", fake_guard)
-    args = cli.build_parser().parse_args(["guard", str(repo), "--patch", str(patch)])
+    args = cli.build_parser().parse_args(
+        [
+            "guard",
+            str(repo),
+            "--patch",
+            str(patch),
+            "--require-structured-verdict",
+        ]
+    )
 
     assert cli.cmd_guard(args, out=lambda _message: None) == 0
     assert {
@@ -294,6 +314,7 @@ def test_trusted_config_forwards_full_runtime_policy_to_guard(tmp_path, monkeypa
             "min_diff_coverage",
             "baseline_evidence",
             "require_demonstrated_fix",
+            "require_structured_verdict",
         )
     } == {
         "strict_harness": True,
@@ -306,6 +327,7 @@ def test_trusted_config_forwards_full_runtime_policy_to_guard(tmp_path, monkeypa
         "min_diff_coverage": 80.0,
         "baseline_evidence": True,
         "require_demonstrated_fix": True,
+        "require_structured_verdict": True,
     }
     assert type(captured["min_diff_coverage"]) is float
 

@@ -1,8 +1,9 @@
 # Release status
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_SUMMARY -->
-Source version `4.7.1` is on the **maintained direct release line**. The latest
-immutable consumer release selected by the protected source tree is
+Source version `4.8.0.dev0` is **unreleased development**; it is unsupported and is not
+a consumer release. The latest immutable consumer release selected by the protected
+source tree remains
 [`v4.7.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1) at commit
 `b222c7df0a3eaef6e89287cd1354625b88ac8b8b`. Detached-maintainer-signed record
 `evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json` binds the published asset

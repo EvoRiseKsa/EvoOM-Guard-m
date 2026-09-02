@@ -515,7 +515,7 @@ is the separately recorded repo phase, not the combined repo+pack verdict.
 | `PASS` | `tests_passed` | Required repo/pack phases passed and protected-path admission found no candidate edit/deletion to the effective set. |
 | `REJECTED` | `protected_harness_edit` | Patch edits/deletes a built-in or explicitly declared effective-policy protected path. |
 | `FAIL` | `tests_failed` | A required test phase genuinely failed. |
-| `FAIL` / `ERROR` | `no_test_verdict` | No clean test verdict was available (collection/usage/judge error). |
+| `FAIL` / `ERROR` | `no_test_verdict` | A launched, supported test phase produced no clean verdict (collection/usage/judge error). An unmatched command under a structured-verdict requirement is instead refused before launch as `assurance_requirement_not_met`. |
 | `TAMPERED` | `junit_exit_mismatch` | Process exit and judge-owned JUnit disagree. |
 | `TAMPERED` | `verifier_pack_snapshot_changed` | Accepted pack snapshot changed before or during execution. |
 | `TAMPERED` | `candidate_tree_changed_during_run` | The prepared repo runtime tree, or a declared harness-input identity during materialization or candidate/pack execution, differed at an enforced checkpoint. |
@@ -527,7 +527,7 @@ is the separately recorded repo phase, not the combined repo+pack verdict.
 | `ERROR` | `runtime_cleanup_failed` | The judge process group or a candidate container could not be proven absent after execution; a pending PASS/FAIL is invalidated fail-closed. |
 | `ERROR` | `test_command_unavailable` | Required test/pack interpreter or executable is unavailable. |
 | `ERROR` | `policy_requirement_unsupported` | Selected judge cannot enforce a requested gate; it is not silently dropped. |
-| `ERROR` | `assurance_requirement_not_met` | Delivered assurance/isolation is below the required floor, required changed-line coverage is explicitly unavailable, or the initial trusted harness-input identity could not be established before materialization. |
+| `ERROR` | `assurance_requirement_not_met` | Delivered assurance/isolation is below the required floor, the configured repository command has no structured runner adapter when that floor is required, required changed-line coverage is explicitly unavailable, or the initial trusted harness-input identity could not be established before materialization. |
 | `ERROR` | `setup_timeout` | Setup timed out. |
 | `ERROR` | `setup_failed` | Setup failed or changed judged paths outside trusted output exceptions. |
 | `FAIL` / `ERROR` | `test_timeout` | A required test phase timed out; exact verdict reflects the judge path. |

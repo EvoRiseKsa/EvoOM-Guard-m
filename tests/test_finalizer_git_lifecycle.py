@@ -728,6 +728,7 @@ def _exercise_raw_git_abort_cleanup(
         traceback_names.append(traceback.tb_frame.f_code.co_name)
         traceback = traceback.tb_next
     assert traceback_names.count("_run_git_command") == 1
+    assert traceback_names.count("run_bounded_git_command") == 1
     return events, list(getattr(primary, "__notes__", []))
 
 

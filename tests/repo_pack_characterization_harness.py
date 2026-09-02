@@ -351,6 +351,14 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
         command: list[str],
         report_path: str,
     ) -> tuple[list[str], bool, dict[str, str]]:
+        if report_path == "judge-result.xml":
+            events.append(
+                {
+                    "command": list(command),
+                    "op": "instrument-repo-preflight",
+                }
+            )
+            return list(command), True, {}
         events.append(
             {
                 "command": _canonical_pack_command(

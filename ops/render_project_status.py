@@ -1381,9 +1381,16 @@ def load_status(root: Path, *, raw: bytes | None = None) -> Status:
         )
     if (
         schema_version == "evoguard-project-status-v3"
-        and status.lifecycle != "release-line"
+        and status.lifecycle
+        not in {
+            "unreleased-development",
+            "release-candidate",
+            "release-line",
+        }
     ):
-        raise ProjectStatusError("project-status v3 requires lifecycle release-line")
+        raise ProjectStatusError(
+            "project-status v3 requires a direct-release source lifecycle"
+        )
     return status
 
 
@@ -2375,7 +2382,7 @@ def _load_direct_release(
         release_body_sha256=release_body_sha256,
         workflow_run_id=workflow_run_id,
     )
-    if source_version != version:
+    if status.lifecycle == "release-line" and source_version != version:
         raise ProjectStatusError("release-line source version must equal the direct release")
     if verify_git:
         assert trusted_head is not None
@@ -4268,23 +4275,45 @@ def _verify_source_relation(
     direct_release: DirectRelease | None = None,
 ) -> None:
     published = _version_tuple(ledger.version)
+    if status.relation != "descendant":
+        raise ProjectStatusError(f"unsupported source relation: {status.relation}")
+    if status.schema_version == "evoguard-project-status-v3":
+        if direct_release is None:
+            raise ProjectStatusError(
+                "project-status v3 requires direct release authority"
+            )
+        direct = _version_tuple(direct_release.version)
+        if published >= direct:
+            raise ProjectStatusError(
+                "the historical ledger must precede the direct consumer release"
+            )
+        if status.lifecycle == "release-line":
+            source = _version_tuple(source_version)
+            if source != direct:
+                raise ProjectStatusError(
+                    "release-line source version must equal the direct release"
+                )
+        elif status.lifecycle == "unreleased-development":
+            source = _version_tuple(source_version, development=True)
+            if source <= direct:
+                raise ProjectStatusError(
+                    "development source must be newer than the direct consumer release"
+                )
+        elif status.lifecycle == "release-candidate":
+            source = _version_tuple(source_version)
+            if source <= direct:
+                raise ProjectStatusError(
+                    "candidate source must be newer than the direct consumer release"
+                )
+        else:
+            raise ProjectStatusError(
+                "project-status v3 source lifecycle is unsupported"
+            )
+        return
     if status.lifecycle == "unreleased-development":
         source = _version_tuple(source_version, development=True)
     else:
         source = _version_tuple(source_version)
-    if status.relation != "descendant":
-        raise ProjectStatusError(f"unsupported source relation: {status.relation}")
-    if status.schema_version == "evoguard-project-status-v3":
-        if (
-            status.lifecycle != "release-line"
-            or direct_release is None
-            or source != _version_tuple(direct_release.version)
-            or published >= source
-        ):
-            raise ProjectStatusError(
-                "project-status v3 must bind a newer direct release on the source line"
-            )
-        return
     if status.lifecycle == "release-line":
         if source != published:
             raise ProjectStatusError(
@@ -4846,13 +4875,32 @@ def _release_summary(context: Context) -> str:
     ledger = context.ledger
     direct = context.direct_release
     if direct is not None:
+        source_lifecycle = {
+            "unreleased-development": (
+                "**unreleased development**; it is unsupported and is not a "
+                "consumer release"
+            ),
+            "release-candidate": (
+                "a **release candidate**; it is unsupported and is not yet a "
+                "consumer release"
+            ),
+            "release-line": "on the **maintained direct release line**",
+        }.get(context.status.lifecycle)
+        if source_lifecycle is None:
+            raise ProjectStatusError(
+                f"unsupported rendered direct source lifecycle: "
+                f"{context.status.lifecycle}"
+            )
+        consumer_relation = (
+            "is" if context.status.lifecycle == "release-line" else "remains"
+        )
         artifacts = "`, `".join(direct.artifacts)
         release_subjects = "`, `".join(direct.release_attestation_subjects)
         build_subjects = "`, `".join(direct.build_provenance_subjects)
         return _wrap(
-            f"Source version `{context.source_version}` is on the **maintained direct "
-            f"release line**. The latest immutable consumer release selected by the "
-            f"protected source tree is [`{direct.tag}`]({direct.release_url}) at commit "
+            f"Source version `{context.source_version}` is {source_lifecycle}. The "
+            f"latest immutable consumer release selected by the protected source tree "
+            f"{consumer_relation} [`{direct.tag}`]({direct.release_url}) at commit "
             f"`{direct.commit_sha}`. Detached-maintainer-signed record "
             f"`{direct.record_path}` binds the published asset observations "
             f"`{artifacts}`. It records successful release-attestation verification for "
@@ -5026,6 +5074,38 @@ def _direct_release_blocks(context: Context) -> dict[str, str]:
     version = direct.version
     commit_sha = direct.commit_sha
     release_link = f"[`{tag}`]({direct.release_url})"
+    source_support_status = {
+        "unreleased-development": (
+            "Unreleased development source; unsupported; not a consumer release"
+        ),
+        "release-candidate": (
+            "Release candidate source; unsupported; not yet a consumer release"
+        ),
+        "release-line": "Source on the maintained direct release line",
+    }.get(architecture.lifecycle)
+    architecture_version_state = {
+        "unreleased-development": (
+            "is unreleased development and is not a consumer release"
+        ),
+        "release-candidate": (
+            "is a release candidate and is not yet a consumer release"
+        ),
+        "release-line": "is on the maintained direct release line",
+    }.get(architecture.lifecycle)
+    if source_support_status is None or architecture_version_state is None:
+        raise ProjectStatusError(
+            f"unsupported rendered direct source lifecycle: {architecture.lifecycle}"
+        )
+    source_support_row = (
+        f"| `{context.source_version}` | {source_support_status} |\n"
+        if architecture.lifecycle != "release-line"
+        else ""
+    )
+    source_support_bullet = (
+        f"- Source `{context.source_version}` status: {source_support_status.lower()}.\n"
+        if architecture.lifecycle != "release-line"
+        else ""
+    )
     asset_names = "`, `".join(direct.artifacts)
     release_subject_names = "`, `".join(direct.release_attestation_subjects)
     build_subject_names = "`, `".join(direct.build_provenance_subjects)
@@ -5050,6 +5130,7 @@ def _direct_release_blocks(context: Context) -> dict[str, str]:
         "consumer release only:\n\n"
         "| Version | Status |\n"
         "| --- | --- |\n"
+        f"{source_support_row}"
         f"| {release_link} | Latest stable release; supported; maintained signed "
         "direct record, not an A-through-H ledger |\n"
         f"| [`{ledger.tag}`]({ledger.release_url}) | Historical latest validated "
@@ -5062,8 +5143,8 @@ def _direct_release_blocks(context: Context) -> dict[str, str]:
         "useful, but a fix will be delivered in a new immutable release rather than by\n"
         "rewriting an existing tag, asset, checksum, attestation, or maintained record."
     )
-    changelog_support = (
-        f"- {release_link} is the latest stable and supported consumer release. Its\n"
+    changelog_support = source_support_bullet + (
+        f"- {release_link} remains the latest stable and supported consumer release. Its\n"
         "  detached-maintainer-signed direct record is a same-owner post-publication\n"
         "  observation, not an A-through-H ledger or independent review.\n"
         f"- [`{ledger.tag}`]({ledger.release_url}) remains the latest historical release\n"
@@ -5139,7 +5220,6 @@ def _direct_release_blocks(context: Context) -> dict[str, str]:
         "maintainer signature authenticates the direct record, not the truth or\n"
         "independence of the same-owner observations inside it."
     )
-    architecture_version_state = "is on the maintained direct release line"
     return {
         "SECURITY_SUPPORTED_VERSIONS": security_support,
         "CHANGELOG_RELEASE_SUPPORT": changelog_support,

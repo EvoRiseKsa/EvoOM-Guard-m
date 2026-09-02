@@ -185,8 +185,10 @@ sandbox for hostile code.
 - EvoOM Guard does not judge test quality, author intent, or general correctness.
 - It does not discover a complete transitive harness graph; declare repository
   wrappers/helpers as `harness_inputs`.
-- Runners outside the eight structured adapters grade on the **exit code alone**
-  today (no structured counts / tamper check) — see
+- By default, runners outside the eight structured adapters grade on the
+  **exit code alone** (no structured counts / tamper check). Use preflight plus
+  `--require-structured-verdict`, or a trusted `strict_harness` policy, to
+  refuse that downgrade before repository-suite execution — see
   [RUNNER_CONFORMANCE.md](RUNNER_CONFORMANCE.md).
 - Same-owner demonstrations are reproducible operational evidence, **not**
   independent validation — see [INDEPENDENT_EVALUATION.md](INDEPENDENT_EVALUATION.md).

@@ -124,8 +124,13 @@ separable: a core-only build that omits every platform path in the table above
 imports cleanly, runs the gate end-to-end, and refuses platform subcommands
 with a clear message instead of a traceback. The boundary is enforced by
 `tests/architecture/test_license_boundaries.py`. Publishing a separate
-core-only wheel remains a distribution decision layered on top of this map,
-not a licensing question.
+core-only wheel is deferred: the current core and platform still share the
+`evoom_guard` import namespace and `evo-guard` console entry point, so two
+distributions would claim the same installed files and have unsafe
+install/uninstall coexistence. Physical source separability does not override
+that package-manager ownership conflict. Reconsideration requires a separate
+namespace and entry point as well as an explicit migration/coexistence
+contract; see [`docs/DISTRIBUTION_SECURITY.md`](docs/DISTRIBUTION_SECURITY.md).
 
 This map remains the authoritative statement of which license applies to which
 path.

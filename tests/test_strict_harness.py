@@ -18,7 +18,6 @@ from evoom_guard.guard import (
     ERROR,
     PASS,
     REASON_ASSURANCE_REQUIREMENT_NOT_MET,
-    REASON_NO_TEST_VERDICT,
     REJECTED,
     guard,
 )
@@ -99,10 +98,19 @@ def test_default_profile_preserves_exit_only_compatibility(tmp_path) -> None:
     assert result.attestation["effective_policy"]["strict_harness"] is False
 
 
-@pytest.mark.skipif(os.name != "posix", reason="requires POSIX process-group proof")
-def test_strict_harness_refuses_exit_only_zero_test_pass(tmp_path) -> None:
+def test_strict_harness_refuses_unadapted_command_before_suite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     (tmp_path / "app.py").write_text("value = 1\n", encoding="utf-8")
     candidate = "<<<FILE: app.py>>>\nvalue = 2\n<<<END FILE>>>"
+    launches: list[list[str]] = []
+
+    def unexpected_run(command: list[str], **_kwargs: object) -> None:
+        launches.append(command)
+        raise AssertionError("an unmatched strict command must not run")
+
+    monkeypatch.setattr(repo_verifier, "_run_bounded_subprocess", unexpected_run)
 
     result = guard(
         str(tmp_path),
@@ -112,10 +120,17 @@ def test_strict_harness_refuses_exit_only_zero_test_pass(tmp_path) -> None:
     )
 
     assert result.verdict == ERROR
-    assert result.reason_code == REASON_NO_TEST_VERDICT
-    assert result.tests_passed == result.tests_total == 0
+    assert result.reason_code == REASON_ASSURANCE_REQUIREMENT_NOT_MET
+    assert result.execution_phase == "preflight"
+    assert result.execution_state == "not_started"
+    assert result.test_command_ran is False
+    assert result.tests_passed is result.tests_total is None
+    assert result.verdict_source is None
+    assert result.isolation == "not_run"
+    assert "no matching runner adapter" in result.diagnostics
     assert result.attestation is not None
     assert result.attestation["effective_policy"]["strict_harness"] is True
+    assert launches == []
 
 
 @pytest.mark.skipif(os.name != "posix", reason="requires POSIX process-group proof")

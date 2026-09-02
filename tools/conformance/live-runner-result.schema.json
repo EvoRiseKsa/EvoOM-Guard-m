@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/tools/conformance/live-runner-result.schema.json",
+  "title": "EvoOM Guard live runner conformance result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "claims", "environment", "execution", "schema_version", "source", "status", "status_basis", "suite"],
+  "properties": {
+    "$schema": {"const": "tools/conformance/live-runner-result.schema.json"},
+    "schema_version": {"const": "evoguard-live-runner-conformance-v1"},
+    "status": {"const": "pass"},
+    "status_basis": {"const": "real_guard_oracle_tests_only"},
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["external_runner_suites_executed", "hostile_code_production", "independent_evaluation", "matrix_cell_only"],
+      "properties": {
+        "external_runner_suites_executed": {"const": true},
+        "hostile_code_production": {"const": false},
+        "independent_evaluation": {"const": false},
+        "matrix_cell_only": {"const": true}
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["matrix_os", "matrix_python", "node", "python", "python_packages_count", "python_packages_sha256", "pytest_plugin_autoload_disabled", "runner_arch", "runner_environment", "runner_image", "runner_image_version", "runner_os", "vitest"],
+      "properties": {
+        "matrix_os": {"enum": ["ubuntu-latest", "windows-latest"]},
+        "matrix_python": {"enum": ["3.10", "3.11", "3.12"]},
+        "node": {"type": "string", "pattern": "^v22\\.[0-9]+\\.[0-9]+$", "maxLength": 4096},
+        "python": {"type": "string", "minLength": 1},
+        "python_packages_count": {"type": "integer", "minimum": 1},
+        "python_packages_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "pytest_plugin_autoload_disabled": {"const": true},
+        "runner_arch": {"const": "X64"},
+        "runner_environment": {"const": "github-hosted"},
+        "runner_image": {"type": "string", "minLength": 1},
+        "runner_image_version": {"type": "string", "minLength": 1},
+        "runner_os": {"enum": ["Linux", "Windows"]},
+        "vitest": {"type": "string", "pattern": "^vitest/4\\.1\\.10(?:\\s.*)?$", "maxLength": 4096}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_name", "git_commit", "git_tree", "repository", "ref", "run_attempt", "run_id", "sha", "workflow_ref", "workflow_sha"],
+      "properties": {
+        "event_name": {"enum": ["pull_request", "push"]},
+        "git_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "git_tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "repository": {"const": "EvoRiseKsa/EvoOM-Guard-m"},
+        "ref": {"type": "string", "pattern": "^(refs/heads/main|refs/pull/[1-9][0-9]*/merge)$"},
+        "run_attempt": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "run_id": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "workflow_ref": {"type": "string", "minLength": 1},
+        "workflow_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aggregate_sha256", "reviewed_files"],
+      "properties": {
+        "aggregate_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "reviewed_files": {
+          "type": "object",
+          "minProperties": 16,
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sha256", "size"],
+            "properties": {
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "size": {"type": "integer", "minimum": 1}
+            }
+          }
+        }
+      }
+    },
+    "suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["errors", "failures", "junit_sha256", "junit_size", "skipped", "test_names", "tests"],
+      "properties": {
+        "errors": {"const": 0},
+        "failures": {"const": 0},
+        "junit_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "junit_size": {"type": "integer", "minimum": 1, "maximum": 2097152},
+        "skipped": {"const": 0},
+        "test_names": {
+          "type": "array",
+          "minItems": 13,
+          "maxItems": 13,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "tests": {"const": 13}
+      }
+    }
+  }
+}

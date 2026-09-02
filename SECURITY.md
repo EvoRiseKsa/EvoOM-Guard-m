@@ -19,6 +19,7 @@ consumer release only:
 
 | Version | Status |
 | --- | --- |
+| `4.8.0.dev0` | Unreleased development source; unsupported; not a consumer release |
 | [`v4.7.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1) | Latest stable release; supported; maintained signed direct record, not an A-through-H ledger |
 | [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) | Historical latest validated A-through-H ledger; unsupported as the current consumer line |
 | Earlier published releases | Historical and unsupported; retained unchanged for reproducibility, verification, and rollback |

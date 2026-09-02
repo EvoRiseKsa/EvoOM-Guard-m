@@ -107,7 +107,9 @@ forgery → FAIL.
   same-process repo suite retains row 11a's false-PASS boundary. Docker is
   defence in depth rather than a complete hostile-kernel boundary; truly
   untrusted input wants VM-class isolation. See [`GUARD.md`](GUARD.md).
-- Runners outside the eight structured adapters (pytest, `node --test`, vitest,
-  jest, gotestsum, RSpec, mocha, Maven Surefire — see the matrix in
-  [`ADOPTION.md`](ADOPTION.md)) grade on the **exit code alone** (no structured
-  counts/tamper check) today.
+- By default, runners outside the eight structured adapters (pytest,
+  `node --test`, vitest, jest, gotestsum, RSpec, mocha, Maven Surefire — see the
+  matrix in [`ADOPTION.md`](ADOPTION.md)) grade on the **exit code alone** (no
+  structured counts/tamper check). `--require-structured-verdict` and trusted
+  `strict_harness` policies refuse that downgrade before repository-suite
+  execution; neither changes the external `--blackbox-only` channel.

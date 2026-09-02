@@ -469,6 +469,15 @@ that mode, dependency manifests/locks and compiler/project configuration (for ex
 `requirements*.txt`, `uv.lock`, `package.json`, `tsconfig*.json`, `go.mod`, and
 `Cargo.toml`) are non-exemptible protected paths. It also rejects a nominally
 successful command unless a non-empty structured JUnit verdict is available.
+Before the repository suite starts, Guard asks the live public runner-adapter
+facade whether that command can be instrumented. If not, strict mode returns
+`ERROR` / `assurance_requirement_not_met` without running the suite. If an
+adapter matches, the existing post-run checks still reject a missing, empty,
+malformed, or exit-code-inconsistent report; adapter recognition alone cannot
+establish `PASS`. For example, a raw `python -c ...` command has no structured
+runner adapter: it is refused in the preflight phase with
+`test_command_started: false`, rather than executed and later classified as
+`no_test_verdict`.
 For host-subprocess execution it additionally requires positive POSIX
 process-group cleanup capability for setup, repository-suite, verifier-pack,
 and pristine-baseline commands. An unsupported host refuses the strict request
@@ -482,6 +491,16 @@ repo-native judge into an external isolation boundary. A managed process group
 is lifecycle containment, not filesystem, network, credential, or
 report-integrity isolation. Use the black-box profile when that stronger
 boundary is required.
+
+For the narrower structured-evidence floor without strict harness's additional
+path and process-lifecycle controls, pass
+`--require-structured-verdict` to `evo-guard guard` (or
+`require_structured_verdict=True` to the Python API). This direct opt-in defaults
+off for compatibility with custom commands that intentionally use exit-code-only
+grading. It is a no-op with `--blackbox-only`, because that mode does not run the
+repository suite; the external verifier-pack report remains mandatory there.
+Run `evo-guard preflight . --strict` first to surface the same live adapter
+decision without executing candidate code.
 
 Put the policy in the base branch, for example:
 

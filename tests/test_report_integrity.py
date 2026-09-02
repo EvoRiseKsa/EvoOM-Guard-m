@@ -24,9 +24,12 @@ the forgery test flips and this file is where that change gets proven.
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
+import evoom_guard.adapters as adapters
 from evoom_guard.guard import ERROR, FAIL, PASS, TAMPERED, guard
 
 
@@ -271,6 +274,188 @@ class RequireAssertLivenessClosesNeutering(unittest.TestCase):
                 require_assert_liveness=True,
             )
             self.assertEqual(r.verdict, ERROR, r.reason)
+
+
+class RequireStructuredVerdictRefusesExitCodeOnly(unittest.TestCase):
+    """The structured-verdict floor is checked before repository execution."""
+
+    @staticmethod
+    def _unknown_success_command() -> list[str]:
+        return [sys.executable, "-c", "raise SystemExit(0)"]
+
+    def test_known_pytest_adapter_keeps_an_honest_change_passing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            result = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1  # benign\n"),
+                require_structured_verdict=True,
+            )
+
+            self.assertEqual(result.verdict, PASS, result.reason)
+            self.assertGreater(result.tests_total or 0, 0)
+
+    def test_unknown_portable_command_is_refused_before_it_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            result = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1\n"),
+                test_command=self._unknown_success_command(),
+                require_structured_verdict=True,
+            )
+
+            self.assertEqual(result.verdict, ERROR, result.reason)
+            self.assertEqual(
+                result.reason_code,
+                "assurance_requirement_not_met",
+                result.reason,
+            )
+            self.assertFalse(result.test_command_ran, result.reason)
+            self.assertIn("structured verdict", result.reason)
+
+    def test_strict_harness_uses_the_same_pre_run_capability_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            result = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1\n"),
+                test_command=self._unknown_success_command(),
+                strict_harness=True,
+            )
+
+            self.assertEqual(result.verdict, ERROR, result.reason)
+            self.assertFalse(result.test_command_ran, result.reason)
+            if os.name == "posix":
+                self.assertIn("structured verdict", result.reason)
+
+    def test_default_off_exit_code_compatibility_is_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _unittest_repo(tmp)
+            result = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1\n"),
+                test_command=self._unknown_success_command(),
+            )
+
+            self.assertEqual(result.verdict, PASS, result.reason)
+            self.assertTrue(result.test_command_ran, result.reason)
+            self.assertEqual(result.tests_total, 0)
+
+    def test_live_facade_custom_adapter_matches_preflight_and_execution(self) -> None:
+        junit = (
+            '<testsuite name="portable" tests="1" failures="0" '
+            'errors="0" skipped="0">'
+            '<testcase classname="portable" name="pass"/>'
+            "</testsuite>"
+        )
+
+        def instrument(
+            _command: list[str],
+            report_path: str,
+        ) -> tuple[list[str], bool, dict[str, str]]:
+            code = (
+                "from pathlib import Path; "
+                f"Path({report_path!r}).write_text({junit!r}, encoding='utf-8')"
+            )
+            return [sys.executable, "-c", code], True, {}
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            adapters,
+            "instrument_command",
+            side_effect=instrument,
+        ):
+            repo = _unittest_repo(tmp)
+            result = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1\n"),
+                test_command=self._unknown_success_command(),
+                require_structured_verdict=True,
+            )
+
+            self.assertEqual(result.verdict, PASS, result.reason)
+            self.assertEqual((result.tests_passed, result.tests_total), (1, 1))
+
+    def test_matched_adapter_missing_report_is_rejected_post_run(self) -> None:
+        def claims_report(
+            command: list[str],
+            _report_path: str,
+        ) -> tuple[list[str], bool, dict[str, str]]:
+            return command, True, {}
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            adapters,
+            "instrument_command",
+            side_effect=claims_report,
+        ):
+            repo = _unittest_repo(tmp)
+            result = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1\n"),
+                test_command=self._unknown_success_command(),
+                require_structured_verdict=True,
+            )
+
+            self.assertNotEqual(result.verdict, PASS, result.reason)
+            self.assertTrue(result.test_command_ran, result.reason)
+            self.assertEqual(result.tests_total, 0)
+
+    def test_matched_adapter_empty_report_is_rejected_post_run(self) -> None:
+        def writes_empty_report(
+            _command: list[str],
+            report_path: str,
+        ) -> tuple[list[str], bool, dict[str, str]]:
+            code = (
+                "from pathlib import Path; "
+                f"Path({report_path!r}).write_text('', encoding='utf-8')"
+            )
+            return [sys.executable, "-c", code], True, {}
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            adapters,
+            "instrument_command",
+            side_effect=writes_empty_report,
+        ):
+            repo = _unittest_repo(tmp)
+            result = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1\n"),
+                test_command=self._unknown_success_command(),
+                require_structured_verdict=True,
+            )
+
+            self.assertNotEqual(result.verdict, PASS, result.reason)
+            self.assertTrue(result.test_command_ran, result.reason)
+            self.assertEqual(result.tests_total, 0)
+
+    def test_post_run_floor_survives_live_adapter_capability_drift(self) -> None:
+        calls = 0
+
+        def disappears_after_preflight(
+            command: list[str],
+            _report_path: str,
+        ) -> tuple[list[str], bool, dict[str, str]]:
+            nonlocal calls
+            calls += 1
+            return command, calls == 1, {}
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            adapters,
+            "instrument_command",
+            side_effect=disappears_after_preflight,
+        ):
+            repo = _unittest_repo(tmp)
+            result = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1\n"),
+                test_command=self._unknown_success_command(),
+                require_structured_verdict=True,
+            )
+
+            self.assertEqual(calls, 2)
+            self.assertNotEqual(result.verdict, PASS, result.reason)
+            self.assertTrue(result.test_command_ran, result.reason)
+            self.assertEqual(result.tests_total, 0)
 
 
 class SuiteContinuityClosesMidRunRewrite(unittest.TestCase):

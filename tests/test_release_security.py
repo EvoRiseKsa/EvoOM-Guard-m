@@ -293,9 +293,22 @@ def test_failed_v470_attempt_is_bounded_and_source_is_not_reused() -> None:
         "same_owner_operation": True,
         "independent_validation": False,
     }
-    assert '__version__ = "4.7.1"' in (
-        ROOT / "evoom_guard" / "__init__.py"
-    ).read_text(encoding="utf-8")
+    project_status = json.loads(
+        (ROOT / "PROJECT_STATUS.json").read_text(encoding="utf-8")
+    )
+    source_text = (ROOT / "evoom_guard" / "__init__.py").read_text(
+        encoding="utf-8"
+    )
+    source_version_match = re.search(
+        r'^__version__ = "([^"]+)"$',
+        source_text,
+        re.MULTILINE,
+    )
+    assert source_version_match is not None
+    source_version = source_version_match.group(1)
+    assert project_status["source"]["lifecycle"] == "unreleased-development"
+    assert source_version == "4.8.0.dev0"
+    assert source_version.endswith(".dev0")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert "## [4.7.1] — 2026-09-01" in changelog
     assert "## [4.7.0] — 2026-08-31 (unpublished; withdrawn)" in changelog

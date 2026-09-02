@@ -13,6 +13,40 @@ import pytest
 
 from tools.ci import run_security_mutation_gate as mutation_gate
 
+_FINALIZER_GIT_OWNER = "evoom_guard/finalizer/git_command.py"
+_FINALIZER_GIT_FACADE = "evoom_guard/finalizer_derivation.py"
+_EXTRACTED_FINALIZER_GIT_MUTATIONS = {
+    "finalizer-git-abort-cleanup-bypass",
+    "finalizer-git-abort-primary-reraise",
+    "finalizer-git-abort-reader-exact-proof-bypass",
+    "finalizer-git-abort-reader-false-observability-bypass",
+    "finalizer-git-abort-reader-raised-observability-bypass",
+    "finalizer-git-abort-second-cleanup-stage-bypass",
+    "finalizer-git-abort-tree-exact-proof-bypass",
+    "finalizer-git-abort-tree-false-observability-bypass",
+    "finalizer-git-abort-tree-raised-observability-bypass",
+    "finalizer-git-env-scrub-bypass",
+    "finalizer-git-interrupt-cleanup-bypass",
+    "finalizer-git-interrupt-exact-proof-bypass",
+    "finalizer-git-live-reader-error-cleanup-bypass",
+    "finalizer-git-no-replace-bypass",
+    "finalizer-git-overflow-state-bypass",
+    "finalizer-git-posix-exact-proof-bypass",
+    "finalizer-git-posix-post-completion-proof-bypass",
+    "finalizer-git-post-poll-silent-cleanup-restore",
+    "finalizer-git-process-group-launch-bypass",
+    "finalizer-git-reader-baseexception-narrowing",
+    "finalizer-git-reader-error-record-bypass",
+    "finalizer-git-reader-start-tracking-bypass",
+}
+_FACADE_FINALIZER_GIT_MUTATIONS = {
+    "finalizer-git-live-reader-close-bypass",
+    "finalizer-git-reader-join-bound-bypass",
+    "finalizer-git-reader-join-cap-bypass",
+    "finalizer-git-reader-join-primary-suppression",
+    "finalizer-git-tree-cleanup-proof-bypass",
+}
+
 
 def test_every_reviewed_mutation_has_exactly_one_current_source_site() -> None:
     """Refactors must retarget reviewed mutants before the long gate starts."""
@@ -27,6 +61,28 @@ def test_every_reviewed_mutation_has_exactly_one_current_source_site() -> None:
             mismatches.append(f"{mutation.name}: unchanged")
 
     assert not mismatches, "\n".join(mismatches)
+
+
+def test_finalizer_git_mutants_follow_the_extracted_owner_boundary() -> None:
+    """Lifecycle mutants must load the owner, not an obsolete facade copy."""
+
+    inventory = {
+        mutation.name: mutation.path
+        for mutation in mutation_gate.MUTATIONS
+        if mutation.name.startswith("finalizer-git-")
+    }
+
+    assert set(inventory) == (
+        _EXTRACTED_FINALIZER_GIT_MUTATIONS | _FACADE_FINALIZER_GIT_MUTATIONS
+    )
+    assert {
+        name: inventory[name] for name in _EXTRACTED_FINALIZER_GIT_MUTATIONS
+    } == {
+        name: _FINALIZER_GIT_OWNER for name in _EXTRACTED_FINALIZER_GIT_MUTATIONS
+    }
+    assert {name: inventory[name] for name in _FACADE_FINALIZER_GIT_MUTATIONS} == {
+        name: _FINALIZER_GIT_FACADE for name in _FACADE_FINALIZER_GIT_MUTATIONS
+    }
 
 
 class _FinishedProcess:

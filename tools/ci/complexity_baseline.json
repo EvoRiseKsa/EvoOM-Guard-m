@@ -204,11 +204,6 @@
     },
     {
       "path": "evoom_guard/finalizer_derivation.py",
-      "symbol": "_run_git_command",
-      "max_complexity": 37
-    },
-    {
-      "path": "evoom_guard/finalizer_derivation.py",
       "symbol": "_snapshot_git_executable",
       "max_complexity": 13
     },

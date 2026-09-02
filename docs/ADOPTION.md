@@ -429,6 +429,16 @@ does **not** discover shell scripts, sourced files, package-script bodies, or
 other harness dependencies. Declare those exact repository files with
 `harness_inputs`.
 
+For a staged migration, `evo-guard preflight .` warns when the live adapter
+facade would select the exit-code-only path; `preflight --strict` makes that
+warning non-zero. Enforce the floor at execution with
+`guard --require-structured-verdict`, or use `"strict_harness": true` in the
+trusted base policy. Both refuse an unmatched repository command before the
+repository suite runs; a configured `setup_command` may already have run. They
+still require the promised report to be non-empty, parseable, and consistent
+afterward. The opt-in defaults off for compatibility, and does not apply to
+`--blackbox-only`, where no repository suite runs.
+
 ### In a workspace / monorepo (pnpm · yarn · npm)
 
 The verdict stays `junit+exit` **only if EvoOM Guard can see the runner** in your

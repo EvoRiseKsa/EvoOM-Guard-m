@@ -55,6 +55,7 @@ production channel.
 | Review security claims | [`ASSURANCE.md`](ASSURANCE.md) | [`REWARD_HACKING_CATALOG.md`](REWARD_HACKING_CATALOG.md) |
 | Inspect the prospective semantic extraction boundary | [`SEMANTIC_CORE_EXTRACTION_PLAN.md`](SEMANTIC_CORE_EXTRACTION_PLAN.md) | [`CANDIDATE_TEXT_MAP_IDENTITY_V2.md`](CANDIDATE_TEXT_MAP_IDENTITY_V2.md) |
 | Integrate machine-readable evidence | [`JSON_SCHEMA.md`](JSON_SCHEMA.md) | [`RECORD_VERIFICATION.md`](RECORD_VERIFICATION.md) |
+| Audit the release packaging boundary | [`DISTRIBUTION_SECURITY.md`](DISTRIBUTION_SECURITY.md) | [`DEPENDENCY_POLICY.md`](DEPENDENCY_POLICY.md) |
 | Consume signed positive and negative attempts | [`CHANGE_ATTEMPT_OBSERVATION.md`](CHANGE_ATTEMPT_OBSERVATION.md) | [`adr/0009-change-attempt-observation-v1.md`](adr/0009-change-attempt-observation-v1.md) |
 | Maintain or release the project | [`RELEASING.md`](RELEASING.md) | [`GOVERNANCE.md`](GOVERNANCE.md) |
 | Understand the implementation | [`architecture/OVERVIEW.md`](architecture/OVERVIEW.md) | [`adr/0001-layered-architecture.md`](adr/0001-layered-architecture.md) |
@@ -155,6 +156,8 @@ contract does not authorize another stage such as publication or deployment.
 - [`FUZZING.md`](FUZZING.md) — fuzz targets, execution, and scope.
 - [`DEPENDENCY_POLICY.md`](DEPENDENCY_POLICY.md) — CI and release dependency
   integrity.
+- [`DISTRIBUTION_SECURITY.md`](DISTRIBUTION_SECURITY.md) — the single-package,
+  offline build, exact-byte wheel/zipapp audit, and deferred core-wheel boundary.
 - [`GITHUB_ARTIFACT_ATTESTATIONS.md`](GITHUB_ARTIFACT_ATTESTATIONS.md) —
   provenance scope and bounded verification procedure.
 - [`SBOM.md`](SBOM.md) — SPDX member inventory and its explicit non-claims.

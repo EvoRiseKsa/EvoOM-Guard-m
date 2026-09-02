@@ -22,6 +22,9 @@ merged `main` is covered by the repository's protected-branch controls.
 - `verifiers` owns repository and black-box execution orchestration, result
   interpretation, and the canonical verifier-pack manifest/snapshot contract.
 - `application` owns policy, decision-gate, and finalization composition.
+- `finalizer` owns protected source derivation/handoff and the specialized
+  bounded raw-Git subprocess lifecycle. The historical flat derivation module
+  remains the compatibility and provider-injection surface.
 - `api`, `cli`, and `integrations` are compatibility boundaries.
 
 The executable import-boundary ratchet in
@@ -71,9 +74,15 @@ a runtime change.
   mutable-list result and `envelope.types` sequencing. The extracted owners
   only return immutable ordered shape errors. Their measured facade hotspots
   fall from C901 26, 24, and 17 to 1 each; the current repository inventory
-  falls from 94 through 93 and 92 to 91.
+  fell from 94 through 93 and 92 to 91. Subsequent reviewed work plus the
+  bounded raw-Git lifecycle extraction bring the current inventory to 89: the
+  `_run_git_command` hotspot at 37 is removed and no extracted helper exceeds
+  the enforced threshold of 10. Its branch-free facade still supplies every
+  historical limit, process/thread/environment provider, error type, and
+  cleanup hook at call time.
 - The broader program is still in progress: cohesive evidence/finalizer
-  package extraction, release engineering, repository-wide strict typing,
+  package extraction beyond this bounded owner, release engineering,
+  repository-wide strict typing,
   independent external red-team evidence, and the end-to-end protected
   build-to-admission chain are not all complete. A zero unclassified-module
   ratchet records reviewed ownership; it does not claim that every mixed

@@ -74,15 +74,23 @@ _LIVE_LICENSE_DOCUMENTS = (
 )
 
 
-def _release_status() -> tuple[str, str, str]:
-    status = json.loads((ROOT / "PROJECT_STATUS.json").read_text(encoding="utf-8"))
+def _release_status_from(
+    status: dict[str, object],
+    *,
+    source_version: str,
+) -> tuple[str, str, str]:
     if status["schema_version"] == "evoguard-project-status-v3":
         record_path = status["published_release"]["record"]
         release_authority = json.loads(
             (ROOT / record_path).read_text(encoding="utf-8")
         )
         consumer_version = release_authority["source"]["version"]
-        state = "direct-recorded"
+        lifecycle = status["source"]["lifecycle"]
+        state = {
+            "unreleased-development": "pre-release",
+            "release-candidate": "pre-release",
+            "release-line": "direct-recorded",
+        }[lifecycle]
     else:
         ledger_path = status["published_release"]["ledger"]
         release_authority = json.loads(
@@ -96,7 +104,12 @@ def _release_status() -> tuple[str, str, str]:
             "published-unledgered": "published-unledgered",
             "release-line": "ledger-recorded",
         }[lifecycle]
-    return __version__, consumer_version, state
+    return source_version, consumer_version, state
+
+
+def _release_status() -> tuple[str, str, str]:
+    status = json.loads((ROOT / "PROJECT_STATUS.json").read_text(encoding="utf-8"))
+    return _release_status_from(status, source_version=__version__)
 
 
 def _assurance_boundary_version() -> str:
@@ -111,6 +124,23 @@ def _assurance_boundary_version() -> str:
 
 
 class DocsVersionDriftTests(unittest.TestCase):
+    def test_v3_source_lifecycle_preserves_the_direct_consumer_boundary(self) -> None:
+        status = json.loads(
+            (ROOT / "PROJECT_STATUS.json").read_text(encoding="utf-8")
+        )
+        for lifecycle, source_version, state in (
+            ("unreleased-development", "4.8.0.dev0", "pre-release"),
+            ("release-candidate", "4.8.0", "pre-release"),
+            ("release-line", "4.7.1", "direct-recorded"),
+        ):
+            with self.subTest(lifecycle=lifecycle):
+                candidate = json.loads(json.dumps(status))
+                candidate["source"]["lifecycle"] = lifecycle
+                self.assertEqual(
+                    _release_status_from(candidate, source_version=source_version),
+                    (source_version, "4.7.1", state),
+                )
+
     def test_every_taught_pin_matches_the_latest_published_version(self) -> None:
         stale: list[str] = []
         prepublication_conditions: list[str] = []
@@ -335,6 +365,9 @@ class DocsVersionDriftTests(unittest.TestCase):
         text = (ROOT / "docs" / "START_HERE.md").read_text(encoding="utf-8")
         source_version, consumer_version, state = _release_status()
         assurance_version = _assurance_boundary_version()
+        project_status = json.loads(
+            (ROOT / "PROJECT_STATUS.json").read_text(encoding="utf-8")
+        )
         self.assertIn(
             state,
             {
@@ -356,7 +389,12 @@ class DocsVersionDriftTests(unittest.TestCase):
                 continue
             context = " ".join(lines[max(0, lineno - 2) : lineno + 3])
             expected_boundary = (
-                consumer_version if state == "direct-recorded" else assurance_version
+                consumer_version
+                if (
+                    project_status["schema_version"]
+                    == "evoguard-project-status-v3"
+                )
+                else assurance_version
             )
             self.assertIn(expected_boundary, context)
             if state not in {"ledger-recorded", "direct-recorded"}:

@@ -72,6 +72,7 @@ import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
+import evoom_guard.adapters as _runner_adapters
 from evoom_guard import __version__
 from evoom_guard.cli import diagnostic_commands as _diagnostic_command_owner
 from evoom_guard.cli import guard_command as _guard_command_owner
@@ -648,6 +649,9 @@ def cmd_preflight(
                 platform=os.name,
             ),
             operating_profile_violations=operating_profile_violations,
+            instrument_command=lambda command, report_path: (
+                _runner_adapters.instrument_command(command, report_path)
+            ),
         ),
         out=out,
     )

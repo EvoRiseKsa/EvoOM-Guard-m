@@ -341,6 +341,7 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
         "strict_harness": True,
         "require_suite_continuity": True,
         "require_assert_liveness": True,
+        "require_structured_verdict": True,
     }
 
     with ExitStack() as stack:

@@ -1,0 +1,108 @@
+name: Runner live conformance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: live (${{ matrix.os }}, py${{ matrix.python }}, node22)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.10"
+          - os: ubuntu-latest
+            python: "3.11"
+          - os: ubuntu-latest
+            python: "3.12"
+          - os: windows-latest
+            python: "3.12"
+    env:
+      EVOGUARD_MATRIX_OS: ${{ matrix.os }}
+      EVOGUARD_MATRIX_PYTHON: ${{ matrix.python }}
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install locked runner and Python dependencies
+        run: |
+          npm ci --ignore-scripts --prefix tools/ci-vitest
+          python -m pip install --only-binary=:all: --require-hashes -r requirements/ci.lock
+          python -m pip install --no-deps --no-build-isolation -e .
+      - name: Add locked Vitest to PATH (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: echo "${GITHUB_WORKSPACE}/tools/ci-vitest/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Add locked Vitest to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value "$env:GITHUB_WORKSPACE\tools\ci-vitest\node_modules\.bin"
+      - name: Execute real pytest, Node, and Vitest Guard oracles
+        run: >-
+          python -m pytest
+          tests/test_pytest_oracle.py
+          tests/test_node_oracle.py
+          tests/test_vitest_oracle.py
+          -q -p no:cacheprovider
+          --junitxml="${{ runner.temp }}/live-runner.xml"
+      - name: Create and verify exact live-runner result
+        run: |
+          python -m tools.conformance.run_live_runner_conformance --junit "${{ runner.temp }}/live-runner.xml" --output "${{ runner.temp }}/live-runner.json"
+          python -m tools.conformance.run_live_runner_conformance --junit "${{ runner.temp }}/live-runner.xml" --verify "${{ runner.temp }}/live-runner.json"
+      - name: Retain exact live-runner evidence
+        id: retain
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: live-runner-${{ matrix.os }}-py${{ matrix.python }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/live-runner.json
+            ${{ runner.temp }}/live-runner.xml
+          if-no-files-found: error
+          retention-days: 30
+      - name: Validate the immutable retained-artifact identity
+        env:
+          ARTIFACT_DIGEST: ${{ steps.retain.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.retain.outputs.artifact-id }}
+        run: >-
+          python -c "import os,re,sys;
+          valid_id=re.fullmatch(r'[1-9][0-9]*', os.environ.get('ARTIFACT_ID',''));
+          valid_digest=re.fullmatch(r'[0-9a-f]{64}', os.environ.get('ARTIFACT_DIGEST',''));
+          sys.exit(0 if valid_id and valid_digest else 'invalid retained-artifact identity')"
+      - name: Download the immutable retained evidence by numeric ID
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ steps.retain.outputs.artifact-id }}
+          digest-mismatch: error
+          path: ${{ runner.temp }}/retained-live-runner
+      - name: Reverify the exact retained JSON and JUnit bytes
+        run: >-
+          python -m tools.conformance.run_live_runner_conformance
+          --junit "${{ runner.temp }}/retained-live-runner/live-runner.xml"
+          --verify "${{ runner.temp }}/retained-live-runner/live-runner.json"
+
+  runner-live-conformance:
+    if: always()
+    needs: [live]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every live matrix cell
+        env:
+          LIVE_RESULT: ${{ needs.live.result }}
+        run: test "$LIVE_RESULT" = "success"
