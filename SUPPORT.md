@@ -19,6 +19,28 @@ Community support and issue triage are provided on a best-effort basis. The
 public repository does not include a response-time, resolution-time, or
 availability service-level agreement.
 
+## Public Beta triage
+
+The self-hosted Action and CLI are in Public Beta. Reports are classified by
+impact so launch and promotion decisions do not depend on informal labels:
+
+- **P0 — security bypass:** a candidate obtains an unexplained `PASS`, escapes
+  the declared isolation boundary, forges trusted evidence, or exposes a
+  credential. Report privately and stop blocking use of the affected path.
+- **P1 — wrong admission:** a reproducible false allow/deny, fail-open behavior,
+  or supported-path compatibility defect can change a required-check decision.
+  Roll the affected repository back to advisory or remove that required check
+  while preserving its other protections.
+- **P2 — degraded operation:** an `ERROR`, unsupported runner, excessive
+  overhead, or evidence usability defect does not produce a false `PASS` but
+  blocks or materially impairs adoption.
+- **P3 — question or documentation:** no admission or security impact.
+
+Include the immutable Action/CLI ref, operating system, runtime, exact command,
+reason code, and a redacted receipt. Never convert an unavailable or
+unsupported judge into `PASS`. The operating and promotion rules are in
+[`docs/PUBLIC_BETA.md`](docs/PUBLIC_BETA.md).
+
 ## Security vulnerabilities
 
 Do **not** disclose a suspected vulnerability, working bypass, credential, or

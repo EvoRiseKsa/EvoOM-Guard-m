@@ -34,6 +34,10 @@ def test_external_pilot_requires_immutable_action_and_base_owned_judge() -> None
     assert "a different change author" in text
     assert "exact verifier command/version" in text
     assert "structural `verify-record` and authenticated" in text
+    assert "at least 10 attempts" in text
+    assert "three to five repositories" in text
+    assert "promotes the gate to a required blocking check only after" in text
+    assert "median clean-checkout-to-first-complete-receipt time below 30 minutes" in text
 
 
 def test_public_pilot_form_warns_against_sensitive_or_escalated_claims() -> None:
@@ -50,3 +54,6 @@ def test_public_pilot_form_warns_against_sensitive_or_escalated_claims() -> None
     assert "someone other than the operator who configures the gate" in text
     assert "judge-owned report" in text
     assert "authorized to retain the bounded records" in text
+    assert "starts advisory" in text
+    assert "at least 10 recorded attempts before blocking promotion" in text
+    assert "non-required advisory check" in text

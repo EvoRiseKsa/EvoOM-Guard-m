@@ -41,6 +41,12 @@ the trust platform is source-available (see [License](#license)).
 > **Naming:** EvoOM Guard is the product, `evo-guard` is the CLI, and
 > `evoom_guard` is the Python package.
 
+> **Public Beta:** the self-hosted Action and CLI are available today for an
+> advisory-first rollout on supported repositories. Start with the
+> [product contract](docs/PRODUCT_CONTRACT.md) and
+> [Public Beta promotion gates](docs/PUBLIC_BETA.md). Public Beta is not Core
+> GA, a hosted service, an SLA, or a hostile-code production certification.
+
 ## Install and run
 
 EvoOM Guard is not distributed through PyPI. Install the recorded release
