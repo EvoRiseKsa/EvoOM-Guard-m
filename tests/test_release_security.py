@@ -647,7 +647,7 @@ def test_release_validation_build_and_write_privileges_are_separated() -> None:
 def test_future_release_artifact_and_sbom_are_attested_in_a_clean_job() -> None:
     build = _job_block(RELEASE, "build-artifact")
     attest = _job_block(RELEASE, "attest-release-assets")
-    attestation_action = "actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d"
+    attestation_action = "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"
     assert attestation_action not in build
     assert attest.count(attestation_action) == 2
     assert attest.count("subject-path: dist/evo-guard.pyz") == 2
