@@ -22,11 +22,10 @@ evidence level allowed by that blueprint.
 ## Current source capabilities and consumer-release boundary
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:ROADMAP_LATEST_RELEASE -->
-Source version `4.8.1.dev0` is **unreleased development**; it is unsupported and is not
-a consumer release. The latest immutable consumer release selected by the protected
-source tree remains
-[`v4.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0) at commit
-`07e361cb9a75cc1822cd905ca65df42235b3b910`. Detached-maintainer-signed record
+Source version `4.8.1` is a **release candidate**; it is unsupported and is not yet a
+consumer release. The latest immutable consumer release selected by the protected source
+tree remains [`v4.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0)
+at commit `07e361cb9a75cc1822cd905ca65df42235b3b910`. Detached-maintainer-signed record
 `evidence/direct-releases/v4.8.0/DIRECT_RELEASE.json` binds the published asset
 observations `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. It records successful
 release-attestation verification for `evo-guard.pyz`, `evo-guard.spdx.json`,

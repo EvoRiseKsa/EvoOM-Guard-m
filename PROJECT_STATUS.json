@@ -1,7 +1,7 @@
 {
   "schema_version": "evoguard-project-status-v3",
   "source": {
-    "lifecycle": "unreleased-development",
+    "lifecycle": "release-candidate",
     "relation_to_latest_release": "descendant",
     "architecture": {
       "behavior_preserving_r2": "complete",
