@@ -1132,9 +1132,12 @@ class ProjectStatusTests(unittest.TestCase):
 
     def test_source_release_and_pipeline_semantics_are_consistent(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
-        self.assertEqual(
+        self.assertIn(
             (context.status.lifecycle, context.source_version),
-            ("release-line", "4.8.0"),
+            {
+                ("unreleased-development", "4.8.1.dev0"),
+                ("release-candidate", "4.8.1"),
+            },
         )
         self.assertEqual(context.status.schema_version, "evoguard-project-status-v3")
         self.assertEqual(context.status.relation, "descendant")
@@ -1451,13 +1454,17 @@ class ProjectStatusTests(unittest.TestCase):
                 )
             )
 
-    def test_release_line_uses_direct_record_and_preserves_recovery_history(
+    def test_v481_source_uses_direct_record_and_preserves_recovery_history(
         self,
     ) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
-        self.assertEqual(
-            (context.status.lifecycle, context.source_version),
-            ("release-line", "4.8.0"),
+        source_identity = (context.status.lifecycle, context.source_version)
+        self.assertIn(
+            source_identity,
+            {
+                ("unreleased-development", "4.8.1.dev0"),
+                ("release-candidate", "4.8.1"),
+            },
         )
         self.assertEqual(context.ledger.version, "4.6.0")
         self.assertIsNotNone(context.direct_release)
@@ -1519,7 +1526,12 @@ class ProjectStatusTests(unittest.TestCase):
         )
         self.assertIn("[`v4.8.0`]", support)
         self.assertIn("[`v4.6.0`]", support)
-        self.assertNotIn("Release candidate source", support)
+        if source_identity[0] == "unreleased-development":
+            self.assertIn("`4.8.1.dev0`", support)
+            self.assertIn("Unreleased development source", support)
+        else:
+            self.assertIn("`4.8.1`", support)
+            self.assertIn("Release candidate source", support)
         self.assertIn("Historical latest validated A-through-H ledger", support)
         self.assertNotIn("temporarily supported", support)
         self.assertNotIn("recovery successor", support)

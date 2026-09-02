@@ -129,8 +129,8 @@ class DocsVersionDriftTests(unittest.TestCase):
             (ROOT / "PROJECT_STATUS.json").read_text(encoding="utf-8")
         )
         for lifecycle, source_version, state in (
-            ("unreleased-development", "4.8.0.dev0", "pre-release"),
-            ("release-candidate", "4.8.0", "pre-release"),
+            ("unreleased-development", "4.8.1.dev0", "pre-release"),
+            ("release-candidate", "4.8.1", "pre-release"),
             ("release-line", "4.8.0", "direct-recorded"),
         ):
             with self.subTest(lifecycle=lifecycle):

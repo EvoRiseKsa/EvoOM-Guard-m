@@ -19,6 +19,7 @@ retained evidence say so.
 ## Release status and support
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
+- Source `4.8.1.dev0` status: unreleased development source; unsupported; not a consumer release.
 - [`v4.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0) remains the latest stable and supported consumer release. Its
   detached-maintainer-signed direct record is a same-owner post-publication
   observation, not an A-through-H ledger or independent review.
@@ -31,6 +32,23 @@ retained evidence say so.
 - Draft candidates that were never published are labelled explicitly below
   and are not supported releases.
 <!-- END EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
+
+## [Unreleased]
+
+### Fixed
+
+- **Release-source verifier inventory.** Advanced the judge-owned release-source
+  pack contract to `1.0.2` so its deterministic PYZ member inventory includes
+  the governing documents `LICENSE`, `LICENSE-APACHE`, `LICENSING.md`, and
+  `NOTICE`. This aligns the verifier with the immutable `v4.8.0` artifact after
+  the first bounded Reverify attempt exposed the stale three-file omission.
+- **Fail-closed regression and current-control pins.** Added missing-member and
+  extra-member regressions that regenerate a canonical SBOM before asserting
+  the exact archive-member rejection, then re-pinned the current policy,
+  bootstrap manifest, and maintenance-control model to the corrected pack.
+  Historical release ledgers and retained attempt evidence remain byte-for-byte
+  unchanged. The later same-owner Reverify PASS remains a bounded semantic
+  result, not a Trusted Finalizer ALLOW, independent review, or Core GA claim.
 
 ## [4.8.0] — 2026-09-02
 
