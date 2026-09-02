@@ -34,9 +34,9 @@ The no-Action alternative is `git diff | evo-guard guard --diff -`.
 Use `evo-guard init --ref v4.8.0 --stdout` to review the workflow first.
 <!-- END EVOGUARD_PROJECT_STATUS:ADOPTION_CURRENT_RELEASE -->
 
-### v4.7.1: observe before enforcing
+### v4.8.0: observe before enforcing
 
-The immutable `v4.7.1` release includes `preflight` and two `init` presets.
+The immutable `v4.8.0` release includes `preflight` and two `init` presets.
 Confirm that exact version before use:
 
 ```bash

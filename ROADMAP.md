@@ -286,7 +286,7 @@ red-team, neither of which waits on appointed reviewers. The independent round
 described below is run when a concrete need calls for it, not as a gate on
 everything else.
 
-1. **Current artifact boundary.** The current immutable `v4.7.1` consumer is
+1. **Current artifact boundary.** The current immutable `v4.8.0` consumer is
    selected by a detached-maintainer-signed same-owner direct record of the
    exact protected publication and byte readback. It is not an A-through-H
    ledger or independent review. Historical `v4.6.0` remains the latest signed

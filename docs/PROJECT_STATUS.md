@@ -147,7 +147,7 @@ depending on them. The following boundary is intentional.
 The public source is not a trade secret. Historical releases through v3.8.0
 remain governed by the licenses shipped with those exact releases. The current
 published immutable
-[`v4.7.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1)
+[`v4.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0)
 release ships the EvoRise Source-Available License 1.0 and is the latest
 protected-tree direct-release-recorded consumer release. The maintained record
 is same-owner evidence, not an A-through-H ledger or independent review;

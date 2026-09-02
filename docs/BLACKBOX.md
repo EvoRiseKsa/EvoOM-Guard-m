@@ -8,7 +8,7 @@
 # The external black-box judge (`--blackbox`)
 
 > **Release boundary:** the black-box and Docker/gVisor mechanisms documented
-> here are available in the current direct-release-recorded `v4.7.1` release
+> here are available in the current direct-release-recorded `v4.8.0` release
 > (and were already present in ledger-recorded `v4.6.0`). Unprofiled records
 > use the frozen schema `1.11`; explicit operating profiles use schema `1.12`.
 > The same-owner direct release record authenticates the exact published

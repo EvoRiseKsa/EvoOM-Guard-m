@@ -68,10 +68,10 @@ or full commit SHA; a moving branch is not a release channel (see
 [Release channel and accountability](#release-channel-and-accountability)).
 
 For a no-install path, download
-[`evo-guard.pyz`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.7.1/evo-guard.pyz),
-[`evo-guard.spdx.json`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.7.1/evo-guard.spdx.json),
-and [`SHA256SUMS`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.7.1/SHA256SUMS)
-from the [`v4.7.1` release](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1).
+[`evo-guard.pyz`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.8.0/evo-guard.pyz),
+[`evo-guard.spdx.json`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.8.0/evo-guard.spdx.json),
+and [`SHA256SUMS`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.8.0/SHA256SUMS)
+from the [`v4.8.0` release](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0).
 Run `sha256sum -c SHA256SUMS`, then `python -I evo-guard.pyz ...`. The core is
 stdlib-only, so no clone and no install are needed.
 
@@ -258,7 +258,7 @@ executes candidate code.
 
 ### Stage a new rollout safely
 
-Release `v4.7.1` includes the static readiness command and explicit workflow
+Release `v4.8.0` includes the static readiness command and explicit workflow
 presets. Confirm the exact installed version before use:
 
 ```bash
@@ -292,7 +292,7 @@ with the same `--ref`, `--path`, and `--policy-path` plus
 | Add organization-owned checks outside the candidate tree | Verifier pack | [`VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) |
 | Judge a CLI through an external report channel | Black-box, preferably `--blackbox-only` | [`BLACKBOX.md`](docs/BLACKBOX.md) |
 | Add a delivered container or gVisor boundary | Isolated execution | [`BLACKBOX.md`](docs/BLACKBOX.md#boundary-evidence-is-observed-never-inferred-from-policy) |
-| Evaluate named assurance profiles in current `v4.7.1` | `v4.7.1` profiles (verify runtime evidence; first ledger-recorded in `v4.6.0`) | [`OPERATING_PROFILES.md`](docs/OPERATING_PROFILES.md) |
+| Evaluate named assurance profiles in current `v4.8.0` | `v4.8.0` profiles (verify runtime evidence; first ledger-recorded in `v4.6.0`) | [`OPERATING_PROFILES.md`](docs/OPERATING_PROFILES.md) |
 | Produce portable, authenticated evidence | Signed verdict or evidence bundle | [`SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) |
 | Separate re-verification, signing, and final admission | Trusted Finalizer | [`TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) |
 | Project signed `ALLOW` and `DENY` attempts for advisory analysis | Change Attempt Observation V1 *(included in v4.5.0)* | [`CHANGE_ATTEMPT_OBSERVATION.md`](docs/CHANGE_ATTEMPT_OBSERVATION.md) |

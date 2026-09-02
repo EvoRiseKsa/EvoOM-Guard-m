@@ -367,7 +367,7 @@ default it writes the minimal `local` (subprocess) policy. `--profile` scaffolds
 a container-isolated policy instead:
 
 ```bash
-evo-guard init --ref v4.7.1 --profile hostile \
+evo-guard init --ref v4.8.0 --profile hostile \
   --test-command "python -I -B -m pytest -q -p no:cacheprovider"
 ```
 
@@ -575,14 +575,14 @@ workflow itself cannot be removed or replaced to bypass the check.
 
 ## External black-box judge & assurance policy
 
-**`v4.7.1` release contract:** for a named, fail-closed combination of these
+**`v4.8.0` release contract:** for a named, fail-closed combination of these
 controls, use
 `--operating-profile local|protected|hostile`. The profile is included in the
 effective policy and its digest only when explicitly selected. `protected`
 requires a pinned black-box-only verifier inside Docker/gVisor with no candidate
 network; `hostile` requires gVisor and an active memory limit. See
 [`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for the exact contract and key
-custody rules. Confirm the exact immutable `v4.7.1` artifact before consumer
+custody rules. Confirm the exact immutable `v4.8.0` artifact before consumer
 use. Its detached-maintainer-signed, same-owner direct record binds the exact
 postpublication readback, not the delivered isolation facts of a particular
 run or an independent review; see

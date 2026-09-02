@@ -41,7 +41,7 @@ reference, not the current release path.
 
 `v4.6.0` is the latest historical A-through-H ledger referenced by
 `PROJECT_STATUS.json`; the current consumer release is direct-recorded
-`v4.7.1`. The historical ledger's canonical signed
+`v4.8.0`. The historical ledger's canonical signed
 [`release-ledger-v2`](../evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json)
 records the exact protected A-through-H operation and resulting publication.
 The previous signed

@@ -131,14 +131,14 @@ class DocsVersionDriftTests(unittest.TestCase):
         for lifecycle, source_version, state in (
             ("unreleased-development", "4.8.0.dev0", "pre-release"),
             ("release-candidate", "4.8.0", "pre-release"),
-            ("release-line", "4.7.1", "direct-recorded"),
+            ("release-line", "4.8.0", "direct-recorded"),
         ):
             with self.subTest(lifecycle=lifecycle):
                 candidate = json.loads(json.dumps(status))
                 candidate["source"]["lifecycle"] = lifecycle
                 self.assertEqual(
                     _release_status_from(candidate, source_version=source_version),
-                    (source_version, "4.7.1", state),
+                    (source_version, "4.8.0", state),
                 )
 
     def test_every_taught_pin_matches_the_latest_published_version(self) -> None:
