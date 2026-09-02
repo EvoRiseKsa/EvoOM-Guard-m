@@ -380,6 +380,68 @@ class ProjectStatusTests(unittest.TestCase):
         self.assertEqual(release.sbom_subjects, ("evo-guard.pyz",))
         self.assertEqual(release.release_attestation_subjects, release.artifacts)
 
+        future_release_spec = replace(
+            render_project_status._RELEASE_SPEC,
+            path=".github/workflows/future-release.yml",
+            reviewed_sha256="0" * 64,
+        )
+        with (
+            mock.patch.object(
+                render_project_status,
+                "_RELEASE_SPEC",
+                future_release_spec,
+            ),
+            mock.patch.object(
+                render_project_status,
+                "_RELEASE_PUBLISHED_VERIFY_PATH",
+                ".github/workflows/future-release-verify.yml",
+            ),
+            mock.patch.object(
+                render_project_status,
+                "_RELEASE_PUBLISHED_VERIFY_SHA256",
+                "1" * 64,
+            ),
+        ):
+            historical = render_project_status._load_direct_release(
+                ROOT,
+                status,
+                "4.7.1",
+                verify_git=False,
+            )
+            with render_project_status._trusted_git_session(ROOT):
+                trusted_head = render_project_status._git(
+                    ROOT,
+                    "rev-parse",
+                    "--verify",
+                    "HEAD",
+                )
+                historical_with_git = render_project_status._load_direct_release(
+                    ROOT,
+                    status,
+                    "4.7.1",
+                    verify_git=True,
+                    trusted_head=trusted_head,
+                )
+        self.assertEqual(historical, release)
+        self.assertEqual(historical_with_git, release)
+        with (
+            mock.patch.object(
+                render_project_status,
+                "_DIRECT_RELEASE_WORKFLOW_CONTRACTS",
+                {},
+            ),
+            self.assertRaisesRegex(
+                render_project_status.ProjectStatusError,
+                "workflow contract is not reviewed",
+            ),
+        ):
+            render_project_status._load_direct_release(
+                ROOT,
+                status,
+                "4.7.1",
+                verify_git=False,
+            )
+
         with self.assertRaises(render_project_status.ProjectStatusError):
             render_project_status._load_direct_release(
                 ROOT,
@@ -541,6 +603,25 @@ class ProjectStatusTests(unittest.TestCase):
                 "workflow digest",
                 lambda value: value["workflow"].__setitem__(
                     "workflow_sha256", "0" * 64
+                ),
+            ),
+            (
+                "workflow path",
+                lambda value: value["workflow"].__setitem__(
+                    "workflow_path", ".github/workflows/future-release.yml"
+                ),
+            ),
+            (
+                "verifier digest",
+                lambda value: value["workflow"].__setitem__(
+                    "verifier_sha256", "0" * 64
+                ),
+            ),
+            (
+                "verifier path",
+                lambda value: value["workflow"].__setitem__(
+                    "verifier_path",
+                    ".github/workflows/future-release-published-verify.yml",
                 ),
             ),
             (

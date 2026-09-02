@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -10,6 +11,8 @@ try:  # Python 3.11+
     import tomllib
 except ModuleNotFoundError:  # Python 3.10 is still a supported CI target.
     import tomli as tomllib
+
+from ops import render_project_status
 
 ROOT = Path(__file__).parents[1]
 CI = ROOT / ".github" / "workflows" / "ci.yml"
@@ -206,13 +209,56 @@ def test_reviewed_github_action_update_pins_are_exact() -> None:
     assert scorecard.count(f"github/codeql-action/upload-sarif@{codeql}") == 1
 
 
-def test_published_release_workflow_retains_its_signed_record_pin() -> None:
+def test_published_release_record_retains_its_historical_workflow_pin() -> None:
     historical_attest = "508db95dd578ae2727ebd6217d5ba78e4fbda05d"
     reviewed_attest = "1e69f48acb82d1966a394da916b4c1698aa569d6"
-    release = RELEASE.read_text(encoding="utf-8")
+    source_commit = "b222c7df0a3eaef6e89287cd1354625b88ac8b8b"
+    workflow_path = ".github/workflows/release.yml"
+    workflow_blob_sha = "ac995a85193c44f3736ee07af7562ae0b28c68fc"
+    workflow_sha256 = (
+        "840ad7257e82fdcccdf751fe6b55aaad8a58679c3e39825cb0d1628e0fda1769"
+    )
+    verifier_path = ".github/workflows/release-published-verify.yml"
+    verifier_blob_sha = "67e95bae6c650a2e3606a24fae0967bab649b7d5"
+    verifier_sha256 = (
+        "20f9f759bd9f14ae16e697894d62e6eb0eb82d6a26333d41a025cbbb81ea4478"
+    )
+    record = json.loads(
+        (ROOT / "evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    workflow = record["workflow"]
+    assert record["source"]["commit_sha"] == source_commit
+    assert workflow["workflow_path"] == workflow_path
+    assert workflow["workflow_blob_sha"] == workflow_blob_sha
+    assert workflow["workflow_sha256"] == workflow_sha256
+    assert workflow["verifier_path"] == verifier_path
+    assert workflow["verifier_blob_sha"] == verifier_blob_sha
+    assert workflow["verifier_sha256"] == verifier_sha256
+    assert render_project_status._DIRECT_RELEASE_WORKFLOW_CONTRACTS["4.7.1"] == (
+        workflow_path,
+        workflow_sha256,
+        verifier_path,
+        verifier_sha256,
+    )
+    with render_project_status._trusted_git_session(ROOT):
+        release = render_project_status._git_bytes(
+            ROOT,
+            "show",
+            "--end-of-options",
+            f"{source_commit}:{workflow_path}",
+        )
 
-    assert release.count(f"actions/attest@{historical_attest}") == 2
-    assert f"actions/attest@{reviewed_attest}" not in release
+    assert hashlib.sha256(release).hexdigest() == workflow_sha256
+    header = f"blob {len(release)}\0".encode("ascii")
+    assert (
+        hashlib.sha1(header + release, usedforsecurity=False).hexdigest()
+        == workflow_blob_sha
+    )
+    text = release.decode("utf-8", "strict")
+    assert text.count(f"actions/attest@{historical_attest}") == 2
+    assert f"actions/attest@{reviewed_attest}" not in text
 
 
 def test_trusted_dependency_inputs_are_codeowner_protected() -> None:
