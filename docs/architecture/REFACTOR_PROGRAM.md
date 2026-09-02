@@ -550,6 +550,13 @@ remain in their established facades.
   ownership remains a review obligation. The unclassified ceiling falls from
   11 to 7 with all other violation classes still zero; package runtime bytes do
   not change.
+- The final Stage-10 classification slice assigns the seven remaining mixed
+  facades to their reviewed existing layers and removes the last layer
+  inversion. Import-boundary ratchet revision 19 records zero cycles,
+  cross-package private imports, wildcard imports, unresolved dynamic imports,
+  layer violations, and unclassified modules. The Stage-10 dependency and
+  ownership-ratchet goal is complete; this does not complete the wider release,
+  production-isolation, or independent-validation programs.
 - The first Stage-11 pure-phase extraction moves trusted path and harness
   policy validation behind one characterized helper. `load_config` C901
   complexity falls from 49 to 42 while exact accepted payloads, error identity,

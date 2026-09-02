@@ -381,6 +381,17 @@ cycles, private imports, wildcard imports, unresolved dynamic imports, and
 layer violations remain zero. No package implementation or runtime byte
 changes in this revision.
 
+Import-boundary ratchet revision 19 classifies the seven remaining flat
+facades according to their reviewed existing responsibilities: `blackbox` to
+verifiers; `finalizer_derivation`, `release_source_producer_receipt`,
+`trusted_finalizer`, and `change_attempt_observation` to finalizer;
+`github_attestation` to admission; `guard` to the public API boundary; and
+`record_verifier` to evidence. It also removes the final finalizer-to-API layer
+inversion. The executable baseline therefore permits zero cycles,
+cross-package private imports, wildcard imports, unresolved dynamic imports,
+layer violations, and unclassified modules. This is a classification and
+dependency-direction result, not an independent assurance or efficacy claim.
+
 Declarative `argparse` construction now lives in the dependency-free
 `cli.parser` owner. `cli.__init__` retains the public `build_parser` facade and
 injects its immutable-ref validator and argument-group helpers on every call,
