@@ -22,9 +22,10 @@ is classified there, this tool excludes it automatically.
 Stages:
 
 1. stage    — copy ``evoom_guard/`` minus platform packages/modules/CLI owners
-              into a staging tree with core packaging metadata.
-2. audit    — every staged ``*.py`` must carry the Apache SPDX marker and must
-              not carry the source-available marker (fail-closed drift check).
+              and all non-Python package resources into a staging tree with
+              core packaging metadata.
+2. audit    — every staged package member must be Python, carry the Apache SPDX
+              marker, and not carry the source-available marker.
 3. build    — ``pip wheel`` the staging tree into ``dist/core/``.
 4. verify   — (``--verify``) fresh venv: install the wheel, prove the core
               surface works (version, imports, a real PASS and a real REJECTED
@@ -54,8 +55,26 @@ BOUNDARIES = ROOT / "tests" / "architecture" / "test_license_boundaries.py"
 DIST_DIR = ROOT / "dist" / "core"
 APACHE_MARKER = "SPDX-License-Identifier: Apache-2.0"
 PLATFORM_MARKER = "Source-available"
+ROOT_README_DISTRIBUTION_MARKER = "not distributed through PyPI"
 REFUSAL_MARKER = "not included in this installation"
-CORE_DOCS = ("README.md", "LICENSE-APACHE", "LICENSING.md", "NOTICE")
+CORE_DOCS = ("LICENSE-APACHE", "LICENSING.md", "NOTICE")
+
+CORE_README = """\
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+# EvoOM Guard Core
+
+`evoom-guard-core` is the Apache-2.0 core distribution of EvoOM Guard. It
+contains the evidence-bound repository verification engine and excludes the
+EvoRise trust-platform, release-admission, finalizer, and signing modules.
+
+The `evo-guard` command remains available for core verification. Commands
+owned by the excluded platform refuse explicitly instead of importing absent
+modules. See `LICENSING.md` for the repository's open-core boundary and
+`LICENSE-APACHE` for the license governing this distribution.
+
+Building or verifying this wheel does not publish it, certify it, or establish
+independent security review.
+"""
 
 CORE_PYPROJECT = """\
 [build-system]
@@ -100,12 +119,22 @@ license-files = ["LICENSE-APACHE", "LICENSING.md", "NOTICE"]
 [tool.setuptools.packages.find]
 include = ["evoom_guard*"]
 
-[tool.setuptools.package-data]
-evoom_guard = ["schemas/*.json", "templates/**/*.json", "templates/**/*.yml"]
-
 [tool.setuptools.dynamic]
 version = { attr = "evoom_guard.__version__" }
 """
+
+WHEEL_METADATA_FILES = frozenset(
+    {
+        "METADATA",
+        "WHEEL",
+        "entry_points.txt",
+        "top_level.txt",
+        "RECORD",
+        "licenses/LICENSE-APACHE",
+        "licenses/LICENSING.md",
+        "licenses/NOTICE",
+    }
+)
 
 
 class CoreBuildError(RuntimeError):
@@ -171,17 +200,31 @@ def stage(staging: Path) -> Path:
         if not target.is_file():
             _fail(f"platform module missing from source tree: {dotted}")
         target.unlink()
+    # The open-core boundary currently licenses Python modules, not the
+    # platform-owned JSON schemas or trusted-finalizer workflow templates.
+    # A core wheel therefore has a deliberately closed Python-only package
+    # payload.  License/notice documents remain wheel metadata below.
+    for target in sorted(package_root.rglob("*"), key=lambda path: len(path.parts), reverse=True):
+        if target.is_file() and target.suffix != ".py":
+            target.unlink()
+        elif target.is_dir() and not any(target.iterdir()):
+            target.rmdir()
     for name in CORE_DOCS:
         shutil.copy2(ROOT / name, staging / name)
+    (staging / "README.md").write_text(CORE_README, encoding="utf-8", newline="\n")
     (staging / "pyproject.toml").write_text(CORE_PYPROJECT, encoding="utf-8")
     return staging
 
 
 def audit(staging: Path) -> int:
     audited = 0
-    for path in sorted((staging / "evoom_guard").rglob("*.py")):
-        text = path.read_text(encoding="utf-8")
+    for path in sorted((staging / "evoom_guard").rglob("*")):
+        if not path.is_file():
+            continue
         relative = path.relative_to(staging)
+        if path.suffix != ".py":
+            _fail(f"staged core package contains a non-Python resource: {relative}")
+        text = path.read_text(encoding="utf-8")
         if APACHE_MARKER not in text:
             _fail(f"staged file lacks the Apache SPDX header: {relative}")
         if PLATFORM_MARKER in text[:600]:
@@ -220,16 +263,58 @@ def audit_wheel(wheel: Path) -> None:
     banned |= {_module_relpath(d, package=False).as_posix() for d in modules}
     with zipfile.ZipFile(wheel) as archive:
         names = archive.namelist()
-    for name in names:
-        for entry in banned:
-            if name == entry or name.startswith(entry):
-                _fail(f"platform path leaked into the core wheel: {name}")
+        dist_info_roots = {
+            name.split("/", 1)[0]
+            for name in names
+            if "/" in name and name.split("/", 1)[0].endswith(".dist-info")
+        }
+        if len(dist_info_roots) != 1:
+            _fail(f"expected exactly one dist-info root, found {sorted(dist_info_roots)}")
+        dist_info_root = next(iter(dist_info_roots))
+        if not dist_info_root.startswith("evoom_guard_core-"):
+            _fail(f"unexpected core wheel dist-info root: {dist_info_root}")
+        allowed_metadata = {
+            f"{dist_info_root}/{relative}" for relative in WHEEL_METADATA_FILES
+        }
+        audited = 0
+        for name in names:
+            if name.endswith("/"):
+                continue
+            for entry in banned:
+                if name == entry or name.startswith(entry):
+                    _fail(f"platform path leaked into the core wheel: {name}")
+            if name.startswith("evoom_guard/"):
+                if not name.endswith(".py"):
+                    _fail(f"unexpected non-Python core resource in wheel: {name}")
+                text = archive.read(name).decode("utf-8")
+                if APACHE_MARKER not in text:
+                    _fail(f"wheel member lacks the Apache SPDX header: {name}")
+                if PLATFORM_MARKER in text[:600]:
+                    _fail(f"wheel member carries a source-available header: {name}")
+                audited += 1
+            elif name not in allowed_metadata:
+                _fail(f"unexpected wheel member outside the core package: {name}")
+        actual_metadata = {name for name in names if name.startswith(f"{dist_info_root}/")}
+        if actual_metadata != allowed_metadata:
+            missing = sorted(allowed_metadata - actual_metadata)
+            extra = sorted(actual_metadata - allowed_metadata)
+            _fail(f"core wheel metadata set mismatch: missing={missing}, extra={extra}")
+        metadata_text = archive.read(f"{dist_info_root}/METADATA").decode("utf-8")
+        if PLATFORM_MARKER in metadata_text:
+            _fail("core wheel METADATA embeds source-available package text")
+        if ROOT_README_DISTRIBUTION_MARKER in metadata_text:
+            _fail("core wheel METADATA embeds the umbrella distribution disclaimer")
+        if "License: Apache-2.0" not in metadata_text:
+            _fail("core wheel METADATA does not declare License: Apache-2.0")
+        if "# EvoOM Guard Core" not in metadata_text:
+            _fail("core wheel METADATA does not embed the reviewed core README")
+        if audited < 50:
+            _fail(f"implausibly small audited core wheel ({audited} modules)")
     for required in (
         "evoom_guard/cli/__init__.py",
         "evoom_guard/guard.py",
         "evoom_guard/verifiers/junit_oracle.py",
         "evoom_guard/runners/pytest.py",
-        "evoom_guard/schemas/",
     ):
         if not any(name.startswith(required) for name in names):
             _fail(f"expected core path missing from the wheel: {required}")

@@ -25,6 +25,8 @@ def test_core_wheel_staging_uses_the_live_license_boundary(tmp_path: Path) -> No
     staging = build_core_wheel.stage(tmp_path / "staging")
     assert build_core_wheel.audit(staging) >= 50
     assert (staging / "evoom_guard" / "guard.py").is_file()
+    assert (staging / "README.md").read_text(encoding="utf-8") == build_core_wheel.CORE_README
+    assert all(path.suffix == ".py" for path in (staging / "evoom_guard").rglob("*") if path.is_file())
 
     for dotted in packages:
         assert not (staging / _module_path(dotted, package=True)).exists()
@@ -57,10 +59,56 @@ def test_core_wheel_audit_rejects_license_boundary_drift(
         build_core_wheel.audit(staging)
 
 
-def test_core_wheel_archive_rejects_a_platform_path(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("member", "expected"),
+    [
+        ("evoom_guard/finalizer/__init__.py", "platform path leaked"),
+        (
+            "evoom_guard/schemas/verdict-record-1.12.schema.json",
+            "unexpected non-Python core resource",
+        ),
+    ],
+)
+def test_core_wheel_archive_rejects_platform_owned_members(
+    tmp_path: Path,
+    member: str,
+    expected: str,
+) -> None:
     wheel = tmp_path / "evoom_guard_core-test.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
-        archive.writestr("evoom_guard/finalizer/__init__.py", "")
+        archive.writestr(member, "")
+        for relative in build_core_wheel.WHEEL_METADATA_FILES:
+            archive.writestr(f"evoom_guard_core-0.dist-info/{relative}", "")
 
-    with pytest.raises(build_core_wheel.CoreBuildError, match="platform path leaked"):
+    with pytest.raises(build_core_wheel.CoreBuildError, match=expected):
+        build_core_wheel.audit_wheel(wheel)
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected"),
+    [
+        (
+            "License: Apache-2.0\n\n# EvoOM Guard Core\nSource-available\n",
+            "embeds source-available package text",
+        ),
+        (
+            "License: Apache-2.0\n\n# EvoOM Guard Core\nnot distributed through PyPI\n",
+            "embeds the umbrella distribution disclaimer",
+        ),
+        ("# EvoOM Guard Core\n", "does not declare License: Apache-2.0"),
+        ("License: Apache-2.0\n", "does not embed the reviewed core README"),
+    ],
+)
+def test_core_wheel_archive_rejects_inconsistent_metadata(
+    tmp_path: Path,
+    metadata: str,
+    expected: str,
+) -> None:
+    wheel = tmp_path / "evoom_guard_core-test.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        for relative in build_core_wheel.WHEEL_METADATA_FILES:
+            value = metadata if relative == "METADATA" else ""
+            archive.writestr(f"evoom_guard_core-0.dist-info/{relative}", value)
+
+    with pytest.raises(build_core_wheel.CoreBuildError, match=expected):
         build_core_wheel.audit_wheel(wheel)
