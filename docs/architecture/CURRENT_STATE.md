@@ -33,19 +33,20 @@ admission owners already recorded by the ratchet, three compatibility facades
 plus one pure flat owner now have executable dependency-closure ratchets:
 `adapters.py` belongs to runners, `patch_applier.py` belongs to candidate,
 `candidate_runner.py` belongs to isolation, and the pure `patchmin.py` owner
-belongs to candidate. These tests make dependency or selected-shape drift
-visible; semantic ownership still requires review. This is classification of
-existing responsibility, not a file move or a runtime change. Mixed flat
-facades remain unclassified debt.
+belongs to candidate. Revision 19 also classifies the seven remaining mixed
+facades by their reviewed existing responsibilities. These tests make
+dependency or selected-shape drift visible; semantic ownership still requires
+review. This is classification of existing responsibility, not a file move or
+a runtime change.
 
 ## Refactor status
 
 - The behavior-preserving R2 extraction is complete.
 - All 45 CLI handlers delegate through typed command-family owners.
 - The public CLI and API compatibility facades remain intentionally stable.
-- The import ratchet currently permits zero dependency cycles and zero
-  cross-package private-symbol imports, with 7 mixed or not-yet-classified
-  flat modules remaining. Trusted Finalizer source validation is
+- The import ratchet currently permits zero dependency cycles, zero
+  cross-package private-symbol imports, and zero unclassified modules. Trusted
+  Finalizer source validation is
   now an explicit public owner contract shared by Artifact Admission V1/V2;
   selected-path Raw-Git regular-blob projection is an explicit public Finalizer
   Derivation contract while its reader and entry types remain private.
@@ -71,10 +72,9 @@ facades remain unclassified debt.
   only return immutable ordered shape errors. Their measured facade hotspots
   fall from C901 26, 24, and 17 to 1 each; the current repository inventory
   falls from 94 through 93 and 92 to 91.
-- The broader program is still in progress: evidence/finalizer domains,
-  release engineering, repository-wide strict typing, independent external
-  red-team evidence, and the end-to-end protected build-to-admission chain are
-  not all complete.
+- The broader program is still in progress: release engineering,
+  repository-wide strict typing, independent external red-team evidence, and
+  the end-to-end protected build-to-admission chain are not all complete.
 
 For the time-ordered implementation record, see
 [`REFACTOR_PROGRAM.md`](REFACTOR_PROGRAM.md). For the enforced dependency
