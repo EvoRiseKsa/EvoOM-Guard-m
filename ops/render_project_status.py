@@ -443,7 +443,7 @@ _RELEASE_SPEC = _WorkflowSpec(
     ),
     "validate-test",
     _RELEASE_MAIN_GATE,
-    reviewed_sha256="840ad7257e82fdcccdf751fe6b55aaad8a58679c3e39825cb0d1628e0fda1769",
+    reviewed_sha256="c1a404466c4bc98e98f43113fb636ac838bd7130726fe027cc5dc9eb8294b026",
     job_gates=(("dispatch-ref-guard", "always()"),),
 )
 _RELEASE_PUBLISHED_VERIFY_PATH = ".github/workflows/release-published-verify.yml"
