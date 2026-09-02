@@ -101,6 +101,19 @@ _DIRECT_RELEASE_PUBLIC_KEY_METADATA_SHA256 = (
 _DIRECT_RELEASE_PUBLIC_KEY_FINGERPRINT = (
     "SHA256:iCn7wa6HgKdu7luf/16rrKZzSk5FygJoA8EKNl3LJ24"
 )
+# Versioned historical authorities. These bytes are signed into each direct
+# record and remain frozen even when the maintained release workflows evolve.
+_DIRECT_RELEASE_WORKFLOW_CONTRACTS: dict[
+    str,
+    tuple[str, str, str, str],
+] = {
+    "4.7.1": (
+        ".github/workflows/release.yml",
+        "840ad7257e82fdcccdf751fe6b55aaad8a58679c3e39825cb0d1628e0fda1769",
+        ".github/workflows/release-published-verify.yml",
+        "20f9f759bd9f14ae16e697894d62e6eb0eb82d6a26333d41a025cbbb81ea4478",
+    ),
+}
 _DIRECT_RELEASE_JOBS = (
     "validate-test",
     "dispatch-ref-guard",
@@ -1562,6 +1575,10 @@ def _verify_direct_release_git_bindings(
     verifier_blob_sha: str,
     verifier_sha256: str,
 ) -> None:
+    historical_contract = _DIRECT_RELEASE_WORKFLOW_CONTRACTS.get(release.version)
+    if historical_contract is None:
+        raise ProjectStatusError("direct-release workflow contract is not reviewed")
+    workflow_path, _, verifier_path, _ = historical_contract
     _git(root, "merge-base", "--is-ancestor", release.commit_sha, trusted_head)
     tag_object = _git(root, "rev-parse", "--verify", f"refs/tags/{release.tag}")
     tag_type = _git(root, "cat-file", "-t", tag_object)
@@ -1606,8 +1623,8 @@ def _verify_direct_release_git_bindings(
     if _version_from_init_bytes(source_init, "direct-release source __init__.py") != release.version:
         raise ProjectStatusError("direct-release version differs from its source commit")
     for relative, expected_blob, expected_sha256 in (
-        (_RELEASE_SPEC.path, workflow_blob_sha, workflow_sha256),
-        (_RELEASE_PUBLISHED_VERIFY_PATH, verifier_blob_sha, verifier_sha256),
+        (workflow_path, workflow_blob_sha, workflow_sha256),
+        (verifier_path, verifier_blob_sha, verifier_sha256),
     ):
         blob = _git(root, "rev-parse", "--verify", f"{release.commit_sha}:{relative}")
         data = _git_bytes(root, "show", f"{release.commit_sha}:{relative}")
@@ -1825,6 +1842,15 @@ def _load_direct_release(
     )
     version = _string(source["version"], "direct-release source.version")
     _version_tuple(version)
+    historical_contract = _DIRECT_RELEASE_WORKFLOW_CONTRACTS.get(version)
+    if historical_contract is None:
+        raise ProjectStatusError("direct-release workflow contract is not reviewed")
+    (
+        historical_workflow_path,
+        historical_workflow_sha256,
+        historical_verifier_path,
+        historical_verifier_sha256,
+    ) = historical_contract
     record_match = _DIRECT_RELEASE_PATH_RE.fullmatch(record_relative)
     if record_match is None or record_match.group(1) != version:
         raise ProjectStatusError("direct-release path version differs from source")
@@ -2034,10 +2060,10 @@ def _load_direct_release(
     if (
         workflow["contract"] != "simple-release-v1"
         or workflow["run_attempt"] != 1
-        or workflow["workflow_path"] != _RELEASE_SPEC.path
-        or workflow_sha256 != _RELEASE_SPEC.reviewed_sha256
-        or workflow["verifier_path"] != _RELEASE_PUBLISHED_VERIFY_PATH
-        or verifier_sha256 != _RELEASE_PUBLISHED_VERIFY_SHA256
+        or workflow["workflow_path"] != historical_workflow_path
+        or workflow_sha256 != historical_workflow_sha256
+        or workflow["verifier_path"] != historical_verifier_path
+        or verifier_sha256 != historical_verifier_sha256
         or workflow["event"] != "workflow_dispatch"
         or workflow["ref"] != "refs/heads/main"
         or workflow["head_sha"] != commit_sha
@@ -2196,7 +2222,7 @@ def _load_direct_release(
     )
     if (
         provider_attestation["conclusion"] != "success"
-        or provider_attestation["signer_workflow"] != _RELEASE_SPEC.path
+        or provider_attestation["signer_workflow"] != historical_workflow_path
     ):
         raise ProjectStatusError("direct-release provider attestation is inconsistent")
     readback = _mapping(
@@ -2337,7 +2363,7 @@ def _load_direct_release(
         tag_object_sha=tag_object_sha,
         release_url=release_url,
         artifacts=tuple(_PIPELINE_ASSETS),
-        build_signer_workflow=_RELEASE_SPEC.path,
+        build_signer_workflow=historical_workflow_path,
         build_provenance_subjects=build_subjects,
         sbom_subjects=sbom_subjects,
         release_attestation_subjects=release_subjects,
