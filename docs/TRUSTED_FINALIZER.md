@@ -40,7 +40,7 @@ Each consumer must apply its own branch protection, Environment/reviewer
 controls, protected Guard-artifact digest, and audit.
 
 The repository-level implementation-ready workflow copies download
-maintained immutable release `v4.7.1`. Before enabling those copies, download
+maintained immutable release `v4.8.0`. Before enabling those copies, download
 that release's `evo-guard.pyz` and `SHA256SUMS`, verify the manifest and
 release attestation, and copy the reviewed runtime digest into protected
 variable `EVOGUARD_GUARD_ARTIFACT_SHA256`. The workflow must not derive its
@@ -50,7 +50,7 @@ The `examples/trusted-finalizer/` pair remains a frozen v3.7.0 reference and
 must not be silently rewritten. The packaged no-clobber deployment kit
 remains byte-bound to release `v4.5.0`; `finalizer-init` does not silently
 upgrade that kit. New deployments built directly from the repository-level
-workflow copies should use `v4.7.1` (version `4.7.1`) or its exact commit
+workflow copies should use `v4.8.0` (version `4.8.0`) or its exact commit
 pin and complete the audit before enforcement. The direct release record is
 not an A-through-H ledger or independent authorization.
 <!-- END EVOGUARD_PROJECT_STATUS:TRUSTED_FINALIZER_RELEASE_PIN -->

@@ -94,7 +94,7 @@ RAW_ENTRY_PINS: dict[str, tuple[str, str]] = {
         "workflow-H",
         "bc6e41645b151775c339af17e3941851c15e2d3f",
     ),
-    ".github/CODEOWNERS": ("control", "68acf1fdc0e53c882fa7e1a256ce060ad9dac99d"),
+    ".github/CODEOWNERS": ("control", "fb67147621b6ab64bb406fc856bb57857b18a093"),
     ".evoguard.json": ("policy", "7988a6a7d6f1df0ebd14028eba29f2257b2b1d2c"),
     "security/release-pipeline-bootstrap.json": (
         "control",

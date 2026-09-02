@@ -11,11 +11,15 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 BETA = ROOT / "docs" / "PUBLIC_BETA.md"
 PRODUCT = ROOT / "docs" / "PRODUCT_CONTRACT.md"
+CURRENT_RELEASE = "v4.8.0"
+CURRENT_RELEASE_SHA = "07e361cb9a75cc1822cd905ca65df42235b3b910"
 
 
 def test_product_contract_preserves_the_one_question_and_nonclaims() -> None:
     text = PRODUCT.read_text(encoding="utf-8")
 
+    assert CURRENT_RELEASE in text
+    assert CURRENT_RELEASE_SHA in text
     assert "Did this change satisfy the selected judge without editing or deleting an" in text
     assert "evidence path protected by the active policy?" in text
     assert "Public Beta" in text
@@ -32,6 +36,8 @@ def test_public_beta_is_advisory_first_and_evidence_promoted() -> None:
     text = BETA.read_text(encoding="utf-8")
     normalized = " ".join(text.split())
 
+    assert CURRENT_RELEASE in text
+    assert CURRENT_RELEASE_SHA in text
     assert "keep its check non-required" in text
     assert "at least **10 attempts**" in text
     assert "first four are fixed" in text

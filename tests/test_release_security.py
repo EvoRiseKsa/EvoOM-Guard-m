@@ -306,9 +306,12 @@ def test_failed_v470_attempt_is_bounded_and_source_is_not_reused() -> None:
     )
     assert source_version_match is not None
     source_version = source_version_match.group(1)
-    assert project_status["source"]["lifecycle"] == "release-candidate"
+    assert project_status["source"]["lifecycle"] == "release-line"
     assert source_version == "4.8.0"
     assert not source_version.endswith(".dev0")
+    assert project_status["published_release"]["record"] == (
+        "evidence/direct-releases/v4.8.0/DIRECT_RELEASE.json"
+    )
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert "## [4.8.0] — 2026-09-02" in changelog
     assert "## [4.7.1] — 2026-09-01" in changelog
