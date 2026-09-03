@@ -11,9 +11,9 @@
 
 EvoOM Guard is available as a **Public Beta** for self-hosted use through its
 GitHub Action and command-line interface. The maintained consumer artifact is
-the immutable [`v4.8.0` release](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0).
+the immutable [`v4.8.1` release](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.1).
 Consumers pin that tag or, for the strictest identity, its recorded full commit
-SHA, `07e361cb9a75cc1822cd905ca65df42235b3b910`.
+SHA, `e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8`.
 The product is not a hosted SaaS, a managed merge service, or a PyPI
 distribution.
 

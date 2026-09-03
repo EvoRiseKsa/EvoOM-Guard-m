@@ -11,8 +11,8 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 BETA = ROOT / "docs" / "PUBLIC_BETA.md"
 PRODUCT = ROOT / "docs" / "PRODUCT_CONTRACT.md"
-CURRENT_RELEASE = "v4.8.0"
-CURRENT_RELEASE_SHA = "07e361cb9a75cc1822cd905ca65df42235b3b910"
+CURRENT_RELEASE = "v4.8.1"
+CURRENT_RELEASE_SHA = "e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8"
 
 
 def test_product_contract_preserves_the_one_question_and_nonclaims() -> None:

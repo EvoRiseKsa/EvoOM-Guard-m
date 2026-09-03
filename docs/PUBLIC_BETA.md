@@ -10,7 +10,7 @@
 ## Current launch boundary
 
 The EvoOM Guard Public Beta is open for self-hosted GitHub Action and CLI
-adoption on the immutable `v4.8.0` consumer release. The launch claim is narrow:
+adoption on the immutable `v4.8.1` consumer release. The launch claim is narrow:
 teams can install the gate, observe its five verdicts, retain exact receipts,
 and promote a supported repository to a protected blocking check after the
 evidence gates below pass.
@@ -22,8 +22,8 @@ claims.
 
 ## Stage 0: pin and preflight
 
-1. Pin `EvoRiseKsa/EvoOM-Guard-m` to `v4.8.0` or its recorded full commit SHA,
-   `07e361cb9a75cc1822cd905ca65df42235b3b910`.
+1. Pin `EvoRiseKsa/EvoOM-Guard-m` to `v4.8.1` or its recorded full commit SHA,
+   `e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8`.
 2. Run `evo-guard version` and retain the output.
 3. Run `evo-guard preflight . --strict --json` using the proposed base-owned
    policy. Preflight does not execute candidate code and is not a `PASS`.
