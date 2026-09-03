@@ -83,7 +83,7 @@ def test_phase_results_are_immutable() -> None:
         result.passed = False  # type: ignore[misc]
 
 
-def test_repo_verifier_forwards_strict_harness_to_phase_contract() -> None:
+def test_repo_verifier_forwards_structured_verdict_floor_to_phase_contract() -> None:
     verifier_tree = ast.parse(
         textwrap.dedent(inspect.getsource(repo_verifier.RepoVerifier._verify))
     )
@@ -100,7 +100,9 @@ def test_repo_verifier_forwards_strict_harness_to_phase_contract() -> None:
         for keyword in request_calls[0].keywords
         if keyword.arg is not None
     }
-    assert keywords["strict_harness"] == "strict_harness"
+    assert keywords["strict_harness"] == (
+        "strict_harness or self.require_structured_verdict"
+    )
 
     owner_tree = ast.parse(
         textwrap.dedent(inspect.getsource(repo_suite.interpret_repo_suite))

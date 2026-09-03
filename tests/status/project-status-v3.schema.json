@@ -25,8 +25,12 @@
       ],
       "properties": {
         "lifecycle": {
-          "description": "A v3 status selects one stable simple-release-v1 publication through a byte- and signature-pinned maintained direct record. It does not promote that record to an A-through-H release ledger or independent review.",
-          "const": "release-line"
+          "description": "A v3 status selects one stable simple-release-v1 consumer publication through a byte- and signature-pinned maintained direct record while allowing a strictly newer development or candidate source line. It does not promote that record to an A-through-H release ledger or independent review.",
+          "enum": [
+            "unreleased-development",
+            "release-candidate",
+            "release-line"
+          ]
         },
         "relation_to_latest_release": {
           "const": "descendant"

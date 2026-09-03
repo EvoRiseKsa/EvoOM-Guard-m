@@ -19,18 +19,57 @@ retained evidence say so.
 ## Release status and support
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
-- [`v4.7.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1) is the latest stable and supported consumer release. Its
+- [`v4.8.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.1) remains the latest stable and supported consumer release. Its
   detached-maintainer-signed direct record is a same-owner post-publication
   observation, not an A-through-H ledger or independent review.
 - [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) remains the latest historical release
   with a validated protected A-through-H ledger; that ledger does not apply to
-  `v4.7.1`.
+  `v4.8.1`.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
 - Draft candidates that were never published are labelled explicitly below
   and are not supported releases.
 <!-- END EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
+
+## [4.8.1] — 2026-09-03
+
+### Fixed
+
+- **Release-source verifier inventory.** Advanced the judge-owned release-source
+  pack contract to `1.0.2` so its deterministic PYZ member inventory includes
+  the governing documents `LICENSE`, `LICENSE-APACHE`, `LICENSING.md`, and
+  `NOTICE`. This aligns the verifier with the immutable `v4.8.0` artifact after
+  the first bounded Reverify attempt exposed the stale three-file omission.
+- **Fail-closed regression and current-control pins.** Added missing-member and
+  extra-member regressions that regenerate a canonical SBOM before asserting
+  the exact archive-member rejection, then re-pinned the current policy,
+  bootstrap manifest, and maintenance-control model to the corrected pack.
+  Historical release ledgers and retained attempt evidence remain byte-for-byte
+  unchanged. The later same-owner Reverify PASS remains a bounded semantic
+  result, not a Trusted Finalizer ALLOW, independent review, or Core GA claim.
+
+## [4.8.0] — 2026-09-02
+
+### Added
+
+- **R3 semantic hardening: opt-in structured repository verdicts.** `preflight`
+  now resolves the live public runner-adapter facade and reports whether the
+  configured repository command can produce judge-owned JUnit evidence. An
+  exit-code-only command is an ordinary warning, and therefore makes
+  `preflight --strict` non-zero. `guard --require-structured-verdict` refuses
+  that command before the repository suite starts; `strict_harness` now applies
+  the same pre-run capability floor. A matching adapter remains only a
+  capability observation: the existing post-run missing, empty, malformed, and
+  exit/report-integrity checks remain authoritative.
+- **Compatibility and rollback.** The new Guard option defaults off, so existing
+  commands outside the structured adapter set retain their exit-code-only
+  behavior. `--blackbox-only` has no repository suite and deliberately ignores
+  this repo-native floor. Removing the opt-in restores the old compatibility
+  path; replacing `strict_harness` with the narrower controls restores its prior
+  scope. Positive/adversarial coverage includes known and unknown runners, a
+  late-bound custom facade, pre-run refusal, missing/empty reports, and the
+  black-box-only exception, using portable Python commands rather than a shell.
 
 ## [4.7.1] — 2026-09-01
 

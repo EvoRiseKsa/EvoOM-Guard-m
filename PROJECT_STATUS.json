@@ -10,10 +10,10 @@
     }
   },
   "published_release": {
-    "record": "evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json",
-    "record_sha256": "eaa7e4f640db8a777ad2632322351825307d123a6664097e544063ef361fa4c6",
-    "signature": "evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json.sig",
-    "signature_sha256": "e7e67ef35f760c2c86c522587b4436409a96028016a8f35652827edf73b1a5bb"
+    "record": "evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json",
+    "record_sha256": "1486b94f8d1c7f9746dc0e5ac727c070d3617f7dc4dba7fed77af0b827f5cf04",
+    "signature": "evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json.sig",
+    "signature_sha256": "a6ee8557a0a61d8a59b762060382fbcecd9f5c70b265b3fe20867d05656eb5b6"
   },
   "historical_evidence": {
     "latest_validated_a_h_ledger": "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json"

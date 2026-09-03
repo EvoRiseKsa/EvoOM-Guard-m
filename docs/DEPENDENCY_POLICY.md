@@ -19,7 +19,8 @@ from open version ranges at workflow time.
 ## Python tooling
 
 `requirements/ci.in` is the small, human-reviewed source declaration for the
-build backend and the `dev` tools declared in `pyproject.toml`.
+build backend, the `dev` tools declared in `pyproject.toml`, and the exact
+`tomli` compatibility parser imported by distribution tooling on Python 3.10.
 `requirements/ci.lock` is generated from it with `pip-compile` on Python 3.10,
 contains every transitive package and SHA-256 hash, and is the only Python
 tooling input used by the CI and release workflows. Those workflows install it

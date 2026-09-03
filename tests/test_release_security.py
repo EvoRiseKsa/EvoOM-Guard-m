@@ -293,10 +293,27 @@ def test_failed_v470_attempt_is_bounded_and_source_is_not_reused() -> None:
         "same_owner_operation": True,
         "independent_validation": False,
     }
-    assert '__version__ = "4.7.1"' in (
-        ROOT / "evoom_guard" / "__init__.py"
-    ).read_text(encoding="utf-8")
+    project_status = json.loads(
+        (ROOT / "PROJECT_STATUS.json").read_text(encoding="utf-8")
+    )
+    source_text = (ROOT / "evoom_guard" / "__init__.py").read_text(
+        encoding="utf-8"
+    )
+    source_version_match = re.search(
+        r'^__version__ = "([^"]+)"$',
+        source_text,
+        re.MULTILINE,
+    )
+    assert source_version_match is not None
+    source_version = source_version_match.group(1)
+    source_identity = (project_status["source"]["lifecycle"], source_version)
+    assert source_identity == ("release-line", "4.8.1")
+    assert project_status["published_release"]["record"] == (
+        "evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json"
+    )
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "## [4.8.1] — 2026-09-03" in changelog
+    assert "## [4.8.0] — 2026-09-02" in changelog
     assert "## [4.7.1] — 2026-09-01" in changelog
     assert "## [4.7.0] — 2026-08-31 (unpublished; withdrawn)" in changelog
 
@@ -647,7 +664,7 @@ def test_release_validation_build_and_write_privileges_are_separated() -> None:
 def test_future_release_artifact_and_sbom_are_attested_in_a_clean_job() -> None:
     build = _job_block(RELEASE, "build-artifact")
     attest = _job_block(RELEASE, "attest-release-assets")
-    attestation_action = "actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d"
+    attestation_action = "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"
     assert attestation_action not in build
     assert attest.count(attestation_action) == 2
     assert attest.count("subject-path: dist/evo-guard.pyz") == 2

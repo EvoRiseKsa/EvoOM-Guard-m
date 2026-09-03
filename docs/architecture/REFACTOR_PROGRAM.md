@@ -550,6 +550,13 @@ remain in their established facades.
   ownership remains a review obligation. The unclassified ceiling falls from
   11 to 7 with all other violation classes still zero; package runtime bytes do
   not change.
+- The final Stage-10 classification slice assigns the seven remaining mixed
+  facades to their reviewed existing layers and removes the last layer
+  inversion. Import-boundary ratchet revision 19 records zero cycles,
+  cross-package private imports, wildcard imports, unresolved dynamic imports,
+  layer violations, and unclassified modules. The Stage-10 dependency and
+  ownership-ratchet goal is complete; this does not complete the wider release,
+  production-isolation, or independent-validation programs.
 - The first Stage-11 pure-phase extraction moves trusted path and harness
   policy validation behind one characterized helper. `load_config` C901
   complexity falls from 49 to 42 while exact accepted payloads, error identity,
@@ -612,10 +619,23 @@ remain in their established facades.
   classified verifier owner adds no cycle, private import, layer violation, or
   unclassified debt; the seven mixed facades remain explicit debt and neither
   schema nor verdict behavior changes.
+- The bounded finalizer ownership slice moves only the raw-Git subprocess
+  lifecycle from `finalizer_derivation.py::_run_git_command` into the
+  effect-injected `finalizer/git_command.py` owner. The branch-free historical
+  facade resolves its existing process, thread, clock, environment, limit,
+  exception, and cleanup seams on every call. Existing characterization binds
+  bare/worktree commands, closed pinned-executable environments, concurrent
+  bounded pipe draining, deadlines, exact-`True` cleanup proof, POSIX
+  post-completion cleanup, partial reader starts, primary exception identity,
+  ordered bounded cleanup notes, error bytes/messages, and executable-pin
+  stability. The owner imports no facade and no extracted helper exceeds the
+  C901 threshold; removing the former complexity-37 hotspot lowers the current
+  repository inventory from 90 to 89. This changes no raw object, verdict,
+  schema, canonical byte, signature, admission, or publication behavior.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction
-is **complete**; the overall refactor program is **in-progress**. Source version `4.7.1`
+is **complete**; the overall refactor program is **in-progress**. Source version `4.8.1`
 is on the maintained direct release line.
 <!-- END EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 - Extract evidence primitives and finalizer/admission domain packages.

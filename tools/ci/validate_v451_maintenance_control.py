@@ -94,19 +94,19 @@ RAW_ENTRY_PINS: dict[str, tuple[str, str]] = {
         "workflow-H",
         "bc6e41645b151775c339af17e3941851c15e2d3f",
     ),
-    ".github/CODEOWNERS": ("control", "68acf1fdc0e53c882fa7e1a256ce060ad9dac99d"),
-    ".evoguard.json": ("policy", "7988a6a7d6f1df0ebd14028eba29f2257b2b1d2c"),
+    ".github/CODEOWNERS": ("control", "fb67147621b6ab64bb406fc856bb57857b18a093"),
+    ".evoguard.json": ("policy", "9f261b876834e5c612f6c024383934f7a4d43bc9"),
     "security/release-pipeline-bootstrap.json": (
         "control",
-        "44d4f0b87129f00aee1005d96830bc203013521e",
+        "73949bef45ef6a4d16d4fe9fb20944de9fcc5284",
     ),
     "security/release-source-pack/pack.json": (
         "pack",
-        "a05bb0d113cfc9675e06c9480590496dbf841b82",
+        "efcec2e40ea39f02994e0da7500826b3e322ee76",
     ),
     "security/release-source-pack/test_release_protocol.py": (
         "pack",
-        "f8f6d9369d295171ad78c87dff424840a800de3e",
+        "e8a3221087024d86dd5181b47d1811806ef607cf",
     ),
     "security/judge-requirements.lock": (
         "control",

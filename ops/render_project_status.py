@@ -101,6 +101,51 @@ _DIRECT_RELEASE_PUBLIC_KEY_METADATA_SHA256 = (
 _DIRECT_RELEASE_PUBLIC_KEY_FINGERPRINT = (
     "SHA256:iCn7wa6HgKdu7luf/16rrKZzSk5FygJoA8EKNl3LJ24"
 )
+# Versioned historical authorities. These bytes are signed into each direct
+# record and remain frozen even when the maintained release workflows evolve.
+_DIRECT_RELEASE_WORKFLOW_CONTRACTS: dict[
+    str,
+    tuple[str, str, str, str],
+] = {
+    "4.7.1": (
+        ".github/workflows/release.yml",
+        "840ad7257e82fdcccdf751fe6b55aaad8a58679c3e39825cb0d1628e0fda1769",
+        ".github/workflows/release-published-verify.yml",
+        "20f9f759bd9f14ae16e697894d62e6eb0eb82d6a26333d41a025cbbb81ea4478",
+    ),
+    "4.8.0": (
+        ".github/workflows/release.yml",
+        "c1a404466c4bc98e98f43113fb636ac838bd7130726fe027cc5dc9eb8294b026",
+        ".github/workflows/release-published-verify.yml",
+        "20f9f759bd9f14ae16e697894d62e6eb0eb82d6a26333d41a025cbbb81ea4478",
+    ),
+    "4.8.1": (
+        ".github/workflows/release.yml",
+        "c1a404466c4bc98e98f43113fb636ac838bd7130726fe027cc5dc9eb8294b026",
+        ".github/workflows/release-published-verify.yml",
+        "20f9f759bd9f14ae16e697894d62e6eb0eb82d6a26333d41a025cbbb81ea4478",
+    ),
+}
+_DIRECT_RELEASE_HISTORY_CONTRACTS = {
+    "4.7.1": "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json",
+    "4.8.0": "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json",
+    "4.8.1": "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json",
+}
+_DIRECT_RELEASE_CREATED_UTC_SEMANTICS_CONTRACTS = {
+    "4.7.1": (
+        "Exact GitHub Releases API created_at value; target-commit metadata, not "
+        "draft creation or publication time."
+    ),
+    "4.8.0": (
+        "Exact GitHub Releases API created_at value; target-commit metadata, not "
+        "draft creation or publication time."
+    ),
+    "4.8.1": (
+        "Exact GitHub Releases API created_at value; for v4.8.1 it equals the "
+        "annotated-tag tagger timestamp, not the target-commit, draft-creation, or "
+        "publication time."
+    ),
+}
 _DIRECT_RELEASE_JOBS = (
     "validate-test",
     "dispatch-ref-guard",
@@ -112,12 +157,26 @@ _DIRECT_RELEASE_JOBS = (
     "publish-release",
     "post-publication-verify / verify-published-release",
 )
-_DIRECT_RELEASE_NON_CLAIMS = (
-    "This maintained record is not evoguard-release-ledger-v2 and does not claim protected A-through-H, RSAE, or RAAE evidence for v4.7.1.",
-    "Publication and same-owner verification do not prove behavioral correctness, security, production readiness, deployment, or independent efficacy.",
-    "The record was created after immutable publication and is not part of the v4.7.1 tag, source tree, or release assets.",
-    "Provider-control observations are point-in-time workflow and API observations, not guarantees that mutable repository controls can never change later.",
-)
+_DIRECT_RELEASE_NON_CLAIM_CONTRACTS = {
+    "4.7.1": (
+        "This maintained record is not evoguard-release-ledger-v2 and does not claim protected A-through-H, RSAE, or RAAE evidence for v4.7.1.",
+        "Publication and same-owner verification do not prove behavioral correctness, security, production readiness, deployment, or independent efficacy.",
+        "The record was created after immutable publication and is not part of the v4.7.1 tag, source tree, or release assets.",
+        "Provider-control observations are point-in-time workflow and API observations, not guarantees that mutable repository controls can never change later.",
+    ),
+    "4.8.0": (
+        "This maintained record is not evoguard-release-ledger-v2 and does not claim protected A-through-H, RSAE, or RAAE evidence for v4.8.0.",
+        "Publication and same-owner verification support only advisory-first Public Beta release availability; they do not prove behavioral correctness, security, production readiness, deployment, Core GA, hostile-code production suitability, or independent efficacy.",
+        "The record was created after immutable publication and is not part of the v4.8.0 tag, source tree, or release assets.",
+        "Provider-control observations are point-in-time workflow and API observations, not guarantees that mutable repository controls can never change later.",
+    ),
+    "4.8.1": (
+        "This maintained record is not evoguard-release-ledger-v2 and does not claim protected A-through-H, RSAE, or RAAE evidence for v4.8.1.",
+        "Publication and same-owner verification support only advisory-first Public Beta release availability; they do not prove behavioral correctness, security, production readiness, deployment, Core GA, hostile-code production suitability, or independent efficacy.",
+        "The record was created after immutable publication and is not part of the v4.8.1 tag, source tree, or release assets.",
+        "Provider-control observations are point-in-time workflow and API observations, not guarantees that mutable repository controls can never change later.",
+    ),
+}
 _BEGIN_RE = re.compile(r"<!-- BEGIN EVOGUARD_PROJECT_STATUS:([A-Z0-9_]+) -->")
 _END_RE = re.compile(r"<!-- END EVOGUARD_PROJECT_STATUS:([A-Z0-9_]+) -->")
 _MARKER_LINE_RE = re.compile(
@@ -430,7 +489,7 @@ _RELEASE_SPEC = _WorkflowSpec(
     ),
     "validate-test",
     _RELEASE_MAIN_GATE,
-    reviewed_sha256="840ad7257e82fdcccdf751fe6b55aaad8a58679c3e39825cb0d1628e0fda1769",
+    reviewed_sha256="c1a404466c4bc98e98f43113fb636ac838bd7130726fe027cc5dc9eb8294b026",
     job_gates=(("dispatch-ref-guard", "always()"),),
 )
 _RELEASE_PUBLISHED_VERIFY_PATH = ".github/workflows/release-published-verify.yml"
@@ -1368,9 +1427,16 @@ def load_status(root: Path, *, raw: bytes | None = None) -> Status:
         )
     if (
         schema_version == "evoguard-project-status-v3"
-        and status.lifecycle != "release-line"
+        and status.lifecycle
+        not in {
+            "unreleased-development",
+            "release-candidate",
+            "release-line",
+        }
     ):
-        raise ProjectStatusError("project-status v3 requires lifecycle release-line")
+        raise ProjectStatusError(
+            "project-status v3 requires a direct-release source lifecycle"
+        )
     return status
 
 
@@ -1562,6 +1628,10 @@ def _verify_direct_release_git_bindings(
     verifier_blob_sha: str,
     verifier_sha256: str,
 ) -> None:
+    historical_contract = _DIRECT_RELEASE_WORKFLOW_CONTRACTS.get(release.version)
+    if historical_contract is None:
+        raise ProjectStatusError("direct-release workflow contract is not reviewed")
+    workflow_path, _, verifier_path, _ = historical_contract
     _git(root, "merge-base", "--is-ancestor", release.commit_sha, trusted_head)
     tag_object = _git(root, "rev-parse", "--verify", f"refs/tags/{release.tag}")
     tag_type = _git(root, "cat-file", "-t", tag_object)
@@ -1606,8 +1676,8 @@ def _verify_direct_release_git_bindings(
     if _version_from_init_bytes(source_init, "direct-release source __init__.py") != release.version:
         raise ProjectStatusError("direct-release version differs from its source commit")
     for relative, expected_blob, expected_sha256 in (
-        (_RELEASE_SPEC.path, workflow_blob_sha, workflow_sha256),
-        (_RELEASE_PUBLISHED_VERIFY_PATH, verifier_blob_sha, verifier_sha256),
+        (workflow_path, workflow_blob_sha, workflow_sha256),
+        (verifier_path, verifier_blob_sha, verifier_sha256),
     ):
         blob = _git(root, "rev-parse", "--verify", f"{release.commit_sha}:{relative}")
         data = _git_bytes(root, "show", f"{release.commit_sha}:{relative}")
@@ -1825,6 +1895,26 @@ def _load_direct_release(
     )
     version = _string(source["version"], "direct-release source.version")
     _version_tuple(version)
+    historical_contract = _DIRECT_RELEASE_WORKFLOW_CONTRACTS.get(version)
+    if historical_contract is None:
+        raise ProjectStatusError("direct-release workflow contract is not reviewed")
+    historical_ledger_contract = _DIRECT_RELEASE_HISTORY_CONTRACTS.get(version)
+    non_claim_contract = _DIRECT_RELEASE_NON_CLAIM_CONTRACTS.get(version)
+    if historical_ledger_contract is None or non_claim_contract is None:
+        raise ProjectStatusError("direct-release history and non-claim contracts are not reviewed")
+    created_utc_semantics_contract = (
+        _DIRECT_RELEASE_CREATED_UTC_SEMANTICS_CONTRACTS.get(version)
+    )
+    if created_utc_semantics_contract is None:
+        raise ProjectStatusError(
+            "direct-release publication-time contract is not reviewed"
+        )
+    (
+        historical_workflow_path,
+        historical_workflow_sha256,
+        historical_verifier_path,
+        historical_verifier_sha256,
+    ) = historical_contract
     record_match = _DIRECT_RELEASE_PATH_RE.fullmatch(record_relative)
     if record_match is None or record_match.group(1) != version:
         raise ProjectStatusError("direct-release path version differs from source")
@@ -1928,11 +2018,7 @@ def _load_direct_release(
         or release_object["draft"] is not False
         or release_object["prerelease"] is not False
         or release_object["immutable"] is not True
-        or release_object["created_utc_semantics"]
-        != (
-            "Exact GitHub Releases API created_at value; target-commit metadata, not "
-            "draft creation or publication time."
-        )
+        or release_object["created_utc_semantics"] != created_utc_semantics_contract
         or release_url
         != f"https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/{tag}"
         or release_object["body_sha256_semantics"] != body_sha256_semantics
@@ -2034,10 +2120,10 @@ def _load_direct_release(
     if (
         workflow["contract"] != "simple-release-v1"
         or workflow["run_attempt"] != 1
-        or workflow["workflow_path"] != _RELEASE_SPEC.path
-        or workflow_sha256 != _RELEASE_SPEC.reviewed_sha256
-        or workflow["verifier_path"] != _RELEASE_PUBLISHED_VERIFY_PATH
-        or verifier_sha256 != _RELEASE_PUBLISHED_VERIFY_SHA256
+        or workflow["workflow_path"] != historical_workflow_path
+        or workflow_sha256 != historical_workflow_sha256
+        or workflow["verifier_path"] != historical_verifier_path
+        or verifier_sha256 != historical_verifier_sha256
         or workflow["event"] != "workflow_dispatch"
         or workflow["ref"] != "refs/heads/main"
         or workflow["head_sha"] != commit_sha
@@ -2196,7 +2282,7 @@ def _load_direct_release(
     )
     if (
         provider_attestation["conclusion"] != "success"
-        or provider_attestation["signer_workflow"] != _RELEASE_SPEC.path
+        or provider_attestation["signer_workflow"] != historical_workflow_path
     ):
         raise ProjectStatusError("direct-release provider attestation is inconsistent")
     readback = _mapping(
@@ -2299,7 +2385,8 @@ def _load_direct_release(
         {"latest_validated_a_h_ledger", "applies_to_this_release"},
     )
     if (
-        historical["latest_validated_a_h_ledger"] != status.ledger_path
+        historical["latest_validated_a_h_ledger"] != historical_ledger_contract
+        or historical["latest_validated_a_h_ledger"] != status.ledger_path
         or historical["applies_to_this_release"] is not False
     ):
         raise ProjectStatusError("direct-release historical ledger boundary is inconsistent")
@@ -2319,7 +2406,7 @@ def _load_direct_release(
     _exact_string_list(
         trust["non_claims"],
         "direct-release trust_boundary.non_claims",
-        _DIRECT_RELEASE_NON_CLAIMS,
+        non_claim_contract,
     )
     if (
         trust["same_owner_operation"] is not True
@@ -2337,7 +2424,7 @@ def _load_direct_release(
         tag_object_sha=tag_object_sha,
         release_url=release_url,
         artifacts=tuple(_PIPELINE_ASSETS),
-        build_signer_workflow=_RELEASE_SPEC.path,
+        build_signer_workflow=historical_workflow_path,
         build_provenance_subjects=build_subjects,
         sbom_subjects=sbom_subjects,
         release_attestation_subjects=release_subjects,
@@ -2349,7 +2436,7 @@ def _load_direct_release(
         release_body_sha256=release_body_sha256,
         workflow_run_id=workflow_run_id,
     )
-    if source_version != version:
+    if status.lifecycle == "release-line" and source_version != version:
         raise ProjectStatusError("release-line source version must equal the direct release")
     if verify_git:
         assert trusted_head is not None
@@ -4242,23 +4329,45 @@ def _verify_source_relation(
     direct_release: DirectRelease | None = None,
 ) -> None:
     published = _version_tuple(ledger.version)
+    if status.relation != "descendant":
+        raise ProjectStatusError(f"unsupported source relation: {status.relation}")
+    if status.schema_version == "evoguard-project-status-v3":
+        if direct_release is None:
+            raise ProjectStatusError(
+                "project-status v3 requires direct release authority"
+            )
+        direct = _version_tuple(direct_release.version)
+        if published >= direct:
+            raise ProjectStatusError(
+                "the historical ledger must precede the direct consumer release"
+            )
+        if status.lifecycle == "release-line":
+            source = _version_tuple(source_version)
+            if source != direct:
+                raise ProjectStatusError(
+                    "release-line source version must equal the direct release"
+                )
+        elif status.lifecycle == "unreleased-development":
+            source = _version_tuple(source_version, development=True)
+            if source <= direct:
+                raise ProjectStatusError(
+                    "development source must be newer than the direct consumer release"
+                )
+        elif status.lifecycle == "release-candidate":
+            source = _version_tuple(source_version)
+            if source <= direct:
+                raise ProjectStatusError(
+                    "candidate source must be newer than the direct consumer release"
+                )
+        else:
+            raise ProjectStatusError(
+                "project-status v3 source lifecycle is unsupported"
+            )
+        return
     if status.lifecycle == "unreleased-development":
         source = _version_tuple(source_version, development=True)
     else:
         source = _version_tuple(source_version)
-    if status.relation != "descendant":
-        raise ProjectStatusError(f"unsupported source relation: {status.relation}")
-    if status.schema_version == "evoguard-project-status-v3":
-        if (
-            status.lifecycle != "release-line"
-            or direct_release is None
-            or source != _version_tuple(direct_release.version)
-            or published >= source
-        ):
-            raise ProjectStatusError(
-                "project-status v3 must bind a newer direct release on the source line"
-            )
-        return
     if status.lifecycle == "release-line":
         if source != published:
             raise ProjectStatusError(
@@ -4820,13 +4929,32 @@ def _release_summary(context: Context) -> str:
     ledger = context.ledger
     direct = context.direct_release
     if direct is not None:
+        source_lifecycle = {
+            "unreleased-development": (
+                "**unreleased development**; it is unsupported and is not a "
+                "consumer release"
+            ),
+            "release-candidate": (
+                "a **release candidate**; it is unsupported and is not yet a "
+                "consumer release"
+            ),
+            "release-line": "on the **maintained direct release line**",
+        }.get(context.status.lifecycle)
+        if source_lifecycle is None:
+            raise ProjectStatusError(
+                f"unsupported rendered direct source lifecycle: "
+                f"{context.status.lifecycle}"
+            )
+        consumer_relation = (
+            "is" if context.status.lifecycle == "release-line" else "remains"
+        )
         artifacts = "`, `".join(direct.artifacts)
         release_subjects = "`, `".join(direct.release_attestation_subjects)
         build_subjects = "`, `".join(direct.build_provenance_subjects)
         return _wrap(
-            f"Source version `{context.source_version}` is on the **maintained direct "
-            f"release line**. The latest immutable consumer release selected by the "
-            f"protected source tree is [`{direct.tag}`]({direct.release_url}) at commit "
+            f"Source version `{context.source_version}` is {source_lifecycle}. The "
+            f"latest immutable consumer release selected by the protected source tree "
+            f"{consumer_relation} [`{direct.tag}`]({direct.release_url}) at commit "
             f"`{direct.commit_sha}`. Detached-maintainer-signed record "
             f"`{direct.record_path}` binds the published asset observations "
             f"`{artifacts}`. It records successful release-attestation verification for "
@@ -5000,6 +5128,38 @@ def _direct_release_blocks(context: Context) -> dict[str, str]:
     version = direct.version
     commit_sha = direct.commit_sha
     release_link = f"[`{tag}`]({direct.release_url})"
+    source_support_status = {
+        "unreleased-development": (
+            "Unreleased development source; unsupported; not a consumer release"
+        ),
+        "release-candidate": (
+            "Release candidate source; unsupported; not yet a consumer release"
+        ),
+        "release-line": "Source on the maintained direct release line",
+    }.get(architecture.lifecycle)
+    architecture_version_state = {
+        "unreleased-development": (
+            "is unreleased development and is not a consumer release"
+        ),
+        "release-candidate": (
+            "is a release candidate and is not yet a consumer release"
+        ),
+        "release-line": "is on the maintained direct release line",
+    }.get(architecture.lifecycle)
+    if source_support_status is None or architecture_version_state is None:
+        raise ProjectStatusError(
+            f"unsupported rendered direct source lifecycle: {architecture.lifecycle}"
+        )
+    source_support_row = (
+        f"| `{context.source_version}` | {source_support_status} |\n"
+        if architecture.lifecycle != "release-line"
+        else ""
+    )
+    source_support_bullet = (
+        f"- Source `{context.source_version}` status: {source_support_status.lower()}.\n"
+        if architecture.lifecycle != "release-line"
+        else ""
+    )
     asset_names = "`, `".join(direct.artifacts)
     release_subject_names = "`, `".join(direct.release_attestation_subjects)
     build_subject_names = "`, `".join(direct.build_provenance_subjects)
@@ -5024,6 +5184,7 @@ def _direct_release_blocks(context: Context) -> dict[str, str]:
         "consumer release only:\n\n"
         "| Version | Status |\n"
         "| --- | --- |\n"
+        f"{source_support_row}"
         f"| {release_link} | Latest stable release; supported; maintained signed "
         "direct record, not an A-through-H ledger |\n"
         f"| [`{ledger.tag}`]({ledger.release_url}) | Historical latest validated "
@@ -5036,8 +5197,8 @@ def _direct_release_blocks(context: Context) -> dict[str, str]:
         "useful, but a fix will be delivered in a new immutable release rather than by\n"
         "rewriting an existing tag, asset, checksum, attestation, or maintained record."
     )
-    changelog_support = (
-        f"- {release_link} is the latest stable and supported consumer release. Its\n"
+    changelog_support = source_support_bullet + (
+        f"- {release_link} remains the latest stable and supported consumer release. Its\n"
         "  detached-maintainer-signed direct record is a same-owner post-publication\n"
         "  observation, not an A-through-H ledger or independent review.\n"
         f"- [`{ledger.tag}`]({ledger.release_url}) remains the latest historical release\n"
@@ -5113,7 +5274,6 @@ def _direct_release_blocks(context: Context) -> dict[str, str]:
         "maintainer signature authenticates the direct record, not the truth or\n"
         "independence of the same-owner observations inside it."
     )
-    architecture_version_state = "is on the maintained direct release line"
     return {
         "SECURITY_SUPPORTED_VERSIONS": security_support,
         "CHANGELOG_RELEASE_SUPPORT": changelog_support,

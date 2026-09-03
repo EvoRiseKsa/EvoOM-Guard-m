@@ -95,6 +95,23 @@ class BlackboxJudgeTests(unittest.TestCase):
             self.assertEqual(r.assurance["report_integrity"], "external_process_isolated")
             self.assertEqual(r.assurance["overall_profile"], "black_box_external_judge")
 
+    def test_blackbox_only_does_not_require_a_repo_suite_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, pack = _repo(tmp), _pack(tmp)
+            result = guard(
+                repo,
+                _block("calc/note.py", "# ok\n"),
+                test_command=[sys.executable, "-c", "raise SystemExit(0)"],
+                verifier_pack=pack,
+                blackbox=True,
+                blackbox_only=True,
+                strict_harness=True,
+                require_structured_verdict=True,
+            )
+
+            self.assertEqual(result.verdict, PASS, result.reason)
+            self.assertEqual(result.verdict_source, "blackbox")
+
     def test_wrong_answer_fails_black_box(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, pack = _repo(tmp), _pack(tmp)

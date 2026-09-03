@@ -102,10 +102,27 @@ offline v1 contract in that run. The result states
 }
 ```
 
-Production support still requires a separately published, schema-versioned
-matrix that executes real suites against declared runner versions on every
-advertised operating system. This kit is the formal local contract layer for
-that future matrix, not the matrix itself.
+The separate `Runner live conformance` workflow complements this offline kit.
+It executes real Guard PASS/FAIL oracles for pytest, Node `--test`, and Vitest,
+plus a protected-test tamper/rejection oracle for pytest, against Node 22 and
+the locked Vitest version on Ubuntu (Python 3.10/3.11/3.12) and Windows (Python
+3.12). Every cell must execute the exact 13 reviewed oracle tests with zero
+skips, failures, or errors. Pytest third-party plugin autoload is disabled. It
+writes a create-only `evoguard-live-runner-conformance-v1` JSON record bound to
+the exact JUnit bytes, reviewed source subset, complete Git commit/tree,
+installed Python package-inventory digest, tool versions, GitHub-hosted runner
+image/architecture, workflow SHA, run, and attempt and verifies it immediately.
+The workflow then uploads only that JSON/JUnit pair, validates the immutable
+numeric artifact ID and digest, downloads that exact artifact with digest
+mismatch configured as fatal, and semantically re-verifies the downloaded
+bytes. The artifact is retained for 30 days.
+
+The stable aggregate check is `runner-live-conformance`. It is same-owner
+GitHub-hosted operational evidence, not an independent result or a hostile-code
+production boundary. Jest, gotestsum, RSpec, Mocha, Maven, and generic shell
+owners remain **adapter-contract-only** until equivalent real-suite cells are
+added; their presence in the offline manifest is not an advertised live runner
+support claim.
 
 The verifier establishes unsigned self-consistency only. It does not establish
 who ran the kit or prove independent launch. A release evidence bundle must
@@ -117,6 +134,10 @@ bytes, trusted manifest, source inventory, and CI/run identity.
 - `tools/conformance/runner-manifest.json`: canonical owners, orders, and cases.
 - `tools/conformance/runner-manifest.schema.json`: manifest schema.
 - `tools/conformance/runner-result.schema.json`: result schema.
+- `tools/conformance/live-runner-result.schema.json`: one real matrix-cell
+  result schema.
+- `tools/conformance/live_runner_result.py`: exact JUnit/result validator.
+- `tools/conformance/run_live_runner_conformance.py`: create/verify CLI.
 - `tools/conformance/runner_kit.py`: offline evaluator and provenance collector.
 - `tools/conformance/run_runner_conformance.py`: create-only CLI.
 

@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+import evoom_guard.adapters as adapters
 from evoom_guard.cli import main
 from evoom_guard.cli.preflight_commands import PreflightServices, execute_preflight
 from evoom_guard.policy.preflight import analyze_preflight, normalize_test_command
@@ -65,6 +66,9 @@ def _services(
         ),
         locate_executable=lambda executable, _cwd: f"/trusted/{executable}",
         operating_profile_violations=lambda *_args, **_kwargs: (),
+        instrument_command=lambda command, report_path: (
+            adapters.instrument_command(command, report_path)
+        ),
     )
 
 
@@ -271,6 +275,7 @@ def test_config_relative_pack_uses_policy_directory_but_override_uses_cwd(
         is_pack_sha256=services.is_pack_sha256,
         locate_executable=services.locate_executable,
         operating_profile_violations=services.operating_profile_violations,
+        instrument_command=services.instrument_command,
     )
 
     assert execute_preflight(
@@ -337,6 +342,7 @@ def test_unsupported_policy_requirements_and_profile_overrides_fail_closed(
             if kwargs["isolation"] == "subprocess"
             else ()
         ),
+        instrument_command=services.instrument_command,
     )
 
     result = execute_preflight(
@@ -376,3 +382,103 @@ def test_strict_digest_pinned_container_can_be_green(tmp_path: Path) -> None:
     )
 
     assert result == 0
+
+
+def _statuses_by_code(payload: dict[str, object]) -> dict[str, str]:
+    checks = payload["checks"]
+    assert isinstance(checks, list)
+    return {
+        str(check["code"]): str(check["status"])
+        for check in checks
+        if isinstance(check, dict)
+    }
+
+
+def test_known_runner_reports_structured_verdict_capability(tmp_path: Path) -> None:
+    output: list[str] = []
+    result = execute_preflight(
+        _args(tmp_path, preflight_json=True),
+        services=_services(
+            {"test_command": ["python", "-m", "pytest", "-q"]}
+        ),
+        out=output.append,
+    )
+
+    assert result == 0
+    statuses = _statuses_by_code(json.loads(output[0]))
+    assert statuses["test_command.structured_verdict"] == "pass"
+    assert "test_command.exit_code_only_verdict" not in statuses
+
+
+def test_unknown_runner_warns_and_strict_preflight_is_nonzero(
+    tmp_path: Path,
+) -> None:
+    output: list[str] = []
+    result = execute_preflight(
+        _args(
+            tmp_path,
+            no_config=True,
+            strict=True,
+            test_command="portable-unknown-runner",
+            preflight_json=True,
+        ),
+        services=_services({}),
+        out=output.append,
+    )
+
+    assert result == 1
+    statuses = _statuses_by_code(json.loads(output[0]))
+    assert statuses["test_command.exit_code_only_verdict"] == "warning"
+    assert "test_command.structured_verdict" not in statuses
+
+
+def test_preflight_uses_the_live_adapters_facade(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: list[tuple[list[str], str]] = []
+    services = _services(
+        {"test_command": ["portable-unknown-runner"]}
+    )
+
+    def late_instrument(
+        command: list[str],
+        report_path: str,
+    ) -> tuple[list[str], bool, dict[str, str]]:
+        calls.append((command, report_path))
+        return command, True, {}
+
+    monkeypatch.setattr(adapters, "instrument_command", late_instrument)
+    output: list[str] = []
+    result = execute_preflight(
+        _args(tmp_path, preflight_json=True),
+        services=services,
+        out=output.append,
+    )
+
+    assert result == 0
+    assert calls == [(["portable-unknown-runner"], "judge-result.xml")]
+    statuses = _statuses_by_code(json.loads(output[0]))
+    assert statuses["test_command.structured_verdict"] == "pass"
+
+
+def test_blackbox_only_skips_repo_suite_structured_verdict_check(
+    tmp_path: Path,
+) -> None:
+    output: list[str] = []
+    execute_preflight(
+        _args(
+            tmp_path,
+            preflight_json=True,
+            strict=True,
+            blackbox=True,
+            blackbox_only=True,
+            test_command="portable-unknown-runner",
+        ),
+        services=_services({}),
+        out=output.append,
+    )
+
+    statuses = _statuses_by_code(json.loads(output[0]))
+    assert "test_command.structured_verdict" not in statuses
+    assert "test_command.exit_code_only_verdict" not in statuses

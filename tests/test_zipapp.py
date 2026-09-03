@@ -14,6 +14,7 @@ on every verdict). Build is stdlib-only, so the suite stays green without extras
 """
 
 import hashlib
+import io
 import json
 import os
 import subprocess
@@ -50,8 +51,23 @@ def _minimal_source(root: Path) -> Path:
     package.mkdir(parents=True)
     (package / "__init__.py").write_text('__version__ = "test"\n', encoding="utf-8")
     (package / "cli.py").write_text("def main():\n    return 0\n", encoding="utf-8")
-    (root / "LICENSE").write_text("test license\n", encoding="utf-8")
+    for document in ("LICENSE", "LICENSE-APACHE", "LICENSING.md", "NOTICE"):
+        (root / document).write_text(f"test {document}\n", encoding="utf-8")
     return package
+
+
+def _insert_hidden_zip_padding(raw: bytes) -> bytes:
+    end = raw.rfind(b"PK\x05\x06")
+    assert end >= 0
+    central_offset = int.from_bytes(raw[end + 16 : end + 20], "little")
+    assert raw[central_offset : central_offset + 4] == b"PK\x01\x02"
+    padding = b"unreviewed bytes between ZIP records"
+    mutated = bytearray(raw[:central_offset] + padding + raw[central_offset:])
+    moved_end = end + len(padding)
+    mutated[moved_end + 16 : moved_end + 20] = (
+        central_offset + len(padding)
+    ).to_bytes(4, "little")
+    return bytes(mutated)
 
 
 def test_pyz_builds_and_reports_version(tmp_path):
@@ -210,6 +226,63 @@ def test_pyz_build_rejects_output_inside_packaged_source(tmp_path):
 
     with pytest.raises(ValueError, match="output must not replace"):
         _build(package, root=root)
+
+
+@pytest.mark.parametrize(
+    "document",
+    ("LICENSE", "LICENSE-APACHE", "LICENSING.md", "NOTICE"),
+)
+def test_pyz_build_rejects_output_over_governing_document(tmp_path, document):
+    root = tmp_path / "source"
+    _minimal_source(root)
+    governing_document = root / document
+    original = governing_document.read_bytes()
+
+    with pytest.raises(ValueError, match="output must not replace"):
+        _build_module().build(str(governing_document), root=str(root))
+
+    assert governing_document.read_bytes() == original
+
+
+def test_pyz_build_rejects_output_parent_symlink_into_packaged_source(tmp_path):
+    root = tmp_path / "source"
+    package = _minimal_source(root)
+    output_link = root / "output-link"
+    try:
+        os.symlink(package, output_link, target_is_directory=True)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"directory symbolic links are unavailable: {error}")
+    injected = package / "injected.pyz"
+
+    try:
+        with pytest.raises(ValueError, match="link or reparse point"):
+            _build_module().build(str(output_link / injected.name), root=str(root))
+        assert not injected.exists()
+    finally:
+        output_link.unlink()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junction/reparse-point contract")
+def test_pyz_build_rejects_output_parent_junction_into_packaged_source(tmp_path):
+    root = tmp_path / "source"
+    package = _minimal_source(root)
+    output_link = root / "output-link"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(output_link), str(package)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if created.returncode != 0:
+        pytest.skip(f"junction creation is unavailable: {created.stdout}{created.stderr}")
+    injected = package / "injected.pyz"
+
+    try:
+        with pytest.raises(ValueError, match="link or reparse point"):
+            _build_module().build(str(output_link / injected.name), root=str(root))
+        assert not injected.exists()
+    finally:
+        os.rmdir(output_link)
 
 
 def test_pyz_build_rejects_an_existing_output_symlink(tmp_path):
@@ -642,6 +715,75 @@ def test_pyz_build_is_byte_reproducible(tmp_path):
             )
 
 
+def test_pyz_audit_rejects_a_modified_member(tmp_path):
+    original = Path(_build(tmp_path / "build"))
+    tampered = tmp_path / "tampered.pyz"
+    with zipfile.ZipFile(original) as archive:
+        contents = {info.filename: archive.read(info) for info in archive.infolist()}
+    contents["evoom_guard/__init__.py"] += b"\n# post-build modification\n"
+    with tampered.open("xb") as raw:
+        raw.write(b"#!/usr/bin/env python3\n")
+        with zipfile.ZipFile(raw, "w", compression=zipfile.ZIP_STORED) as archive:
+            for name in sorted(contents):
+                info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+                info.create_system = 3
+                info.external_attr = 0o100644 << 16
+                info.compress_type = zipfile.ZIP_STORED
+                archive.writestr(info, contents[name])
+
+    with pytest.raises(ValueError, match=r"member (?:size|bytes) differs from staging"):
+        _build_module().audit(str(tampered))
+
+
+def test_pyz_audit_rejects_appended_payload(tmp_path):
+    original = Path(_build(tmp_path / "build"))
+    tampered = tmp_path / "appended.pyz"
+    tampered.write_bytes(original.read_bytes() + b"unreviewed trailing payload")
+
+    with pytest.raises(ValueError, match="trailing bytes"):
+        _build_module().audit(str(tampered))
+
+
+def test_pyz_audit_rejects_hidden_padding_between_zip_records(tmp_path):
+    original = Path(_build(tmp_path / "build"))
+    tampered = tmp_path / "padded.pyz"
+    tampered.write_bytes(_insert_hidden_zip_padding(original.read_bytes()))
+    with zipfile.ZipFile(original) as expected, zipfile.ZipFile(tampered) as actual:
+        assert actual.namelist() == expected.namelist()
+        assert all(actual.read(name) == expected.read(name) for name in expected.namelist())
+
+    with pytest.raises(ValueError, match="raw ZIP bytes"):
+        _build_module().audit(str(tampered))
+
+
+def test_pyz_audit_binds_zip_reads_and_final_readback_to_one_snapshot(
+    tmp_path, monkeypatch
+):
+    original = Path(_build(tmp_path / "build"))
+    target = tmp_path / "audited.pyz"
+    source_bytes = original.read_bytes()
+    target.write_bytes(source_bytes)
+    replacement = tmp_path / "replacement.pyz"
+    replacement.write_bytes(_insert_hidden_zip_padding(source_bytes))
+    build_pyz = _build_module()
+    real_zip_file = build_pyz.zipfile.ZipFile
+    replaced = False
+
+    def replace_path_after_snapshot(source, *args, **kwargs):
+        nonlocal replaced
+        if not replaced:
+            assert isinstance(source, io.BytesIO)
+            os.replace(replacement, target)
+            replaced = True
+        return real_zip_file(source, *args, **kwargs)
+
+    monkeypatch.setattr(build_pyz.zipfile, "ZipFile", replace_path_after_snapshot)
+
+    with pytest.raises(ValueError, match="changed after.*snapshot"):
+        build_pyz.audit(str(target))
+    assert replaced
+
+
 def test_pyz_build_is_identical_from_lf_and_crlf_source_trees(tmp_path):
     sources = {
         "__init__.py": b'__version__ = "test"\n',
@@ -663,7 +805,10 @@ def test_pyz_build_is_identical_from_lf_and_crlf_source_trees(tmp_path):
             path = package / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(source.replace(b"\n", newline))
-        (root / "LICENSE").write_bytes(b"test license\n".replace(b"\n", newline))
+        for document in ("LICENSE", "LICENSE-APACHE", "LICENSING.md", "NOTICE"):
+            (root / document).write_bytes(
+                f"test {document}\n".encode().replace(b"\n", newline)
+            )
         (package / "payload.bin").write_bytes(non_python_payload)
         roots[checkout] = root
 
@@ -679,16 +824,19 @@ def test_pyz_build_is_identical_from_lf_and_crlf_source_trees(tmp_path):
             archived = archive.read(f"evoom_guard/{name}")
             assert b"\r" not in archived
         assert archive.read("evoom_guard/payload.bin") == non_python_payload
-        assert archive.read("LICENSE") == b"test license\n"
+        for document in ("LICENSE", "LICENSE-APACHE", "LICENSING.md", "NOTICE"):
+            assert archive.read(document) == f"test {document}\n".encode()
 
 
-def test_pyz_build_refuses_to_omit_the_license(tmp_path):
+@pytest.mark.parametrize(
+    "missing_document", ("LICENSE", "LICENSE-APACHE", "LICENSING.md", "NOTICE")
+)
+def test_pyz_build_refuses_to_omit_a_governing_document(tmp_path, missing_document):
     root = tmp_path / "unlicensed"
-    package = root / "evoom_guard"
-    package.mkdir(parents=True)
-    (package / "__init__.py").write_text('__version__ = "test"\n', encoding="utf-8")
+    _minimal_source(root)
+    (root / missing_document).unlink()
 
-    with pytest.raises(FileNotFoundError, match="LICENSE not found"):
+    with pytest.raises(FileNotFoundError, match=f"{missing_document} not found"):
         _build(tmp_path / "build", root=root)
 
 

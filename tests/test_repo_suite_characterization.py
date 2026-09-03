@@ -53,6 +53,7 @@ def test_completed_branch_order_and_junit_ownership_are_frozen(
     directory_case = capture_case("host_junit_directory_pass", tmp_path)
 
     assert [event["op"] for event in file_case["events"]] == [
+        "instrument",
         "command",
         "instrument",
         "resolve-host",
@@ -63,9 +64,9 @@ def test_completed_branch_order_and_junit_ownership_are_frozen(
         "evaluate",
         "distill",
     ]
-    assert file_case["events"][2]["report_outside_candidate"] is True
-    assert file_case["events"][3]["strict_cleanup"] is True
-    assert file_case["events"][5]["outside_candidate"] is True
+    assert file_case["events"][3]["report_outside_candidate"] is True
+    assert file_case["events"][4]["strict_cleanup"] is True
+    assert file_case["events"][6]["outside_candidate"] is True
     assert [event["op"] for event in directory_case["events"]][-5:] == [
         "read-report",
         "parse-xml",

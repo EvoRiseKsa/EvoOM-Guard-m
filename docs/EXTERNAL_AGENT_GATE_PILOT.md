@@ -15,15 +15,17 @@ repository participated.
 
 ## Pilot objective
 
-Recruit three or four repositories owned and operated by different teams. Each
-team installs EvoOM Guard as a required pull-request check, runs both benign and
-intentionally rejected changes, and retains the machine-readable verdict and
-the GitHub check result.
+Recruit three to five repositories owned and operated by different teams. Each
+team installs EvoOM Guard in advisory mode, records at least 10 preregistered
+attempts, and retains the machine-readable verdict and GitHub check result. A
+repository promotes the gate to a required blocking check only after the
+evidence gates in [`PUBLIC_BETA.md`](PUBLIC_BETA.md) pass.
 
 The primary product outcome is:
 
-> An external operator can activate a blocking, evidence-bound admission check
-> and verify its receipt without giving the change author control of the judge.
+> An external operator can stage an advisory evidence-bound check, verify its
+> receipts without giving the change author control of the judge, and promote
+> it to blocking only after the recorded promotion gates pass.
 
 ## What the pilot does and does not prove
 
@@ -42,7 +44,8 @@ input, or free-text model name is not an identity proof.
 
 A pilot repository must have:
 
-- a default branch protected by a required pull-request check;
+- a protected default branch capable of requiring the blocking check after the
+  advisory phase;
 - a base-owned EvoOM policy and base-owned judge configuration;
 - an immutable EvoOM Action reference (full commit SHA or immutable release
   tag), never a floating major tag;
@@ -57,14 +60,18 @@ controlled storage.
 
 ## Required attempts
 
-Each repository completes at least four attempts against the same pinned Guard
-version and policy:
+Each repository completes at least 10 attempts against the same pinned Guard
+version and policy. The first four are fixed:
 
 1. a benign change expected to pass;
 2. an ordinary failing change expected not to pass;
 3. a change that modifies or deletes a protected judge/test/policy path;
 4. a change that tries to disable collection, replace the report, or otherwise
    control the admission channel.
+
+The remaining six are preregistered repository-typical cases: at least three
+benign changes, at least one operational edge case, and two additional cases
+selected before any result is known.
 
 The expected outcome is fixed before execution. A pilot operator must not
 relabel a case after seeing the verdict. Any infrastructure failure remains
@@ -99,8 +106,9 @@ authorized access to the corresponding bytes.
 Report per repository and in aggregate:
 
 - protected activation: all enrolled repositories, with at least 3 enrolled;
-  report the exact numerator and denominator rather than assuming a cohort of
-  four;
+  report the exact numerator and denominator across the 3–5 target cohort;
+- at least 10 recorded attempts per repository;
+- median clean-checkout-to-first-complete-receipt time below 30 minutes;
 - valid decision coverage: target at least 95%, with `ERROR` reported
   separately;
 - receipt reproducibility: 100% of retained receipts accepted by the frozen
@@ -117,17 +125,19 @@ the true rate is zero.
 
 ## Operating sequence
 
-1. Record repository eligibility, the pinned Action reference, protected-check
+1. Record repository eligibility, the pinned Action reference, eventual
+   protected-check
    name, policy digest, judge command, and evidence-retention location.
-2. Record the four expected outcomes before opening the candidate pull
-   requests.
+2. Record the expected class for all 10 or more attempts before opening the
+   candidate pull requests.
 3. Run the attempts. Do not retry only failed cases; record every retry and its
    reason.
 4. Have a second operator verify the exact retained receipts.
 5. Publish the bounded product metrics. Keep scientific efficacy claims in the
    independent 80-case protocol.
-6. Remove or retain the required check according to the participating team's
-   decision. The pilot grants no release or production authority.
+6. Promote through a trusted policy PR only when every Public Beta promotion
+   gate passes; otherwise keep the check advisory. The pilot grants no release
+   or production authority.
 
 To volunteer, use the external pilot issue form. Never paste credentials,
 private code, or an undisclosed vulnerability into a public issue.

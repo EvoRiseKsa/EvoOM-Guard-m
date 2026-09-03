@@ -12,12 +12,12 @@ product, `evo-guard` is the CLI, and `evoom_guard` is the Python package.
 
 ## Version boundary
 
-- **Latest published stable release:** [`v4.7.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.7.1).
-- **Consumer pin:** `v4.7.1`, or commit
-  `b222c7df0a3eaef6e89287cd1354625b88ac8b8b` for the strictest immutable
+- **Latest published stable release:** [`v4.8.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.1).
+- **Consumer pin:** `v4.8.1`, or commit
+  `e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8` for the strictest immutable
   identity. Its maintained, detached-maintainer-signed
-  [`DIRECT_RELEASE.json`](../evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json)
-  and [detached signature](../evidence/direct-releases/v4.7.1/DIRECT_RELEASE.json.sig)
+  [`DIRECT_RELEASE.json`](../evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json)
+  and [detached signature](../evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json.sig)
   records the successful `simple-release-v1` publication. This same-owner
   record is not an A-through-H release ledger or independent review.
 - **Historical A-through-H evidence:** `v4.6.0` remains the newest validated
@@ -45,20 +45,28 @@ production channel.
 
 | You want to… | Start here | Then read |
 |---|---|---|
+| Decide whether the product fits your repository | [`PRODUCT_CONTRACT.md`](PRODUCT_CONTRACT.md) | [`PUBLIC_BETA.md`](PUBLIC_BETA.md) |
 | Evaluate the product quickly | [`START_HERE.md`](START_HERE.md) | [`ASSURANCE.md`](ASSURANCE.md) |
 | Add the gate to a repository | [`ADOPTION.md`](ADOPTION.md) | [`GUARD.md`](GUARD.md) |
 | Check readiness and stage a non-blocking rollout | [`PREFLIGHT.md`](PREFLIGHT.md) | [`ADOPTION.md`](ADOPTION.md) |
+| Join the bounded external adoption pilot | [`PUBLIC_BETA.md`](PUBLIC_BETA.md) | [`EXTERNAL_AGENT_GATE_PILOT.md`](EXTERNAL_AGENT_GATE_PILOT.md) |
 | Judge a CLI externally | [`BLACKBOX.md`](BLACKBOX.md) | [`VERIFIER_PACKS.md`](VERIFIER_PACKS.md) |
 | Design a production deployment | [`PRODUCTION_BLUEPRINT.md`](PRODUCTION_BLUEPRINT.md) | [`PRODUCTION_OPERATIONS.md`](PRODUCTION_OPERATIONS.md) |
 | Review security claims | [`ASSURANCE.md`](ASSURANCE.md) | [`REWARD_HACKING_CATALOG.md`](REWARD_HACKING_CATALOG.md) |
 | Inspect the prospective semantic extraction boundary | [`SEMANTIC_CORE_EXTRACTION_PLAN.md`](SEMANTIC_CORE_EXTRACTION_PLAN.md) | [`CANDIDATE_TEXT_MAP_IDENTITY_V2.md`](CANDIDATE_TEXT_MAP_IDENTITY_V2.md) |
 | Integrate machine-readable evidence | [`JSON_SCHEMA.md`](JSON_SCHEMA.md) | [`RECORD_VERIFICATION.md`](RECORD_VERIFICATION.md) |
+| Audit the release packaging boundary | [`DISTRIBUTION_SECURITY.md`](DISTRIBUTION_SECURITY.md) | [`DEPENDENCY_POLICY.md`](DEPENDENCY_POLICY.md) |
 | Consume signed positive and negative attempts | [`CHANGE_ATTEMPT_OBSERVATION.md`](CHANGE_ATTEMPT_OBSERVATION.md) | [`adr/0009-change-attempt-observation-v1.md`](adr/0009-change-attempt-observation-v1.md) |
 | Maintain or release the project | [`RELEASING.md`](RELEASING.md) | [`GOVERNANCE.md`](GOVERNANCE.md) |
 | Understand the implementation | [`architecture/OVERVIEW.md`](architecture/OVERVIEW.md) | [`adr/0001-layered-architecture.md`](adr/0001-layered-architecture.md) |
 
 ## Getting started
 
+- [`PRODUCT_CONTRACT.md`](PRODUCT_CONTRACT.md) — the one product question,
+  intended users, supported Beta profiles, deployment obligations, and
+  explicit non-products.
+- [`PUBLIC_BETA.md`](PUBLIC_BETA.md) — advisory-first rollout, evidence-based
+  promotion, cohort measures, incident handling, and GA exit criteria.
 - [`START_HERE.md`](START_HERE.md) — choose the basic, black-box, isolated, or
   Trusted Finalizer path.
 - [`ADOPTION.md`](ADOPTION.md) — install, configure, and interpret the gate in a
@@ -148,6 +156,8 @@ contract does not authorize another stage such as publication or deployment.
 - [`FUZZING.md`](FUZZING.md) — fuzz targets, execution, and scope.
 - [`DEPENDENCY_POLICY.md`](DEPENDENCY_POLICY.md) — CI and release dependency
   integrity.
+- [`DISTRIBUTION_SECURITY.md`](DISTRIBUTION_SECURITY.md) — the single-package,
+  offline build, exact-byte wheel/zipapp audit, and deferred core-wheel boundary.
 - [`GITHUB_ARTIFACT_ATTESTATIONS.md`](GITHUB_ARTIFACT_ATTESTATIONS.md) —
   provenance scope and bounded verification procedure.
 - [`SBOM.md`](SBOM.md) — SPDX member inventory and its explicit non-claims.

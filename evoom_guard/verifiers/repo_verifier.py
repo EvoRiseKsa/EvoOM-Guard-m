@@ -89,7 +89,7 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Any, TypedDict, cast
 
-from evoom_guard.adapters import instrument_command
+import evoom_guard.adapters as _runner_adapters
 from evoom_guard.candidate import (
     PatchBlock as PatchBlock,
 )
@@ -391,6 +391,15 @@ _matches_globs = matches_globs
 _resolve_host_command = resolve_host_command
 _setup_fidelity_changes = setup_fidelity_changes
 _setup_fidelity_snapshot = setup_fidelity_snapshot
+
+
+def instrument_command(
+    command: list[str],
+    report_path: str,
+) -> tuple[list[str], bool, dict[str, str]]:
+    """Resolve the historical execution seam through the live public facade."""
+
+    return _runner_adapters.instrument_command(command, report_path)
 
 try:  # POSIX-only; absent on Windows.
     import resource
@@ -748,6 +757,7 @@ class RepoVerifier:
         harness_inputs: tuple[str, ...] = (),
         require_suite_continuity: bool = False,
         require_assert_liveness: bool = False,
+        require_structured_verdict: bool = False,
     ) -> None:
         validate_isolation_mode(isolation)
         self.timeout = timeout
@@ -797,6 +807,11 @@ class RepoVerifier:
         # false PASS. Default off; pytest-only (a non-pytest command with this set is
         # refused before any suite runs). See evoom_guard/verifiers/assert_liveness.py.
         self.require_assert_liveness = require_assert_liveness
+        # Narrow, trusted-repository control: refuse before the repository suite
+        # when the live runner facade cannot instrument a judge-owned structured
+        # report.  The post-run report checks remain authoritative; a matching
+        # adapter is capability evidence, not proof that a valid report arrived.
+        self.require_structured_verdict = require_structured_verdict
         # Command wrappers and explicitly declared helper files are judge-owned
         # and cannot be waived through the ordinary adopter allowlist.
         self.harness_inputs = normalize_harness_inputs(harness_inputs)
@@ -1030,8 +1045,56 @@ class RepoVerifier:
             self._active_docker_image.reset(image_token)
 
     # ------------------------------------------------------------------ #
-    # Assertion-liveness (catalog row 11b) lifecycle, factored out of
-    # ``_verify`` so the main flow stays readable: a pre-suite preflight, a
+    # Repository-suite assurance requirements are factored out of ``_verify``
+    # so adding a fail-closed capability gate does not increase its reviewed
+    # complexity ceiling.  The structured-verdict and assertion-liveness gates
+    # are composed behind the one existing terminal-decision site.
+    def _repo_suite_requirements_preflight(
+        self,
+        *,
+        problem: RepoProblem | dict,
+        copy: str,
+        changed: list[str],
+        setup_isolation: object,
+        runtime_evidence: Callable[[], dict[str, Any]],
+        require_structured_verdict: bool,
+    ) -> VerdictResult | None:
+        """Apply all requested repository-suite gates before suite launch."""
+
+        base_command = self._base_command(problem)
+        if require_structured_verdict:
+            _, report_expected, _ = instrument_command(
+                [str(token) for token in base_command],
+                "judge-result.xml",
+            )
+            if not report_expected:
+                return VerdictResult(
+                    passed=False,
+                    score=0.0,
+                    diagnostics=(
+                        "a non-empty structured verdict is required, but the "
+                        "configured repository test command has no matching "
+                        "runner adapter; refusing before repository-suite "
+                        "execution instead of "
+                        "grading from the process exit code alone: "
+                        f"{base_command}"
+                    ),
+                    artifact={
+                        "files_changed": changed,
+                        "outcome": "structured_verdict_unavailable",
+                        "setup_isolation": setup_isolation,
+                        **runtime_evidence(),
+                    },
+                )
+        return self._assert_liveness_preflight(
+            problem=problem,
+            copy=copy,
+            changed=changed,
+            setup_isolation=setup_isolation,
+            runtime_evidence=runtime_evidence,
+        )
+
+    # Assertion-liveness (catalog row 11b) lifecycle: a pre-suite preflight, a
     # suite-environment tweak, and an after-suite tamper check. Each is a no-op
     # when ``--require-assert-liveness`` is off, so the default path is unchanged.
     def _assert_liveness_preflight(
@@ -1650,18 +1713,22 @@ class RepoVerifier:
                     ),
                 )
 
-            # Assertion-liveness (catalog row 11b): refuse a non-pytest command and
-            # install the judge-owned canary into the prepared copy *before* the
-            # continuity baseline below. See ``_assert_liveness_preflight``.
-            liveness_refusal = self._assert_liveness_preflight(
+            # Compose structured-verdict and assertion-liveness requirements at
+            # one existing decision site. Strict harness also requires the
+            # structured capability before launch; post-run report validation is
+            # still retained below.
+            requirements_refusal = self._repo_suite_requirements_preflight(
                 problem=problem,
                 copy=copy,
                 changed=changed,
                 setup_isolation=setup_isolation,
                 runtime_evidence=runtime_evidence,
+                require_structured_verdict=(
+                    strict_harness or self.require_structured_verdict
+                ),
             )
-            if liveness_refusal is not None:
-                return liveness_refusal
+            if requirements_refusal is not None:
+                return requirements_refusal
 
             if runtime_continuity.required:
                 capture_failure = runtime_continuity.capture_baseline()
@@ -1775,7 +1842,9 @@ class RepoVerifier:
             repo_phase = interpret_repo_suite(
                 RepoSuiteInterpretationRequest(
                     completed=completed_suite,
-                    strict_harness=strict_harness,
+                    strict_harness=(
+                        strict_harness or self.require_structured_verdict
+                    ),
                 ),
                 services=RepoSuiteInterpretationServices(
                     read_report=lambda: _read_text_or_none,

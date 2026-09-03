@@ -55,6 +55,11 @@ from evoom_guard.execution import (
     process_group_popen_kwargs,
     terminate_process_tree,
 )
+from evoom_guard.finalizer.git_command import (
+    GitCommandLimits,
+    GitCommandServices,
+    run_bounded_git_command,
+)
 from evoom_guard.pack_manifest import (
     MAX_PACK_BYTES,
     MAX_PACK_ENTRIES,
@@ -736,214 +741,42 @@ def _run_git_command(
     limit: int = MAX_GIT_TREE_BYTES,
     isolated_environment: bool = False,
 ) -> bytes:
-    """Run one read-only Git query with bounded streaming output.
+    """Delegate one bounded query while preserving historical patch points."""
 
-    A raw tree can be candidate-controlled.  Do not use ``capture_output`` and
-    check its size afterwards: that would let a very large tree occupy memory
-    in the privileged finalizer process before the stated limit takes effect.
-    Both pipes are drained concurrently so a verbose error cannot deadlock the
-    child or bypass a resource bound.
-    """
-
-    command = [executable, "--no-replace-objects"]
-    command.extend(["--git-dir", repo] if bare else ["-C", repo])
-    command.extend(args)
-    if isolated_environment:
-        # A digest-pinned executable is not a meaningful code pin if the
-        # dynamic loader, HOME/XDG configuration, or executable search path can
-        # still be injected by the parent.  The high-trust pinned path therefore
-        # gets a closed environment.  The two Windows variables are retained
-        # only for platform process startup; pinned execution itself is POSIX-
-        # only and fails before this point on Windows.
-        environment = {
-            "GIT_OPTIONAL_LOCKS": "0",
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_ATTR_NOSYSTEM": "1",
-            "GIT_TERMINAL_PROMPT": "0",
-            "LC_ALL": "C",
-            "LANG": "C",
-        }
-        if os.name == "nt":  # pragma: no cover - pinned mode rejects Windows
-            for name in ("SYSTEMROOT", "WINDIR"):
-                if name in os.environ:
-                    environment[name] = os.environ[name]
-    else:
-        environment = {
-            key: value
-            for key, value in os.environ.items()
-            if not key.upper().startswith("GIT_")
-        }
-        environment["GIT_OPTIONAL_LOCKS"] = "0"
-    process: subprocess.Popen[Any] | None = None
-    streams: list[Any] = []
-    reader_start_attempts: list[threading.Thread] = []
-    cleanup_proven = False
-    readers_closed = False
-    try:
-        try:
-            process = subprocess.Popen(
-                command,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=environment,
-                **process_group_popen_kwargs(),
-            )
-        except OSError as exc:
-            raise FinalizerDerivationError(f"could not read immutable Git object: {exc}") from exc
-        stdout_stream = process.stdout
-        stderr_stream = process.stderr
-        streams = [stream for stream in (stdout_stream, stderr_stream) if stream is not None]
-        if stdout_stream is None or stderr_stream is None:
-            raise FinalizerDerivationError(
-                "could not read immutable Git object: Git output pipes were not created"
-            )
-        stdout = bytearray()
-        stderr = bytearray()
-        overflow: set[str] = set()
-        read_errors: list[BaseException] = []
-        reader_signal = threading.Event()
-
-        def drain(stream: Any, *, maximum: int, target: bytearray, label: str) -> None:
-            try:
-                while True:
-                    chunk = stream.read(_GIT_STREAM_CHUNK_BYTES)
-                    if not chunk:
-                        return
-                    remaining = maximum + 1 - len(target)
-                    if remaining > 0:
-                        target.extend(chunk[:remaining])
-                    if len(target) > maximum:
-                        overflow.add(label)
-                        reader_signal.set()
-            except BaseException as exc:
-                read_errors.append(exc)
-                reader_signal.set()
-
-        readers = [
-            threading.Thread(
-                target=drain,
-                args=(stdout_stream,),
-                kwargs={"maximum": limit, "target": stdout, "label": "stdout"},
-                daemon=True,
-            ),
-            threading.Thread(
-                target=drain,
-                args=(stderr_stream,),
-                kwargs={
-                    "maximum": MAX_GIT_STDERR_BYTES,
-                    "target": stderr,
-                    "label": "stderr",
-                },
-                daemon=True,
-            ),
-        ]
-        for reader in readers:
-            # Record before start(): start may fail after a native thread exists.
-            reader_start_attempts.append(reader)
-            reader.start()
-        deadline = time.monotonic() + _GIT_QUERY_TIMEOUT_SECONDS
-        timed_out = False
-        while process.poll() is None:
-            if read_errors or overflow:
-                break
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                timed_out = True
-                break
-            reader_signal.wait(min(_GIT_PROCESS_POLL_SECONDS, remaining))
-
-        interrupted = timed_out or bool(read_errors) or bool(overflow)
-        if interrupted:
-            if _terminate_git_process_tree(process) is not True:
-                raise FinalizerDerivationError(
-                    "could not read immutable Git object: Git query process "
-                    "cleanup could not be proven"
-                )
-            cleanup_proven = True
-        else:
-            process.wait(timeout=_GIT_KILL_REAP_SECONDS)
-            if os.name == "posix":
-                if _terminate_git_process_tree(process) is not True:
-                    raise FinalizerDerivationError(
-                        "could not read immutable Git object: Git query process "
-                        "cleanup could not be proven"
-                    )
-                cleanup_proven = True
-
-        if _join_and_close_git_readers(reader_start_attempts, streams) is not True:
-            raise FinalizerDerivationError(
-                "could not read immutable Git object: Git query output readers "
-                "did not stop after cleanup"
-            )
-        readers_closed = True
-
-        if timed_out:
-            raise FinalizerDerivationError(
-                "could not read immutable Git object: Git query timed out"
-            )
-        if read_errors:
-            raise FinalizerDerivationError(
-                f"could not read immutable Git object: {read_errors[0]}"
-            ) from read_errors[0]
-        if "stdout" in overflow:
-            raise FinalizerDerivationError("Git object listing exceeds the finalizer limit")
-        if "stderr" in overflow:
-            raise FinalizerDerivationError("Git error output exceeds the finalizer limit")
-        if process.returncode != 0:
-            detail = bytes(stderr).decode("utf-8", "replace")[:512].strip()
-            raise FinalizerDerivationError(
-                f"Git object lookup failed: {detail or process.returncode}"
-            )
-        return bytes(stdout)
-    except BaseException as primary:
-        # Preserve the exact active exception while independently attempting
-        # every bounded cleanup stage. Secondary cleanup failures are evidence,
-        # never replacements for the authoritative primary.
-        if process is not None:
-            if cleanup_proven is not True:
-                try:
-                    tree_cleanup_result = _terminate_git_process_tree(process)
-                except BaseException as cleanup_error:
-                    note_abort_cleanup_failure(
-                        primary,
-                        "Raw-Git finalizer process-tree abort cleanup raised while "
-                        "preserving the primary exception: "
-                        + abort_cleanup_exception_summary(cleanup_error),
-                    )
-                else:
-                    if tree_cleanup_result is True:
-                        cleanup_proven = True
-                    else:
-                        note_abort_cleanup_failure(
-                            primary,
-                            "Raw-Git finalizer process-tree abort cleanup was not "
-                            "proven while preserving the primary exception",
-                        )
-            if readers_closed is not True:
-                try:
-                    reader_cleanup_result = _join_and_close_git_readers(
-                        reader_start_attempts,
-                        streams,
-                    )
-                except BaseException as cleanup_error:
-                    note_abort_cleanup_failure(
-                        primary,
-                        "Raw-Git finalizer output-reader abort cleanup raised while "
-                        "preserving the primary exception: "
-                        + abort_cleanup_exception_summary(cleanup_error),
-                    )
-                else:
-                    if reader_cleanup_result is True:
-                        readers_closed = True
-                    else:
-                        note_abort_cleanup_failure(
-                            primary,
-                            "Raw-Git finalizer output-reader abort cleanup was not "
-                            "proven while preserving the primary exception",
-                        )
-        raise
+    return run_bounded_git_command(
+        repo,
+        args,
+        bare=bare,
+        executable=executable,
+        isolated_environment=isolated_environment,
+        limits=GitCommandLimits(
+            stdout_bytes=limit,
+            stderr_bytes=MAX_GIT_STDERR_BYTES,
+            stream_chunk_bytes=_GIT_STREAM_CHUNK_BYTES,
+            query_timeout_seconds=_GIT_QUERY_TIMEOUT_SECONDS,
+            process_poll_seconds=_GIT_PROCESS_POLL_SECONDS,
+            kill_reap_seconds=_GIT_KILL_REAP_SECONDS,
+        ),
+        services=GitCommandServices(
+            popen=subprocess.Popen,
+            thread_factory=threading.Thread,
+            event_factory=threading.Event,
+            monotonic=time.monotonic,
+            environment=os.environ,
+            os_name=os.name,
+            # Keep this lookup lazy: historical tests and callers can replace
+            # ``os`` with the minimal non-isolated surface (name + environ).
+            devnull_path=lambda: os.devnull,
+            devnull_input=subprocess.DEVNULL,
+            pipe_output=subprocess.PIPE,
+            process_group_popen_kwargs=process_group_popen_kwargs,
+            terminate_process_tree=_terminate_git_process_tree,
+            join_and_close_readers=_join_and_close_git_readers,
+            error_factory=FinalizerDerivationError,
+            note_abort_cleanup_failure=note_abort_cleanup_failure,
+            abort_cleanup_exception_summary=abort_cleanup_exception_summary,
+        ),
+    )
 
 
 def _git_command(

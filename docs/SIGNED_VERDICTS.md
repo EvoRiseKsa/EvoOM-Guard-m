@@ -18,14 +18,14 @@ key or whether the recorded run was honest.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:SIGNED_VERDICTS_RELEASE_PIN -->
 Requires the `sign` extra (the core gate stays stdlib-only). Install it from
-maintained immutable release `v4.7.1`:
+maintained immutable release `v4.8.1`:
 
 ```bash
-pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.7.1"
+pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.8.1"
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:SIGNED_VERDICTS_RELEASE_PIN -->
 
-The pinned `v4.7.1` release includes the
+The pinned `v4.8.1` release includes the
 `--acknowledge-local-key-exposure` flag and the descriptor/reservation
 hardening documented below. Consult the documentation at the exact version
 you run; the same-owner direct release record authenticates exact published

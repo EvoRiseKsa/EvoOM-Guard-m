@@ -30,6 +30,9 @@ class PreflightServices:
     is_pack_sha256: Callable[[object], bool]
     locate_executable: Callable[[str, str], str | None]
     operating_profile_violations: Callable[..., tuple[str, ...]]
+    instrument_command: Callable[
+        [list[str], str], tuple[list[str], bool, dict[str, str]]
+    ]
     absolute_path: Callable[[str], str] = os.path.abspath
     join_path: Callable[..., str] = os.path.join
 
@@ -251,6 +254,11 @@ def execute_preflight(
             pack_path,
             expected_pack_sha256,
             services=services,
+        )
+        + _structured_verdict_checks(
+            command,
+            blackbox_only=blackbox_only,
+            services=services,
         ),
     )
 
@@ -294,6 +302,59 @@ def _resolve_pack_path(
         return services.absolute_path(value)
     base = os.path.dirname(config_path) if config_path else repository
     return services.absolute_path(services.join_path(base, value))
+
+
+def _structured_verdict_checks(
+    command: Sequence[str],
+    *,
+    blackbox_only: bool,
+    services: PreflightServices,
+) -> tuple[PreflightCheck, ...]:
+    """Report whether the repository command has a structured-verdict adapter.
+
+    Instrumentation is a pure argv/environment transform; it does not execute
+    the candidate command.  The injected call is deliberately resolved through
+    the live compatibility facade at call time so preflight and execution see
+    the same adopter-provided runner registry.
+    """
+
+    if blackbox_only or not command:
+        return ()
+    _, report_expected, _ = services.instrument_command(
+        [str(token) for token in command],
+        "judge-result.xml",
+    )
+    if report_expected:
+        return (
+            PreflightCheck(
+                code="test_command.structured_verdict",
+                status="pass",
+                message=(
+                    "a structured runner adapter can instrument this command "
+                    "for a JUnit-backed verdict; report delivery, parsing, and "
+                    "exit/report integrity are verified after execution"
+                ),
+            ),
+        )
+    return (
+        PreflightCheck(
+            code="test_command.exit_code_only_verdict",
+            status="warning",
+            message=(
+                "no structured runner adapter matches this command: the "
+                "repository-suite verdict would be graded from the process "
+                "exit code alone, without judge-owned JUnit evidence or an "
+                "exit/report tamper cross-check"
+            ),
+            remediation=(
+                "invoke a recognized runner (pytest, node --test, vitest, jest, "
+                "mocha, gotestsum, rspec, or maven) directly or through a "
+                "supported launcher; use --require-structured-verdict or "
+                "strict_harness to refuse this downgrade before "
+                "repository-suite execution"
+            ),
+        ),
+    )
 
 
 def _pack_checks(

@@ -959,6 +959,64 @@ def test_flat_evidence_admission_and_finalizer_owners_follow_declared_layers() -
         )
 
 
+def test_raw_git_process_lifecycle_has_one_finalizer_owner_and_compatibility_facade() -> None:
+    """Keep raw-Git effects cohesive without breaking historical patch points."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    facade_module = "evoom_guard.finalizer_derivation"
+    owner_module = "evoom_guard.finalizer.git_command"
+    facade_path = PACKAGE_ROOT / "finalizer_derivation.py"
+    owner_path = PACKAGE_ROOT / "finalizer" / "git_command.py"
+
+    assert owner_module in analysis.modules
+    assert owner_module not in analysis.violations["unclassified_modules"]
+    assert (facade_module, owner_module) in analysis.internal_edges
+    assert {
+        target
+        for source, target in analysis.internal_edges
+        if source == owner_module and target != owner_module
+    } == set()
+
+    facade_tree = ast.parse(facade_path.read_text(encoding="utf-8"))
+    facade = next(
+        node
+        for node in facade_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_run_git_command"
+    )
+    assert not any(
+        isinstance(node, (ast.For, ast.If, ast.Match, ast.Try, ast.While))
+        for node in ast.walk(facade)
+    )
+    delegated_calls = [
+        node
+        for node in ast.walk(facade)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "run_bounded_git_command"
+    ]
+    assert len(delegated_calls) == 1
+
+    owner_tree = ast.parse(owner_path.read_text(encoding="utf-8"))
+    owner_functions = {
+        node.name for node in owner_tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert {
+        "_cleanup_after_abort",
+        "_start_process",
+        "_start_readers",
+        "_wait_for_process",
+        "run_bounded_git_command",
+    } <= owner_functions
+    assert not any(
+        isinstance(node, (ast.Import, ast.ImportFrom))
+        and any(
+            alias.name == facade_module or alias.name.startswith(f"{facade_module}.")
+            for alias in node.names
+        )
+        for node in ast.walk(owner_tree)
+    )
+
+
 def test_artifact_provider_v3_is_a_closed_admission_layer() -> None:
     """Keep provider-specific V3 above existing evidence and V2 primitives."""
 

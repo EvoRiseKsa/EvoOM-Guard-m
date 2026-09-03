@@ -66,7 +66,7 @@ jobs:
       - name: Lint (ruff)
         run: >-
           python -m ruff check
-          evoom_guard/ tests/ tools/ci/ tools/conformance/ tools/evaluation/ tools/fuzz/ tools/telemetry/
+          evoom_guard/ tests/ tools/ci/ tools/conformance/ tools/evaluation/ tools/fuzz/ tools/packaging/ tools/telemetry/
           benchmarks/evaluate.py benchmarks/run_live.py benchmarks/run_manifest.py benchmarks/security_baseline.py
           ops/build_pyz.py ops/generate_spdx_sbom.py ops/render_project_status.py
 
@@ -77,6 +77,7 @@ jobs:
         run: >-
           python -m mypy --strict
           ops/build_pyz.py ops/generate_spdx_sbom.py ops/render_project_status.py
+          tools/packaging/build_distribution.py
           tools/ci/check_trust_assurance.py
           tools/ci/validate_v451_maintenance_control.py
 
@@ -129,6 +130,13 @@ jobs:
       - name: Import smoke (stdlib-only core, no extras)
         run: |
           python -c "import evoom_guard, evoom_guard.guard, evoom_guard.cli; print('ok', evoom_guard.__version__)"
+
+      - name: Secure single-distribution build and exact-byte audit (Python 3.12)
+        if: matrix.python-version == '3.12'
+        run: >-
+          python -I tools/packaging/build_distribution.py
+          --output-dir "${RUNNER_TEMP}/evoom-distribution-qa"
+          --reproducibility-check --verify
 
       - name: CLI smoke — a cheat patch must be REJECTED
         run: |

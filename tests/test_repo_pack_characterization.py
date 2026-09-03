@@ -58,6 +58,7 @@ def test_host_command_order_and_strict_cleanup_are_frozen(
     operations = [event["op"] for event in case["events"]]
 
     assert operations == [
+        "instrument-repo-preflight",
         "runtime-capture",
         "suite-execute",
         "verify-runtime",
@@ -74,7 +75,7 @@ def test_host_command_order_and_strict_cleanup_are_frozen(
         "compose",
         "distill",
     ]
-    instrument = case["events"][5]
+    instrument = case["events"][6]
     assert instrument["report_outside_candidate"] is True
     assert instrument["command"] == [
         "<PYTHON>",
@@ -87,7 +88,7 @@ def test_host_command_order_and_strict_cleanup_are_frozen(
         "--confcutdir=<PACK>",
         "<PACK>",
     ]
-    assert case["events"][7]["strict_cleanup"] is True
+    assert case["events"][8]["strict_cleanup"] is True
 
 
 @pytest.mark.parametrize(

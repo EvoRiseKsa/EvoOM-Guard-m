@@ -105,6 +105,14 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
         problem["expect_verifier_pack_sha256"] = "a" * 64
     elif case_name == "strict_exit_only_rejected":
         verifier_options["strict_harness"] = True
+        # This command has no structured-report adapter. The strict capability
+        # gate must refuse it before launch, so a stable executable token keeps
+        # the frozen diagnostic portable without creating an execution risk.
+        verifier_options["test_command"] = [
+            "python",
+            "-c",
+            "raise SystemExit(0)",
+        ]
     elif case_name in ("junit_pass", "junit_tamper"):
         mode = "tamper" if case_name == "junit_tamper" else "pass"
         verifier_options["test_command"] = [

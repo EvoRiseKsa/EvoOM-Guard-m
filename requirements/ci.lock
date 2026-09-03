@@ -672,6 +672,7 @@ tomli==2.4.1 \
     --hash=sha256:ff18e6a727ee0ab0388507b89d1bc6a22b138d1e2fa56d1ad494586d61d2eae9 \
     --hash=sha256:ff2983983d34813c1aeb0fa89091e76c3a22889ee83ab27c5eeb45100560c049
     # via
+    #   -r requirements/ci.in
     #   mypy
     #   pytest
 typing-extensions==4.16.0 \

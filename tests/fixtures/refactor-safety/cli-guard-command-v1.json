@@ -50,6 +50,7 @@
             "policy_version": null,
             "protected": [],
             "require_assert_liveness": false,
+            "require_structured_verdict": false,
             "require_candidate_isolation": null,
             "require_demonstrated_fix": false,
             "require_report_integrity": null,
@@ -151,6 +152,7 @@
               "policy/**"
             ],
             "require_assert_liveness": false,
+            "require_structured_verdict": false,
             "require_candidate_isolation": "subprocess",
             "require_demonstrated_fix": true,
             "require_report_integrity": "external_process_isolated",
@@ -276,6 +278,7 @@
             "policy_version": null,
             "protected": [],
             "require_assert_liveness": false,
+            "require_structured_verdict": false,
             "require_candidate_isolation": null,
             "require_demonstrated_fix": false,
             "require_report_integrity": null,
@@ -345,6 +348,7 @@
               "cli/**"
             ],
             "require_assert_liveness": false,
+            "require_structured_verdict": false,
             "require_candidate_isolation": "subprocess",
             "require_demonstrated_fix": true,
             "require_report_integrity": "external_process_isolated",

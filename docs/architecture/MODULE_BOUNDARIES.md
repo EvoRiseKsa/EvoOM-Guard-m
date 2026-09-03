@@ -14,7 +14,11 @@
 - `verifiers/`: concrete verification engines (repo and blackbox) and verdict oracles.
 - `application/`: orchestration pipeline and evidence decision composition.
 - `evidence/`: canonical types, record producers, bundles, signatures.
-- `finalizer/`: PR/release source finalization workflows and handoff.
+- `finalizer/`: PR/release source finalization workflows, handoff, and the
+  specialized bounded raw-Git subprocess lifecycle. The flat
+  `finalizer_derivation.py` path retains raw-object derivation and its
+  compatibility facade; it injects historical effect seams into the package
+  owner rather than duplicating lifecycle control flow.
 - `admission/`: admission adapters and output contracts.
 - `api/` and `cli/`: thin public/CLI compatibility surfaces.
 - `integrations/`: high-level output and external-platform adapters. Guard

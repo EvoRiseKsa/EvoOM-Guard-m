@@ -59,6 +59,7 @@ class _RepoVerifierFactory(Protocol):
         strict_harness: bool,
         require_suite_continuity: bool,
         require_assert_liveness: bool,
+        require_structured_verdict: bool,
     ) -> _RepoVerifier: ...
 
 
@@ -146,6 +147,7 @@ class RepoJudgmentInput:
     strict_harness: bool
     require_suite_continuity: bool = False
     require_assert_liveness: bool = False
+    require_structured_verdict: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +211,7 @@ def build_repo_judgment(
             strict_harness=request.strict_harness,
             require_suite_continuity=request.require_suite_continuity,
             require_assert_liveness=request.require_assert_liveness,
+            require_structured_verdict=request.require_structured_verdict,
         ).verify(request.candidate_text, request.problem)
         raw_artifact = verifier_result.artifact or {}
         verification_evidence = services.evidence_projector_provider()(

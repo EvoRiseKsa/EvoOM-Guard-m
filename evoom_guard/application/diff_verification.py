@@ -135,6 +135,7 @@ class DiffVerificationOptions:
     harness_inputs: tuple[str, ...] = ()
     require_suite_continuity: bool = False
     require_assert_liveness: bool = False
+    require_structured_verdict: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -366,6 +367,7 @@ def verify_diff(
             strict_harness=options.strict_harness,
             require_suite_continuity=options.require_suite_continuity,
             require_assert_liveness=options.require_assert_liveness,
+            require_structured_verdict=options.require_structured_verdict,
             **profile_options,
             **harness_input_options,
             file_blocks=file_blocks,

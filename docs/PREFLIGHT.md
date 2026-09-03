@@ -39,12 +39,29 @@ problems such as:
   exact tree identity before a verifier pack;
 - pytest cache writes without `-p no:cacheprovider` in that same continuity
   boundary; and
+- a repository command outside the live structured-runner adapter set, which
+  would otherwise be graded from its process exit code without JUnit counts or
+  an exit/report mismatch check; and
 - common Maven, Gradle, Cargo, Jest, and package-script output risks.
 
 Exit `0` means no deterministic error was found. Exit `1` means the report has
 an error, or has a warning when `--strict` is selected. Exit `2` is a CLI or
 trusted-policy usage error. A ready report is not evidence that arbitrary tests
 will make no writes and is never equivalent to `PASS`.
+
+The adapter finding uses the same live `evoom_guard.adapters` compatibility
+facade that repository execution uses. This matters for adopters that extend or
+monkeypatch that facade: preflight observes the same current capability instead
+of a copied registry snapshot. A missing adapter is a warning in ordinary
+preflight and makes `--strict` return `1`. To enforce the same floor during
+Guard, use `guard --require-structured-verdict`; a trusted base policy with
+`"strict_harness": true` also enforces it. Adapter recognition is not a verdict:
+Guard still requires the promised report to exist, be non-empty and parseable,
+and agree with the process exit after the suite runs.
+
+`--blackbox-only` intentionally omits this finding because it skips the
+repository suite. Its external verifier-pack report and integrity rules remain
+the applicable verdict channel.
 
 ## Python command hygiene
 

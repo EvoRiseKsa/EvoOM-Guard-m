@@ -118,6 +118,10 @@ def test_outcome_policy_tables_are_exact_and_immutable() -> None:
             ERROR,
             REASON_ASSURANCE_REQUIREMENT_NOT_MET,
         ),
+        "structured_verdict_unavailable": (
+            ERROR,
+            REASON_ASSURANCE_REQUIREMENT_NOT_MET,
+        ),
         "runtime_identity_unavailable": (
             ERROR,
             REASON_ASSURANCE_REQUIREMENT_NOT_MET,
