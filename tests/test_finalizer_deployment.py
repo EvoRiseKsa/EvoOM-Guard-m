@@ -208,7 +208,7 @@ def test_packaged_templates_match_manifest_and_current_release_pin_contract() ->
         "seal.yml": ROOT / ".github/workflows/evoguard-seal.yml",
     }
     packaged_pin = b"/releases/download/v4.5.0/evo-guard.pyz"
-    current_pin = b"/releases/download/v4.8.0/evo-guard.pyz"
+    current_pin = b"/releases/download/v4.8.1/evo-guard.pyz"
     for resource, workflow in pairs.items():
         template_bytes = (TEMPLATES / resource).read_bytes()
         assert hashlib.sha256(template_bytes).hexdigest() == by_resource[resource]["sha256"]

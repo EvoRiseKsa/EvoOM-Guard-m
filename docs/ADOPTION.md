@@ -16,27 +16,27 @@ verdict + exit code for a pipeline.
 ## 1. Turn it on (one command)
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:ADOPTION_CURRENT_RELEASE -->
-[`v4.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0) is the latest maintained immutable consumer release selected by
-the protected source tree, at commit `07e361cb9a75cc1822cd905ca65df42235b3b910`. For stricter CI, pin that
+[`v4.8.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.1) is the latest maintained immutable consumer release selected by
+the protected source tree, at commit `e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8`. For stricter CI, pin that
 full commit SHA. Its signed direct record is same-owner evidence, not an
 A-through-H ledger or independent review.
 
 From the repository you want to protect:
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.8.0"
-evo-guard init --ref v4.8.0 --test-command "python -m pytest -q"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.8.1"
+evo-guard init --ref v4.8.1 --test-command "python -m pytest -q"
 git add .github/workflows/evoguard.yml .evoguard.json
 git commit -m "ci: add EvoOM Guard policy" && git push
 ```
 
 The no-Action alternative is `git diff | evo-guard guard --diff -`.
-Use `evo-guard init --ref v4.8.0 --stdout` to review the workflow first.
+Use `evo-guard init --ref v4.8.1 --stdout` to review the workflow first.
 <!-- END EVOGUARD_PROJECT_STATUS:ADOPTION_CURRENT_RELEASE -->
 
-### v4.8.0: observe before enforcing
+### v4.8.1: observe before enforcing
 
-The immutable `v4.8.0` release includes `preflight` and two `init` presets.
+The immutable `v4.8.1` release includes `preflight` and two `init` presets.
 Confirm that exact version before use:
 
 ```bash

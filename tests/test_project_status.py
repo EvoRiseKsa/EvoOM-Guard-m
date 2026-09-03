@@ -396,6 +396,39 @@ class ProjectStatusTests(unittest.TestCase):
         self.assertIn("independent efficacy", non_claims)
         self.assertFalse((ROOT / "evidence/release-ledgers/v4.8.0").exists())
 
+    def test_v481_uses_a_public_beta_bounded_direct_record(self) -> None:
+        record_path = (
+            ROOT / "evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json"
+        )
+        signature_path = Path(f"{record_path}.sig")
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        schema = json.loads(
+            (
+                ROOT / "tests/status/direct-release-record-v1.schema.json"
+            ).read_text(encoding="utf-8")
+        )
+        Draft202012Validator.check_schema(schema)
+        self.assertEqual(
+            list(Draft202012Validator(schema).iter_errors(record)),
+            [],
+        )
+        self.assertTrue(signature_path.is_file())
+        self.assertEqual(record["source"]["version"], "4.8.1")
+        self.assertEqual(record["release"]["release_id"], 381659250)
+        self.assertTrue(record["release"]["immutable"])
+        self.assertEqual(record["workflow"]["run_id"], 33700941022)
+        self.assertIn(
+            "annotated-tag tagger timestamp",
+            record["release"]["created_utc_semantics"],
+        )
+        self.assertFalse(record["trust_boundary"]["independent_review"])
+        non_claims = " ".join(record["trust_boundary"]["non_claims"])
+        self.assertIn("Public Beta", non_claims)
+        self.assertIn("Core GA", non_claims)
+        self.assertIn("hostile-code production suitability", non_claims)
+        self.assertIn("independent efficacy", non_claims)
+        self.assertFalse((ROOT / "evidence/release-ledgers/v4.8.1").exists())
+
     def test_direct_release_record_signature_and_cross_bindings_fail_closed(
         self,
     ) -> None:
@@ -525,6 +558,24 @@ class ProjectStatusTests(unittest.TestCase):
                     "4.7.1",
                     verify_git=False,
                 )
+
+        with (
+            mock.patch.object(
+                render_project_status,
+                "_DIRECT_RELEASE_CREATED_UTC_SEMANTICS_CONTRACTS",
+                {},
+            ),
+            self.assertRaisesRegex(
+                render_project_status.ProjectStatusError,
+                "publication-time contract is not reviewed",
+            ),
+        ):
+            render_project_status._load_direct_release(
+                ROOT,
+                status,
+                "4.7.1",
+                verify_git=False,
+            )
 
         with self.assertRaises(render_project_status.ProjectStatusError):
             render_project_status._load_direct_release(
@@ -1132,12 +1183,9 @@ class ProjectStatusTests(unittest.TestCase):
 
     def test_source_release_and_pipeline_semantics_are_consistent(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
-        self.assertIn(
+        self.assertEqual(
             (context.status.lifecycle, context.source_version),
-            {
-                ("unreleased-development", "4.8.1.dev0"),
-                ("release-candidate", "4.8.1"),
-            },
+            ("release-line", "4.8.1"),
         )
         self.assertEqual(context.status.schema_version, "evoguard-project-status-v3")
         self.assertEqual(context.status.relation, "descendant")
@@ -1170,11 +1218,11 @@ class ProjectStatusTests(unittest.TestCase):
         self.assertTrue(context.ledger.pipeline_publication_evidence_recorded)
         self.assertIsNotNone(context.direct_release)
         assert context.direct_release is not None
-        self.assertEqual(context.direct_release.version, "4.8.0")
-        self.assertEqual(context.direct_release.tag, "v4.8.0")
+        self.assertEqual(context.direct_release.version, "4.8.1")
+        self.assertEqual(context.direct_release.tag, "v4.8.1")
         self.assertEqual(
             context.direct_release.commit_sha,
-            "07e361cb9a75cc1822cd905ca65df42235b3b910",
+            "e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8",
         )
         self.assertEqual(context.direct_release.artifacts, context.ledger.artifacts)
         self.assertEqual(
@@ -1256,12 +1304,12 @@ class ProjectStatusTests(unittest.TestCase):
                     "latest immutable consumer release",
                     normalized_summary,
                 )
-                self.assertIn("[`v4.8.0`]", normalized_summary)
+                self.assertIn("[`v4.8.1`]", normalized_summary)
 
         invalid = (
-            ("unreleased-development", "4.8.0.dev0", direct),
+            ("unreleased-development", "4.8.1.dev0", direct),
             ("unreleased-development", "4.7.0.dev0", direct),
-            ("release-candidate", "4.8.0", direct),
+            ("release-candidate", "4.8.1", direct),
             ("release-line", "4.9.0", direct),
             ("published-unledgered", "4.9.0", direct),
             ("unreleased-development", "4.9.0.dev0", None),
@@ -1454,22 +1502,19 @@ class ProjectStatusTests(unittest.TestCase):
                 )
             )
 
-    def test_v481_source_uses_direct_record_and_preserves_recovery_history(
+    def test_v481_release_line_uses_direct_record_and_preserves_recovery_history(
         self,
     ) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
         source_identity = (context.status.lifecycle, context.source_version)
-        self.assertIn(
+        self.assertEqual(
             source_identity,
-            {
-                ("unreleased-development", "4.8.1.dev0"),
-                ("release-candidate", "4.8.1"),
-            },
+            ("release-line", "4.8.1"),
         )
         self.assertEqual(context.ledger.version, "4.6.0")
         self.assertIsNotNone(context.direct_release)
         assert context.direct_release is not None
-        self.assertEqual(context.direct_release.version, "4.8.0")
+        self.assertEqual(context.direct_release.version, "4.8.1")
         self.assertEqual(
             tuple(
                 release.version
@@ -1504,7 +1549,7 @@ class ProjectStatusTests(unittest.TestCase):
         for block in pin_blocks:
             with self.subTest(block=block):
                 rendered = blocks[block]
-                self.assertIn("v4.8.0", rendered)
+                self.assertIn("v4.8.1", rendered)
                 self.assertNotIn("v4.3.0", rendered)
                 self.assertNotRegex(rendered, r"(?:@|--ref\s+)v4\.4\.[012]\b")
 
@@ -1512,7 +1557,7 @@ class ProjectStatusTests(unittest.TestCase):
             blocks["PROJECT_STATUS_RELEASE_PIPELINE"].split()
         )
         self.assertIn(
-            "detached-maintainer-signed direct record for `v4.8.0` records successful",
+            "detached-maintainer-signed direct record for `v4.8.1` records successful",
             pipeline,
         )
         self.assertIn(
@@ -1524,14 +1569,9 @@ class ProjectStatusTests(unittest.TestCase):
             "Latest stable release; supported",
             support,
         )
-        self.assertIn("[`v4.8.0`]", support)
+        self.assertIn("[`v4.8.1`]", support)
         self.assertIn("[`v4.6.0`]", support)
-        if source_identity[0] == "unreleased-development":
-            self.assertIn("`4.8.1.dev0`", support)
-            self.assertIn("Unreleased development source", support)
-        else:
-            self.assertIn("`4.8.1`", support)
-            self.assertIn("Release candidate source", support)
+        self.assertNotIn("Release candidate source", support)
         self.assertIn("Historical latest validated A-through-H ledger", support)
         self.assertNotIn("temporarily supported", support)
         self.assertNotIn("recovery successor", support)

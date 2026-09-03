@@ -1,0 +1,250 @@
+{
+  "schema_version": "evoguard-direct-release-record-v1",
+  "recorded_utc": "2026-09-03T01:26:30Z",
+  "record_scope": "Maintained same-owner post-publication record for simple-release-v1; not a release ledger, independent review, or substitute for either.",
+  "maintainer_signature_contract": {
+    "purpose": "Authenticate the exact maintained post-publication record bytes without upgrading same-owner observations into independent release evidence.",
+    "identity": "EvoRiseKsa",
+    "namespace": "git",
+    "signature_path": "evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json.sig",
+    "public_key_path": "security/release-maintainer-roots/v4.7.0.pub",
+    "public_key_metadata_path": "security/release-maintainer-roots/v4.7.0.json",
+    "public_key_sha256": "f5a137810263756bcfbee4ebb020ca3c26a40d6876a5972ff2baa4d0ef7b0cab",
+    "public_key_metadata_sha256": "40af4936e093a06605a3ca9c42345cad23e59a3145b595639b62aa5c97828017",
+    "public_key_fingerprint": "SHA256:iCn7wa6HgKdu7luf/16rrKZzSk5FygJoA8EKNl3LJ24"
+  },
+  "repository": {
+    "name": "EvoRiseKsa/EvoOM-Guard-m",
+    "repository_id": 1293651176,
+    "owner_login": "EvoRiseKsa",
+    "owner_id": 231647061
+  },
+  "source": {
+    "version": "4.8.1",
+    "commit_sha": "e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8",
+    "tree_sha": "4ffdb42516034aea3e7adb2d3f08f6378976c05e",
+    "ref": "refs/heads/main",
+    "github_verification": {
+      "verified": true,
+      "reason": "valid"
+    }
+  },
+  "tag": {
+    "name": "v4.8.1",
+    "object_type": "tag",
+    "object_sha": "343314e013615bf68ac71646f5bb72d59ac1fc6b",
+    "target_type": "commit",
+    "target_sha": "e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8",
+    "github_verification": {
+      "verified": true,
+      "reason": "valid"
+    },
+    "maintainer_key_fingerprint": "SHA256:iCn7wa6HgKdu7luf/16rrKZzSk5FygJoA8EKNl3LJ24"
+  },
+  "release": {
+    "release_id": 381659250,
+    "name": "v4.8.1",
+    "tag": "v4.8.1",
+    "target_commit_sha": "e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8",
+    "draft": false,
+    "prerelease": false,
+    "immutable": true,
+    "created_utc": "2026-09-02T23:45:00Z",
+    "created_utc_semantics": "Exact GitHub Releases API created_at value; for v4.8.1 it equals the annotated-tag tagger timestamp, not the target-commit, draft-creation, or publication time.",
+    "published_utc": "2026-09-03T01:08:07Z",
+    "release_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.1",
+    "body_sha256": "62c16c4b9a791fbb9786e12b9524f683c69f9828661dbfa0505ebdd946840f9e",
+    "body_sha256_semantics": "SHA-256 of the exact release body encoded as a canonical JSON string followed by LF, matching the workflow output-digest contract; not the hash of raw body text alone.",
+    "author": {
+      "login": "github-actions[bot]",
+      "id": 41898282,
+      "type": "Bot"
+    }
+  },
+  "assets": [
+    {
+      "name": "evo-guard.pyz",
+      "asset_id": 541996626,
+      "size": 2999467,
+      "sha256": "bb656708daa2ec9baff77b43e87a827fe6ef3ddeccc7253fdcc491b5c0517b1d",
+      "content_type": "application/octet-stream",
+      "label": "",
+      "state": "uploaded",
+      "uploader": {
+        "login": "github-actions[bot]",
+        "id": 41898282,
+        "type": "Bot"
+      },
+      "url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.8.1/evo-guard.pyz"
+    },
+    {
+      "name": "evo-guard.spdx.json",
+      "asset_id": 541996640,
+      "size": 131454,
+      "sha256": "eb308f5f556bc222aa16e38d6425e25670f3be357ae063dd34f3930b043f34ab",
+      "content_type": "application/octet-stream",
+      "label": "",
+      "state": "uploaded",
+      "uploader": {
+        "login": "github-actions[bot]",
+        "id": 41898282,
+        "type": "Bot"
+      },
+      "url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.8.1/evo-guard.spdx.json"
+    },
+    {
+      "name": "SHA256SUMS",
+      "asset_id": 541996646,
+      "size": 166,
+      "sha256": "5268d26ce14f326d935c55a9a3692e75dd6c65c1e9a2286f32645e45ac07208c",
+      "content_type": "application/octet-stream",
+      "label": "",
+      "state": "uploaded",
+      "uploader": {
+        "login": "github-actions[bot]",
+        "id": 41898282,
+        "type": "Bot"
+      },
+      "url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.8.1/SHA256SUMS"
+    }
+  ],
+  "workflow": {
+    "contract": "simple-release-v1",
+    "run_id": 33700941022,
+    "run_attempt": 1,
+    "workflow_id": 310687357,
+    "workflow_path": ".github/workflows/release.yml",
+    "workflow_blob_sha": "dc24c9ff17cc55ddf689dc0dc2dd61a568117d72",
+    "workflow_sha256": "c1a404466c4bc98e98f43113fb636ac838bd7130726fe027cc5dc9eb8294b026",
+    "verifier_path": ".github/workflows/release-published-verify.yml",
+    "verifier_blob_sha": "67e95bae6c650a2e3606a24fae0967bab649b7d5",
+    "verifier_sha256": "20f9f759bd9f14ae16e697894d62e6eb0eb82d6a26333d41a025cbbb81ea4478",
+    "event": "workflow_dispatch",
+    "ref": "refs/heads/main",
+    "head_sha": "e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8",
+    "actor": {
+      "login": "EvoRiseKsa",
+      "id": 231647061
+    },
+    "triggering_actor": {
+      "login": "EvoRiseKsa",
+      "id": 231647061
+    },
+    "conclusion": "success",
+    "jobs": [
+      {"name": "validate-test", "job_id": 100479885916, "conclusion": "success"},
+      {"name": "dispatch-ref-guard", "job_id": 100479885740, "conclusion": "success"},
+      {"name": "release-e2e", "job_id": 100479885926, "conclusion": "success"},
+      {"name": "release-windows-e2e", "job_id": 100479886028, "conclusion": "success"},
+      {"name": "build-artifact", "job_id": 100481877890, "conclusion": "success"},
+      {"name": "attest-release-assets", "job_id": 100481915284, "conclusion": "success"},
+      {"name": "prepare-draft", "job_id": 100481960895, "conclusion": "success"},
+      {"name": "publish-release", "job_id": 100482638368, "conclusion": "success"},
+      {"name": "post-publication-verify / verify-published-release", "job_id": 100484356914, "conclusion": "success"}
+    ],
+    "deployments": [
+      {
+        "environment": "evoguard-release-draft",
+        "environment_id": 18718845676,
+        "deployment_id": 6234787239,
+        "terminal_status_id": 17708918139,
+        "terminal_state": "success"
+      },
+      {
+        "environment": "evoguard-release-publication",
+        "environment_id": 18718846349,
+        "deployment_id": 6234825577,
+        "terminal_status_id": 17709156875,
+        "terminal_state": "success"
+      }
+    ]
+  },
+  "prepublication": {
+    "tag_ci": {
+      "run_id": 33699451740,
+      "workflow_id": 309393577,
+      "head_sha": "e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8",
+      "ref": "refs/tags/v4.8.1",
+      "run_attempt": 1,
+      "conclusion": "success",
+      "successful_jobs": 8,
+      "total_jobs": 8
+    },
+    "action_smoke": {
+      "run_id": 33699451675,
+      "workflow_id": 319810724,
+      "head_sha": "e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8",
+      "ref": "refs/tags/v4.8.1",
+      "run_attempt": 1,
+      "conclusion": "success",
+      "successful_jobs": 8,
+      "total_jobs": 8
+    }
+  },
+  "verification_observations": {
+    "release_attestation": {
+      "verified": true,
+      "command": "gh release verify v4.8.1 --repo EvoRiseKsa/EvoOM-Guard-m",
+      "subjects": [
+        "evo-guard.pyz",
+        "evo-guard.spdx.json",
+        "SHA256SUMS"
+      ]
+    },
+    "provider_attestation_job": {
+      "conclusion": "success",
+      "build_provenance_subjects": ["evo-guard.pyz"],
+      "sbom_subjects": ["evo-guard.pyz"],
+      "signer_workflow": ".github/workflows/release.yml"
+    },
+    "post_publication_byte_readback": {
+      "verified": true,
+      "release_id": 381659250,
+      "release_body_sha256": "62c16c4b9a791fbb9786e12b9524f683c69f9828661dbfa0505ebdd946840f9e",
+      "release_body_sha256_semantics": "SHA-256 of the exact release body encoded as a canonical JSON string followed by LF, matching the workflow output-digest contract; not the hash of raw body text alone.",
+      "asset_ids": [541996626, 541996640, 541996646],
+      "asset_sha256": [
+        "bb656708daa2ec9baff77b43e87a827fe6ef3ddeccc7253fdcc491b5c0517b1d",
+        "eb308f5f556bc222aa16e38d6425e25670f3be357ae063dd34f3930b043f34ab",
+        "5268d26ce14f326d935c55a9a3692e75dd6c65c1e9a2286f32645e45ac07208c"
+      ],
+      "sha256sums_lines": [
+        "bb656708daa2ec9baff77b43e87a827fe6ef3ddeccc7253fdcc491b5c0517b1d  evo-guard.pyz",
+        "eb308f5f556bc222aa16e38d6425e25670f3be357ae063dd34f3930b043f34ab  evo-guard.spdx.json"
+      ]
+    }
+  },
+  "provider_control_observation": {
+    "observed_utc": "2026-09-03T01:21:51Z",
+    "immutable_releases_enabled": true,
+    "main_ruleset": {
+      "id": 21771015,
+      "name": "EvoOM Guard main signed-source authority",
+      "enforcement": "active",
+      "bypass_actor_count": 0
+    },
+    "tag_ruleset": {
+      "id": 21997528,
+      "name": "EvoOM Guard release tag authority",
+      "enforcement": "active",
+      "bypass_actor_type": "DeployKey",
+      "active_deploy_key_count": 0
+    }
+  },
+  "historical_evidence": {
+    "latest_validated_a_h_ledger": "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json",
+    "applies_to_this_release": false
+  },
+  "trust_boundary": {
+    "same_owner_operation": true,
+    "independent_review": false,
+    "record_included_in_release_tag": false,
+    "record_included_in_release_assets": false,
+    "non_claims": [
+      "This maintained record is not evoguard-release-ledger-v2 and does not claim protected A-through-H, RSAE, or RAAE evidence for v4.8.1.",
+      "Publication and same-owner verification support only advisory-first Public Beta release availability; they do not prove behavioral correctness, security, production readiness, deployment, Core GA, hostile-code production suitability, or independent efficacy.",
+      "The record was created after immutable publication and is not part of the v4.8.1 tag, source tree, or release assets.",
+      "Provider-control observations are point-in-time workflow and API observations, not guarantees that mutable repository controls can never change later."
+    ]
+  }
+}

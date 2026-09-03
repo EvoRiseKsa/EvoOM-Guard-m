@@ -12,12 +12,12 @@ product, `evo-guard` is the CLI, and `evoom_guard` is the Python package.
 
 ## Version boundary
 
-- **Latest published stable release:** [`v4.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0).
-- **Consumer pin:** `v4.8.0`, or commit
-  `07e361cb9a75cc1822cd905ca65df42235b3b910` for the strictest immutable
+- **Latest published stable release:** [`v4.8.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.1).
+- **Consumer pin:** `v4.8.1`, or commit
+  `e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8` for the strictest immutable
   identity. Its maintained, detached-maintainer-signed
-  [`DIRECT_RELEASE.json`](../evidence/direct-releases/v4.8.0/DIRECT_RELEASE.json)
-  and [detached signature](../evidence/direct-releases/v4.8.0/DIRECT_RELEASE.json.sig)
+  [`DIRECT_RELEASE.json`](../evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json)
+  and [detached signature](../evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json.sig)
   records the successful `simple-release-v1` publication. This same-owner
   record is not an A-through-H release ledger or independent review.
 - **Historical A-through-H evidence:** `v4.6.0` remains the newest validated

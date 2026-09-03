@@ -22,11 +22,11 @@ evidence level allowed by that blueprint.
 ## Current source capabilities and consumer-release boundary
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:ROADMAP_LATEST_RELEASE -->
-Source version `4.8.1` is a **release candidate**; it is unsupported and is not yet a
-consumer release. The latest immutable consumer release selected by the protected source
-tree remains [`v4.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0)
-at commit `07e361cb9a75cc1822cd905ca65df42235b3b910`. Detached-maintainer-signed record
-`evidence/direct-releases/v4.8.0/DIRECT_RELEASE.json` binds the published asset
+Source version `4.8.1` is on the **maintained direct release line**. The latest
+immutable consumer release selected by the protected source tree is
+[`v4.8.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.1) at commit
+`e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8`. Detached-maintainer-signed record
+`evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json` binds the published asset
 observations `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. It records successful
 release-attestation verification for `evo-guard.pyz`, `evo-guard.spdx.json`,
 `SHA256SUMS` and a provider-attestation job whose build-provenance subject is
@@ -35,7 +35,7 @@ post-publication observation created after the tag; it is not part of the releas
 protected A-through-H ledger, independent review, or proof of correctness, security,
 deployment, or efficacy. The latest historical validated A-through-H ledger remains
 `evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json` for `v4.6.0` and does not apply to
-`v4.8.0`.
+`v4.8.1`.
 <!-- END EVOGUARD_PROJECT_STATUS:ROADMAP_LATEST_RELEASE -->
 
 - Verdict schema `1.11` remains the frozen contract used by `v4.3.0`.
@@ -260,8 +260,8 @@ asset attestation. It prepares a byte-verified draft, then a distinct protected
 Environment approval authorizes a no-checkout job to revalidate live source,
 tag-ruleset, signed-tag, and asset authority, publish, and prove exact immutable
 readback. No release step is gated on dates, elapsed time, or stabilization windows. The
-detached-maintainer-signed direct record for `v4.8.0` records successful workflow run
-`33642398535` and post-publication byte readback. Its signature authenticates the exact
+detached-maintainer-signed direct record for `v4.8.1` records successful workflow run
+`33700941022` and post-publication byte readback. Its signature authenticates the exact
 maintained record bytes, but the evidence remains a same-owner observation, not
 independent validation or a protected A-through-H ledger. The archived A-H signed lane
 is implemented in source but inert with every activation flag false; it is a design
@@ -286,7 +286,7 @@ red-team, neither of which waits on appointed reviewers. The independent round
 described below is run when a concrete need calls for it, not as a gate on
 everything else.
 
-1. **Current artifact boundary.** The current immutable `v4.8.0` consumer is
+1. **Current artifact boundary.** The current immutable `v4.8.1` consumer is
    selected by a detached-maintainer-signed same-owner direct record of the
    exact protected publication and byte readback. It is not an A-through-H
    ledger or independent review. Historical `v4.6.0` remains the latest signed

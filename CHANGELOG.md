@@ -19,13 +19,12 @@ retained evidence say so.
 ## Release status and support
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
-- Source `4.8.1` status: release candidate source; unsupported; not yet a consumer release.
-- [`v4.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0) remains the latest stable and supported consumer release. Its
+- [`v4.8.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.1) remains the latest stable and supported consumer release. Its
   detached-maintainer-signed direct record is a same-owner post-publication
   observation, not an A-through-H ledger or independent review.
 - [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) remains the latest historical release
   with a validated protected A-through-H ledger; that ledger does not apply to
-  `v4.8.0`.
+  `v4.8.1`.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
