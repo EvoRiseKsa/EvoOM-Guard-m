@@ -4,7 +4,7 @@
 # [project.optional-dependencies].dev declarations. Direct compatibility imports
 # used only by repository tooling are declared separately below. The generated
 # ci.lock is the only Python dependency input consumed by CI/release.
-setuptools==83.0.0
+setuptools==84.0.0
 # Direct Python 3.10 fallback imported by tools/packaging/build_distribution.py.
 tomli==2.4.1
 pytest>=8
