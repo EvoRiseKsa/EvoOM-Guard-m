@@ -74,9 +74,9 @@ code.
 ## Install
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:GUARD_CURRENT_RELEASE -->
-> **Release availability.** [`v4.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0) is the latest maintained immutable
+> **Release availability.** [`v4.8.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.1) is the latest maintained immutable
 > consumer release selected by the protected source tree. For strict CI, pin
-> commit `07e361cb9a75cc1822cd905ca65df42235b3b910` rather than a tag. Its direct record is not an
+> commit `e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8` rather than a tag. Its direct record is not an
 > A-through-H ledger or independent review.
 
 EvoOM Guard is not published to PyPI. Obtain it from this repository.
@@ -88,14 +88,14 @@ EvoOM Guard is not published to PyPI. Obtain it from this repository.
   with:
     fetch-depth: 0
     persist-credentials: false
-- uses: EvoRiseKsa/EvoOM-Guard-m@v4.8.0
+- uses: EvoRiseKsa/EvoOM-Guard-m@v4.8.1
 ```
 
 **CLI:**
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.8.0"
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@07e361cb9a75cc1822cd905ca65df42235b3b910"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.8.1"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8"
 evo-guard guard --diff - --no-config --test-command "python -m pytest -q" < pr.diff
 ```
 
@@ -347,7 +347,7 @@ A composite action ships at the repository root
   with:
     fetch-depth: 0
     persist-credentials: false
-- uses: EvoRiseKsa/EvoOM-Guard-m@v4.8.0
+- uses: EvoRiseKsa/EvoOM-Guard-m@v4.8.1
   with:
     comment: "false"
     fail-on: "any-non-pass"
@@ -554,7 +554,7 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
   with:
     fetch-depth: 0
     persist-credentials: false
-- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.8.0"
+- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.8.1"
 - run: |
     BASE="${{ github.event.pull_request.base.sha }}"
     git fetch --no-tags origin "$BASE"

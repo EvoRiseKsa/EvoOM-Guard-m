@@ -1,11 +1,11 @@
 # Release status
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_SUMMARY -->
-Source version `4.8.1` is a **release candidate**; it is unsupported and is not yet a
-consumer release. The latest immutable consumer release selected by the protected source
-tree remains [`v4.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.0)
-at commit `07e361cb9a75cc1822cd905ca65df42235b3b910`. Detached-maintainer-signed record
-`evidence/direct-releases/v4.8.0/DIRECT_RELEASE.json` binds the published asset
+Source version `4.8.1` is on the **maintained direct release line**. The latest
+immutable consumer release selected by the protected source tree is
+[`v4.8.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.1) at commit
+`e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8`. Detached-maintainer-signed record
+`evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json` binds the published asset
 observations `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. It records successful
 release-attestation verification for `evo-guard.pyz`, `evo-guard.spdx.json`,
 `SHA256SUMS` and a provider-attestation job whose build-provenance subject is
@@ -14,7 +14,7 @@ post-publication observation created after the tag; it is not part of the releas
 protected A-through-H ledger, independent review, or proof of correctness, security,
 deployment, or efficacy. The latest historical validated A-through-H ledger remains
 `evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json` for `v4.6.0` and does not apply to
-`v4.8.0`.
+`v4.8.1`.
 
 Releases ship through the manually dispatched protected-release workflow
 (`.github/workflows/release.yml`): tag-equals-version validation, the full test suite,
@@ -23,8 +23,8 @@ asset attestation. It prepares a byte-verified draft, then a distinct protected
 Environment approval authorizes a no-checkout job to revalidate live source,
 tag-ruleset, signed-tag, and asset authority, publish, and prove exact immutable
 readback. No release step is gated on dates, elapsed time, or stabilization windows. The
-detached-maintainer-signed direct record for `v4.8.0` records successful workflow run
-`33642398535` and post-publication byte readback. Its signature authenticates the exact
+detached-maintainer-signed direct record for `v4.8.1` records successful workflow run
+`33700941022` and post-publication byte readback. Its signature authenticates the exact
 maintained record bytes, but the evidence remains a same-owner observation, not
 independent validation or a protected A-through-H ledger. The archived A-H signed lane
 is implemented in source but inert with every activation flag false; it is a design
@@ -106,9 +106,9 @@ or publication, establish production readiness, or constitute independent
 security review.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_CONSUMER_PIN -->
-Consumer usage should use maintained immutable release `v4.8.0` only when aligned with
-the acceptance policy; pin commit `07e361cb9a75cc1822cd905ca65df42235b3b910` for the
-strictest source identity. `evo-guard init` requires `--ref` explicitly: supply `v4.8.0`
+Consumer usage should use maintained immutable release `v4.8.1` only when aligned with
+the acceptance policy; pin commit `e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8` for the
+strictest source identity. `evo-guard init` requires `--ref` explicitly: supply `v4.8.1`
 or that full commit SHA. It refuses a moving branch and does not guess a latest release.
 The maintained signed direct record is not an A-through-H ledger or independent review.
 <!-- END EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_CONSUMER_PIN -->
@@ -121,18 +121,18 @@ distributed with a published v4 release carrying that license.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_CURRENT_LEDGER -->
 The protected source tree selects detached-maintainer-signed direct record
-`evidence/direct-releases/v4.8.0/DIRECT_RELEASE.json` (SHA-256
-`208697e8375c29c79553f10a1596f0ce0c62973e96b3955387c81e9be66997db`) and signature
-`evidence/direct-releases/v4.8.0/DIRECT_RELEASE.json.sig` (SHA-256
-`256bdaeb5b3012354677bc222c23d3ecad76fb90df9cedecc088f9385bad0c2f`) for release `v4.8.0`
-at commit `07e361cb9a75cc1822cd905ca65df42235b3b910`. It records immutable publication
+`evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json` (SHA-256
+`1486b94f8d1c7f9746dc0e5ac727c070d3617f7dc4dba7fed77af0b827f5cf04`) and signature
+`evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json.sig` (SHA-256
+`a6ee8557a0a61d8a59b762060382fbcecd9f5c70b265b3fe20867d05656eb5b6`) for release `v4.8.1`
+at commit `e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8`. It records immutable publication
 and exact post-publication readback observations for assets `evo-guard.pyz`,
 `evo-guard.spdx.json`, `SHA256SUMS`. This is a same-owner record created after the tag
 and excluded from its source tree and assets. It is not a protected A-through-H release
 ledger, correctness verdict, production-readiness claim, independent review, or
 deployment authorization. The latest historical validated A-through-H ledger is
 `evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json` for `v4.6.0` and does not apply to
-`v4.8.0`.
+`v4.8.1`.
 <!-- END EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_CURRENT_LEDGER -->
 
 The same bounded identity/provenance records for earlier immutable releases

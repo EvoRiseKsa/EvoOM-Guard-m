@@ -1,7 +1,7 @@
 {
   "schema_version": "evoguard-project-status-v3",
   "source": {
-    "lifecycle": "release-candidate",
+    "lifecycle": "release-line",
     "relation_to_latest_release": "descendant",
     "architecture": {
       "behavior_preserving_r2": "complete",
@@ -10,10 +10,10 @@
     }
   },
   "published_release": {
-    "record": "evidence/direct-releases/v4.8.0/DIRECT_RELEASE.json",
-    "record_sha256": "208697e8375c29c79553f10a1596f0ce0c62973e96b3955387c81e9be66997db",
-    "signature": "evidence/direct-releases/v4.8.0/DIRECT_RELEASE.json.sig",
-    "signature_sha256": "256bdaeb5b3012354677bc222c23d3ecad76fb90df9cedecc088f9385bad0c2f"
+    "record": "evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json",
+    "record_sha256": "1486b94f8d1c7f9746dc0e5ac727c070d3617f7dc4dba7fed77af0b827f5cf04",
+    "signature": "evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json.sig",
+    "signature_sha256": "a6ee8557a0a61d8a59b762060382fbcecd9f5c70b265b3fe20867d05656eb5b6"
   },
   "historical_evidence": {
     "latest_validated_a_h_ledger": "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json"

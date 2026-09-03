@@ -18,10 +18,10 @@ key or whether the recorded run was honest.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:SIGNED_VERDICTS_RELEASE_PIN -->
 Requires the `sign` extra (the core gate stays stdlib-only). Install it from
-maintained immutable release `v4.8.0`:
+maintained immutable release `v4.8.1`:
 
 ```bash
-pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.8.0"
+pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.8.1"
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:SIGNED_VERDICTS_RELEASE_PIN -->
 

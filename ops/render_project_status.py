@@ -119,10 +119,32 @@ _DIRECT_RELEASE_WORKFLOW_CONTRACTS: dict[
         ".github/workflows/release-published-verify.yml",
         "20f9f759bd9f14ae16e697894d62e6eb0eb82d6a26333d41a025cbbb81ea4478",
     ),
+    "4.8.1": (
+        ".github/workflows/release.yml",
+        "c1a404466c4bc98e98f43113fb636ac838bd7130726fe027cc5dc9eb8294b026",
+        ".github/workflows/release-published-verify.yml",
+        "20f9f759bd9f14ae16e697894d62e6eb0eb82d6a26333d41a025cbbb81ea4478",
+    ),
 }
 _DIRECT_RELEASE_HISTORY_CONTRACTS = {
     "4.7.1": "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json",
     "4.8.0": "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json",
+    "4.8.1": "evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json",
+}
+_DIRECT_RELEASE_CREATED_UTC_SEMANTICS_CONTRACTS = {
+    "4.7.1": (
+        "Exact GitHub Releases API created_at value; target-commit metadata, not "
+        "draft creation or publication time."
+    ),
+    "4.8.0": (
+        "Exact GitHub Releases API created_at value; target-commit metadata, not "
+        "draft creation or publication time."
+    ),
+    "4.8.1": (
+        "Exact GitHub Releases API created_at value; for v4.8.1 it equals the "
+        "annotated-tag tagger timestamp, not the target-commit, draft-creation, or "
+        "publication time."
+    ),
 }
 _DIRECT_RELEASE_JOBS = (
     "validate-test",
@@ -146,6 +168,12 @@ _DIRECT_RELEASE_NON_CLAIM_CONTRACTS = {
         "This maintained record is not evoguard-release-ledger-v2 and does not claim protected A-through-H, RSAE, or RAAE evidence for v4.8.0.",
         "Publication and same-owner verification support only advisory-first Public Beta release availability; they do not prove behavioral correctness, security, production readiness, deployment, Core GA, hostile-code production suitability, or independent efficacy.",
         "The record was created after immutable publication and is not part of the v4.8.0 tag, source tree, or release assets.",
+        "Provider-control observations are point-in-time workflow and API observations, not guarantees that mutable repository controls can never change later.",
+    ),
+    "4.8.1": (
+        "This maintained record is not evoguard-release-ledger-v2 and does not claim protected A-through-H, RSAE, or RAAE evidence for v4.8.1.",
+        "Publication and same-owner verification support only advisory-first Public Beta release availability; they do not prove behavioral correctness, security, production readiness, deployment, Core GA, hostile-code production suitability, or independent efficacy.",
+        "The record was created after immutable publication and is not part of the v4.8.1 tag, source tree, or release assets.",
         "Provider-control observations are point-in-time workflow and API observations, not guarantees that mutable repository controls can never change later.",
     ),
 }
@@ -1874,6 +1902,13 @@ def _load_direct_release(
     non_claim_contract = _DIRECT_RELEASE_NON_CLAIM_CONTRACTS.get(version)
     if historical_ledger_contract is None or non_claim_contract is None:
         raise ProjectStatusError("direct-release history and non-claim contracts are not reviewed")
+    created_utc_semantics_contract = (
+        _DIRECT_RELEASE_CREATED_UTC_SEMANTICS_CONTRACTS.get(version)
+    )
+    if created_utc_semantics_contract is None:
+        raise ProjectStatusError(
+            "direct-release publication-time contract is not reviewed"
+        )
     (
         historical_workflow_path,
         historical_workflow_sha256,
@@ -1983,11 +2018,7 @@ def _load_direct_release(
         or release_object["draft"] is not False
         or release_object["prerelease"] is not False
         or release_object["immutable"] is not True
-        or release_object["created_utc_semantics"]
-        != (
-            "Exact GitHub Releases API created_at value; target-commit metadata, not "
-            "draft creation or publication time."
-        )
+        or release_object["created_utc_semantics"] != created_utc_semantics_contract
         or release_url
         != f"https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/{tag}"
         or release_object["body_sha256_semantics"] != body_sha256_semantics
