@@ -381,7 +381,7 @@ def test_tool_identity_requires_every_pinned_version_and_exact_maven_build(
     )
     outputs = {
         "Bash": "unused",
-        "Bundler": "Bundler version 4.0.20",
+        "Bundler": "4.0.20",
         "Go": "go version go1.27.1 linux/amd64",
         "gotestsum": "gotestsum version v1.13.0",
         "Java": (
@@ -434,7 +434,13 @@ def test_tool_identity_requires_every_pinned_version_and_exact_maven_build(
     )
 
     assert live_runner_extended_result._tool_identity("Linux") == _tools()
+    assert commands["Bundler"] == ("bundle", "--version")
     assert commands["Maven"] == ("mvn", "-o", "--version")
+
+    outputs["Bundler"] = "Bundler version 4.0.20"
+    with pytest.raises(LiveRunnerExtendedResultError, match="Bundler version"):
+        live_runner_extended_result._tool_identity("Linux")
+    outputs["Bundler"] = "4.0.20"
 
     outputs["Maven"] = "Apache Maven 3.9.16"
     with pytest.raises(LiveRunnerExtendedResultError, match="Maven version"):

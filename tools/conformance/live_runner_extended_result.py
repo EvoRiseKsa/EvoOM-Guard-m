@@ -391,9 +391,7 @@ def _tool_identity(runner_os: str) -> dict[str, str]:
     tools = {
         "bash_path": bash_path,
         "bash_version": bash_version,
-        "bundler": _exact_output(
-            bundler_output, "Bundler version 4.0.20", "Bundler"
-        ).removeprefix("Bundler version "),
+        "bundler": _exact_output(bundler_output, "4.0.20", "Bundler"),
         "go": "1.27.1",
         "gotestsum": _exact_output(
             gotestsum_output, "gotestsum version v1.13.0", "gotestsum"
