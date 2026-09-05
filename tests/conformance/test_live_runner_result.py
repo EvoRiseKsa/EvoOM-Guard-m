@@ -403,16 +403,17 @@ def test_live_workflow_has_exact_matrix_and_fail_closed_aggregate() -> None:
     text = (ROOT / ".github" / "workflows" / "runner-live-conformance.yml").read_text(
         encoding="utf-8"
     )
+    core = text.split("\n  extended:", maxsplit=1)[0]
 
-    assert text.count("os: ubuntu-latest") == 3
-    assert text.count("os: windows-latest") == 1
-    assert "tests/test_pytest_oracle.py" in text
-    assert "tests/test_node_oracle.py" in text
-    assert "tests/test_vitest_oracle.py" in text
-    assert "--verify \"${{ runner.temp }}/live-runner.json\"" in text
-    assert "id: retain" in text
-    assert "steps.retain.outputs.artifact-id" in text
-    assert "steps.retain.outputs.artifact-digest" in text
+    assert core.count("os: ubuntu-latest") == 3
+    assert core.count("os: windows-latest") == 1
+    assert "tests/test_pytest_oracle.py" in core
+    assert "tests/test_node_oracle.py" in core
+    assert "tests/test_vitest_oracle.py" in core
+    assert "--verify \"${{ runner.temp }}/live-runner.json\"" in core
+    assert "id: retain" in core
+    assert "steps.retain.outputs.artifact-id" in core
+    assert "steps.retain.outputs.artifact-digest" in core
     assert (
         "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
         in text
@@ -420,8 +421,9 @@ def test_live_workflow_has_exact_matrix_and_fail_closed_aggregate() -> None:
     assert "digest-mismatch: error" in text
     assert "retained-live-runner/live-runner.xml" in text
     assert "retained-live-runner/live-runner.json" in text
-    assert text.count("tools.conformance.run_live_runner_conformance") == 3
-    assert 'run: test "$LIVE_RESULT" = "success"' in text
+    assert core.count("tools.conformance.run_live_runner_conformance") == 3
+    assert "needs: [live, extended]" in text
+    assert 'test "$LIVE_RESULT" = "success" && test "$EXTENDED_RESULT" = "success"' in text
     assert "retention-days: 30" in text
     assert "timeout-minutes: 30" in text
     assert "timeout-minutes: 5" in text

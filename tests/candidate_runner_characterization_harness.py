@@ -36,7 +36,7 @@ from evoom_guard.execution import (
     ProcessOutputLimitExceeded,
 )
 
-SCHEMA_VERSION = "candidate-runner-characterization-v2"
+SCHEMA_VERSION = "candidate-runner-characterization-v3"
 NORMALIZED_FIELDS = (
     "temporary workspace paths",
     "judge-owned invocation token",

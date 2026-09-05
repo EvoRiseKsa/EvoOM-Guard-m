@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/tools/conformance/live-runner-extended-result.schema.json",
+  "title": "EvoOM Guard extended live runner conformance result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "claims", "environment", "execution", "schema_version", "source", "status", "status_basis", "suite"],
+  "properties": {
+    "$schema": {"const": "tools/conformance/live-runner-extended-result.schema.json"},
+    "schema_version": {"const": "evoguard-live-runner-extended-conformance-v1"},
+    "status": {"const": "pass"},
+    "status_basis": {"const": "real_extended_guard_oracle_tests_only"},
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["external_runner_suites_executed", "hostile_code_production", "independent_evaluation", "matrix_cell_only"],
+      "properties": {
+        "external_runner_suites_executed": {"const": true},
+        "hostile_code_production": {"const": false},
+        "independent_evaluation": {"const": false},
+        "matrix_cell_only": {"const": true}
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["matrix_os", "matrix_python", "python", "python_packages_count", "python_packages_sha256", "pytest_plugin_autoload_disabled", "runner_arch", "runner_environment", "runner_image", "runner_image_version", "runner_os", "tools"],
+      "allOf": [
+        {
+          "if": {"properties": {"matrix_os": {"const": "ubuntu-latest"}}, "required": ["matrix_os"]},
+          "then": {
+            "properties": {
+              "runner_os": {"const": "Linux"},
+              "tools": {"properties": {"bash_path": {"const": "/usr/bin/bash"}}}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"matrix_os": {"const": "windows-latest"}}, "required": ["matrix_os"]},
+          "then": {
+            "properties": {
+              "runner_os": {"const": "Windows"},
+              "tools": {"properties": {"bash_path": {"const": "C:\\Program Files\\Git\\bin\\bash.exe"}}}
+            }
+          }
+        }
+      ],
+      "properties": {
+        "matrix_os": {"enum": ["ubuntu-latest", "windows-latest"]},
+        "matrix_python": {"const": "3.12.10"},
+        "python": {"const": "3.12.10"},
+        "python_packages_count": {"type": "integer", "minimum": 1},
+        "python_packages_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "pytest_plugin_autoload_disabled": {"const": true},
+        "runner_arch": {"const": "X64"},
+        "runner_environment": {"const": "github-hosted"},
+        "runner_image": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "runner_image_version": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "runner_os": {"enum": ["Linux", "Windows"]},
+        "tools": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["bash_path", "bash_version", "bundler", "go", "gotestsum", "java", "jest_cli", "jest_junit", "jest_package", "maven", "mocha", "node", "rspec", "rspec_junit_formatter", "ruby"],
+          "properties": {
+            "bash_path": {"enum": ["/usr/bin/bash", "C:\\Program Files\\Git\\bin\\bash.exe"]},
+            "bash_version": {"type": "string", "pattern": "^GNU bash, version [0-9]+\\.[0-9]+\\.[0-9]+\\([0-9]+\\)-release \\(.+\\)$", "maxLength": 4096},
+            "bundler": {"const": "4.0.20"},
+            "go": {"const": "1.27.1"},
+            "gotestsum": {"const": "1.13.0"},
+            "java": {"const": "21.0.9"},
+            "jest_cli": {"const": "30.5.0"},
+            "jest_junit": {"const": "17.0.0"},
+            "jest_package": {"const": "30.5.1"},
+            "maven": {"const": "3.9.16"},
+            "mocha": {"const": "12.0.0"},
+            "node": {"const": "22.23.2"},
+            "rspec": {"const": "3.13.2"},
+            "rspec_junit_formatter": {"const": "0.6.0"},
+            "ruby": {"const": "3.4.10"}
+          }
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_name", "git_commit", "git_tree", "repository", "ref", "run_attempt", "run_id", "sha", "workflow_ref", "workflow_sha"],
+      "allOf": [
+        {
+          "if": {"properties": {"event_name": {"const": "push"}}, "required": ["event_name"]},
+          "then": {"properties": {"ref": {"const": "refs/heads/main"}}}
+        },
+        {
+          "if": {"properties": {"event_name": {"const": "pull_request"}}, "required": ["event_name"]},
+          "then": {"properties": {"ref": {"pattern": "^refs/pull/[1-9][0-9]*/merge$"}}}
+        }
+      ],
+      "properties": {
+        "event_name": {"enum": ["pull_request", "push"]},
+        "git_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "git_tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "repository": {"const": "EvoRiseKsa/EvoOM-Guard-m"},
+        "ref": {"type": "string", "pattern": "^(refs/heads/main|refs/pull/[1-9][0-9]*/merge)$"},
+        "run_attempt": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "run_id": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "workflow_ref": {"type": "string", "pattern": "^EvoRiseKsa/EvoOM-Guard-m/\\.github/workflows/runner-live-conformance\\.yml@(refs/heads/main|refs/pull/[1-9][0-9]*/merge)$", "maxLength": 4096},
+        "workflow_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aggregate_sha256", "reviewed_files"],
+      "properties": {
+        "aggregate_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "reviewed_files": {
+          "type": "object",
+          "minProperties": 48,
+          "maxProperties": 48,
+          "propertyNames": {
+            "enum": [
+              ".github/workflows/runner-live-conformance.yml",
+              "evoom_guard/adapters.py",
+              "evoom_guard/guard.py",
+              "evoom_guard/runners/__init__.py",
+              "evoom_guard/runners/_command.py",
+              "evoom_guard/runners/adapters.py",
+              "evoom_guard/runners/gotestsum.py",
+              "evoom_guard/runners/jest.py",
+              "evoom_guard/runners/maven.py",
+              "evoom_guard/runners/mocha.py",
+              "evoom_guard/runners/node_test.py",
+              "evoom_guard/runners/protocol.py",
+              "evoom_guard/runners/registry.py",
+              "evoom_guard/runners/rspec.py",
+              "evoom_guard/runners/shell.py",
+              "evoom_guard/verifiers/junit_oracle.py",
+              "evoom_guard/verifiers/repo_verifier.py",
+              "tests/live_runner_extended_helpers.py",
+              "tests/test_gotestsum_live_oracle.py",
+              "tests/test_jest_live_oracle.py",
+              "tests/test_live_runner_maven_cache.py",
+              "tests/test_maven_live_oracle.py",
+              "tests/test_mocha_live_oracle.py",
+              "tests/test_rspec_live_oracle.py",
+              "tests/test_shell_live_oracle.py",
+              "requirements/ci.in",
+              "requirements/ci.lock",
+              "requirements/docker-pytest.in",
+              "requirements/docker-pytest.lock",
+              "requirements/python310-compat.in",
+              "requirements/python310-compat.lock",
+              "tools/ci-live-runners/go/go.mod",
+              "tools/ci-live-runners/go/go.sum",
+              "tools/ci-live-runners/maven/pom.xml",
+              "tools/ci-live-runners/maven/artifacts.sha256",
+              "tools/ci-live-runners/maven/src/main/java/io/github/evoriseksa/Calc.java",
+              "tools/ci-live-runners/maven/src/test/java/io/github/evoriseksa/CalcTest.java",
+              "tools/ci-live-runners/node/package-lock.json",
+              "tools/ci-live-runners/node/package.json",
+              "tools/ci-live-runners/ruby/Gemfile",
+              "tools/ci-live-runners/ruby/Gemfile.lock",
+              "tools/conformance/secure_io.py",
+              "tools/conformance/fetch_live_runner_maven_cache.py",
+              "tools/conformance/live_runner_extended_result.py",
+              "tools/conformance/run_live_runner_extended_conformance.py",
+              "tools/conformance/verify_live_runner_maven_cache.py",
+              "pyproject.toml",
+              "tools/conformance/live-runner-extended-result.schema.json"
+            ]
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sha256", "size"],
+            "properties": {
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "size": {"type": "integer", "minimum": 1}
+            }
+          }
+        }
+      }
+    },
+    "suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["errors", "failures", "junit_sha256", "junit_size", "skipped", "test_names", "tests"],
+      "properties": {
+        "errors": {"const": 0},
+        "failures": {"const": 0},
+        "junit_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "junit_size": {"type": "integer", "minimum": 1, "maximum": 2097152},
+        "skipped": {"const": 0},
+        "test_names": {
+          "type": "array",
+          "minItems": 19,
+          "maxItems": 19,
+          "uniqueItems": true,
+          "prefixItems": [
+            {"const": "test_extended_gotestsum_broken_fix_is_fail"},
+            {"const": "test_extended_gotestsum_green_baseline_remains_green_with_private_cache"},
+            {"const": "test_extended_gotestsum_honest_fix_is_pass"},
+            {"const": "test_extended_jest_broken_fix_is_fail"},
+            {"const": "test_extended_jest_honest_fix_is_pass"},
+            {"const": "test_extended_jest_protected_test_rewrite_is_rejected"},
+            {"const": "test_extended_maven_broken_fix_is_fail"},
+            {"const": "test_extended_maven_honest_fix_is_pass"},
+            {"const": "test_extended_mocha_broken_fix_is_fail"},
+            {"const": "test_extended_mocha_honest_fix_is_pass"},
+            {"const": "test_extended_parse_gotestsum_junit_counts"},
+            {"const": "test_extended_parse_jest_junit_counts"},
+            {"const": "test_extended_parse_maven_junit_counts"},
+            {"const": "test_extended_parse_mocha_junit_counts"},
+            {"const": "test_extended_parse_rspec_junit_counts"},
+            {"const": "test_extended_rspec_broken_fix_is_fail"},
+            {"const": "test_extended_rspec_honest_fix_is_pass"},
+            {"const": "test_extended_shell_broken_fix_is_fail"},
+            {"const": "test_extended_shell_honest_fix_is_pass"}
+          ],
+          "items": false
+        },
+        "tests": {"const": 19}
+      }
+    }
+  }
+}

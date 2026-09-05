@@ -635,8 +635,8 @@ remain in their established facades.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction
-is **complete**; the overall refactor program is **in-progress**. Source version `4.8.1`
-is on the maintained direct release line.
+is **complete**; the overall refactor program is **in-progress**. Source version
+`4.9.0.dev0` is unreleased development and is not a consumer release.
 <!-- END EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. The

@@ -86,8 +86,12 @@ reports `not_run`, and `attestation.mode=blackbox` plus the effective policy
 record only what was requested. If you ask for
 `--isolation docker` and the daemon is down, the image is missing, or the runtime
 is absent, Guard **refuses** (`ERROR` / `assurance_requirement_not_met`) rather
-than silently running on the host and *labelling* it docker. Pair it with the
-fail-closed floor and a container boundary becomes a contract:
+than silently running on the host and *labelling* it docker. The container
+launcher also overrides any image-level `GOCACHE` with
+`/tmp/go-build` on the container's fresh `/tmp` tmpfs. A pre-populated,
+read-only, or disabled Go cache baked into the image therefore cannot cross the
+black-box candidate boundary. Pair it with the fail-closed floor and a
+container boundary becomes a contract:
 
 ```bash
 evo-guard guard ./repo --patch p.txt --verifier-pack ./pack --blackbox \

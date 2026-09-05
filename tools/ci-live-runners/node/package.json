@@ -1,0 +1,12 @@
+{
+  "name": "evoguard-live-runner-node-tools",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Locked Node tools for the bounded extended live-runner matrix.",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "jest": "30.5.1",
+    "jest-junit": "17.0.0",
+    "mocha": "12.0.0"
+  }
+}

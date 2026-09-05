@@ -54,9 +54,9 @@ def _install_success_path(
         if copy_hook is not None:
             copy_hook()
 
-    def judge_environment(workdir: str) -> dict[str, str]:
-        events.append(("environment", workdir))
-        return {"BASE": "1"}
+    def judge_environment(workdir: str, *, phase: str) -> dict[str, str]:
+        events.append(("environment", phase, workdir))
+        return {"BASE": "1", "GOCACHE": f"{workdir}/{phase}/go-build"}
 
     def snapshot(
         root: str,

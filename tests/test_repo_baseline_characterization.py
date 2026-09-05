@@ -61,9 +61,12 @@ def _install_successful_baseline(
         events.append(("copy", source, destination))
         Path(destination).mkdir()
 
-    def environment(workdir: str) -> dict[str, str]:
-        events.append(("environment", workdir))
-        return {"JUDGE": "owned"}
+    def environment(workdir: str, *, phase: str) -> dict[str, str]:
+        events.append(("environment", phase, workdir))
+        return {
+            "JUDGE": phase,
+            "GOCACHE": str(Path(workdir) / phase / "go-build"),
+        }
 
     snapshot_count = 0
 
@@ -216,6 +219,7 @@ def test_baseline_effect_order_trust_boundary_and_cleanup_are_frozen(
             "run",
             "snapshot",
             "changes",
+            "environment",
             "command",
             "instrument",
             "resolve",
@@ -250,6 +254,12 @@ def test_baseline_effect_order_trust_boundary_and_cleanup_are_frozen(
         if isinstance(event, tuple) and event[0] == "run"
     ]
     assert [event[1] for event in run_events] == ["setup", "suite"]
+    run_environments = [event[4] for event in run_events]
+    assert [environment["JUDGE"] for environment in run_environments] == [
+        "setup",
+        "repo-suite",
+    ]
+    assert len({environment["GOCACHE"] for environment in run_environments}) == 2
     assert [event[-2] for event in run_events] == (
         ["LIMITS", "LIMITS"] if os.name == "posix" else [None, None]
     )

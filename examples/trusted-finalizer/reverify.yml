@@ -176,7 +176,7 @@ jobs:
           path: ${{ runner.temp }}/finalizer-control.json
           if-no-files-found: error
           overwrite: false
-          retention-days: 1
+          retention-days: 30
 
   reverify:
     needs: metadata
@@ -380,4 +380,4 @@ jobs:
             ${{ runner.temp }}/verdict.json
             ${{ runner.temp }}/handoff.json
           if-no-files-found: warn
-          retention-days: 1
+          retention-days: 30

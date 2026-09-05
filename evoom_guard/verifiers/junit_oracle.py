@@ -131,11 +131,24 @@ def _validate_declared_counts(
         if not passed_only_surplus:
             raise _InvalidJUnit
 
-    if any(
-        actual_by_name[name] != value
+    terminal_mismatches = {
+        name
         for name, value in declared.items()
-        if name != "tests"
-    ):
+        if name != "tests" and actual_by_name[name] != value
+    }
+    # Mocha 12's built-in ``xunit`` reporter labels assertion failures as
+    # ``errors`` in the suite aggregate while emitting explicit ``failure``
+    # testcase children. Accept only that exact two-counter alias and retain the
+    # child-derived counts below. This cannot turn a terminal case into a pass;
+    # missing, invented, skipped, mixed, or reverse aliases remain invalid.
+    mocha_failure_error_alias = (
+        terminal_mismatches == {"failures", "errors"}
+        and actual_by_name["failures"] > 0
+        and actual_by_name["errors"] == 0
+        and declared.get("failures") == 0
+        and declared.get("errors") == actual_by_name["failures"]
+    )
+    if terminal_mismatches and not mocha_failure_error_alias:
         raise _InvalidJUnit
 
 

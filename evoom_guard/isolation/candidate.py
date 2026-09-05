@@ -322,7 +322,8 @@ class CandidateRunner:
             "--pids-limit", "256", "--cpus", "1",
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
             "--ulimit", "nofile=1024:1024",
-            "-e", "HOME=/tmp", "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "LANG=C.UTF-8",
+            "-e", "HOME=/tmp", "-e", "GOCACHE=/tmp/go-build",
+            "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "LANG=C.UTF-8",
             "-v", f"{target}:/candidate:ro", "-w", "/candidate",
         ]
         getuid = getattr(os, "getuid", None)

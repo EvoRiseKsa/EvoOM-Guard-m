@@ -19,13 +19,19 @@ VECTOR = (
     Path(__file__).parent
     / "fixtures"
     / "refactor-safety"
-    / "candidate-runner-v2.json"
+    / "candidate-runner-v3.json"
 )
-LEGACY_VECTOR = (
+LEGACY_V1_VECTOR = (
     Path(__file__).parent
     / "fixtures"
     / "refactor-safety"
     / "candidate-runner-v1.json"
+)
+LEGACY_V2_VECTOR = (
+    Path(__file__).parent
+    / "fixtures"
+    / "refactor-safety"
+    / "candidate-runner-v2.json"
 )
 
 
@@ -41,12 +47,23 @@ def test_candidate_runner_vector_metadata_is_exact() -> None:
 
 
 def test_security_ratchet_preserves_the_historical_v1_vector() -> None:
-    legacy = json.loads(LEGACY_VECTOR.read_text(encoding="utf-8"))
+    legacy = json.loads(LEGACY_V1_VECTOR.read_text(encoding="utf-8"))
     assert legacy["schema_version"] == "candidate-runner-characterization-v1"
     assert (
         legacy["cases"]["image_inspect_hit"]["digest"]
         == "sha256:0123456789abcdef"
     )
+
+
+def test_go_cache_ratchet_preserves_the_historical_v2_vector() -> None:
+    legacy = json.loads(LEGACY_V2_VECTOR.read_text(encoding="utf-8"))
+    assert legacy["schema_version"] == "candidate-runner-characterization-v2"
+    prefix = legacy["cases"]["docker_plan"]["config"]["prefix"]
+    assert "GOCACHE=/tmp/go-build" not in prefix
+
+    current = _frozen()
+    current_prefix = current["cases"]["docker_plan"]["config"]["prefix"]
+    assert "GOCACHE=/tmp/go-build" in current_prefix
 
 
 @pytest.mark.parametrize("case_name", CASE_NAMES)

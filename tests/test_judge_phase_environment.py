@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import evoom_guard.guard as guard_module
 from evoom_guard.execution.judge_environment import create_judge_phase_environment
 from evoom_guard.runtime_identity import capture_runtime_identity, verify_runtime_identity
 from evoom_guard.verifiers.repo_verifier import RepoVerifier
@@ -18,6 +19,7 @@ _ENVIRONMENT_KEYS = (
     "TEMP",
     "TMP",
     "XDG_CACHE_HOME",
+    "GOCACHE",
     "PYTHONDONTWRITEBYTECODE",
     "PYTHONNOUSERSITE",
 )
@@ -52,6 +54,7 @@ def test_phase_scratch_is_distinct_outside_candidate_and_not_in_runtime_identity
             "TEMP",
             "TMP",
             "XDG_CACHE_HOME",
+            "GOCACHE",
         ):
             path = Path(environment[key])
             assert path.is_dir()
@@ -72,6 +75,8 @@ def test_phase_environment_keeps_only_required_windows_runtime_plumbing(tmp_path
             "COMSPEC": r"C:\Windows\System32\cmd.exe",
             "PATHEXT": ".EXE;.CMD",
             "USERPROFILE": r"C:\Users\candidate",
+            "LOCALAPPDATA": r"C:\Users\candidate\AppData\Local",
+            "GOCACHE": r"C:\attacker-go-cache",
             "TMP": r"C:\ambient-temp",
             "PYTHONPYCACHEPREFIX": r"C:\attacker-bytecode",
         },
@@ -84,7 +89,10 @@ def test_phase_environment_keeps_only_required_windows_runtime_plumbing(tmp_path
     assert environment["COMSPEC"] == r"C:\Windows\System32\cmd.exe"
     assert environment["PATHEXT"] == ".EXE;.CMD"
     assert environment["TMP"] != r"C:\ambient-temp"
+    assert environment["GOCACHE"] != r"C:\attacker-go-cache"
+    assert Path(environment["GOCACHE"]).is_dir()
     assert "USERPROFILE" not in environment
+    assert "LOCALAPPDATA" not in environment
     assert "PYTHONPYCACHEPREFIX" not in environment
 
 
@@ -172,6 +180,58 @@ def _load_record(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def test_repo_baseline_delivers_distinct_setup_and_suite_go_caches_and_cleans_them(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    setup_record = tmp_path / "baseline-setup-environment.json"
+    suite_record = tmp_path / "baseline-suite-environment.json"
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    (repository / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    def record_environment(destination: Path) -> list[str]:
+        expression = (
+            "import json,os,pathlib;"
+            f"pathlib.Path({str(destination)!r}).write_text("
+            "json.dumps({key:os.environ[key] for key in "
+            "('HOME','XDG_CACHE_HOME','GOCACHE')}),encoding='utf-8')"
+        )
+        return [sys.executable, "-c", expression]
+
+    ambient_cache = tmp_path / "ambient-go-cache"
+    ambient_cache.mkdir()
+    monkeypatch.setenv("GOCACHE", str(ambient_cache))
+    result = guard_module._run_baseline_suite(
+        str(repository),
+        test_command=record_environment(suite_record),
+        setup_command=record_environment(setup_record),
+        setup_output_globs=(),
+        timeout=30,
+        mem_limit_mb=0,
+        strict_harness=False,
+    )
+
+    assert result["verdict"] == "PASS"
+    environments = {
+        "setup": _load_record(setup_record),
+        "repo-suite": _load_record(suite_record),
+    }
+    roots = {
+        phase: Path(environment["HOME"]).parent
+        for phase, environment in environments.items()
+    }
+    assert len(set(roots.values())) == 2
+    for phase, environment in environments.items():
+        root = roots[phase]
+        assert root.name.startswith(f".evoguard-{phase}-")
+        assert Path(environment["GOCACHE"]).name == "go-build"
+        assert root in Path(environment["GOCACHE"]).parents
+        assert root in Path(environment["XDG_CACHE_HOME"]).parents
+        assert environment["GOCACHE"] != str(ambient_cache)
+        assert not root.exists()
+
+
 def test_repo_verifier_delivers_separate_setup_suite_and_pack_environments(
     tmp_path: Path,
 ) -> None:
@@ -243,7 +303,7 @@ def test_repo_verifier_delivers_separate_setup_suite_and_pack_environments(
     assert set(records["verifier-pack"]["visible_scratch"]) == {
         root.name for root in roots.values()
     }
-    for key in ("HOME", "TMPDIR", "TEMP", "TMP", "XDG_CACHE_HOME"):
+    for key in ("HOME", "TMPDIR", "TEMP", "TMP", "XDG_CACHE_HOME", "GOCACHE"):
         assert len({environment[key] for environment in observed.values()}) == 3
     for environment in observed.values():
         assert environment["PYTHONDONTWRITEBYTECODE"] == "1"

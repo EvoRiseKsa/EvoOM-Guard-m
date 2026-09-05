@@ -173,20 +173,28 @@ flags are required.
 | Python | pytest | `python -m pytest -q` | built-in `--junitxml` |
 | JavaScript / TypeScript | Vitest | `npx vitest run` | built-in `--reporter=junit` |
 | JavaScript / TypeScript | Jest | `npx jest` | `jest-junit` |
-| JavaScript / TypeScript | Mocha | `npx mocha` | `mocha-junit-reporter` |
+| JavaScript / TypeScript | Mocha | `npx mocha` | built-in `xunit` reporter with POSIX exit codes |
 | JavaScript / TypeScript | `node --test` | `node --test` | built-in reporter |
 | Go | gotestsum | `gotestsum ./...` | built-in `--junitfile` |
-| Java | Maven Surefire | `mvn -q test` | Surefire XML reports |
+| Java | Maven Surefire | `mvn -q test` | Surefire XML reports via the explicit POM bridge below |
 | Ruby | RSpec | `bundle exec rspec` | `rspec_junit_formatter` |
 | Any of the above | `sh -c "…"` | `sh -c "npx jest && go test ./..."` | wraps the inner runner |
 
-pytest, Vitest, `node --test`, and Maven need no extra plugin; Jest, Mocha,
-RSpec, and Go require their reporter package (`jest-junit`,
-`mocha-junit-reporter`, `rspec_junit_formatter`, `gotestsum`) to be installed in
+pytest, Vitest, Mocha, `node --test`, and Maven need no extra reporter plugin;
+Jest, RSpec, and Go require their reporter package (`jest-junit`,
+`rspec_junit_formatter`, `gotestsum`) to be installed in
 the environment where the suite runs. Any other command still runs but grades
 on the exit code alone. For the exact instrumented `argv` and report
 environment per runner, and how to add a new one, see
 [Runner adapter conformance](docs/RUNNER_CONFORMANCE.md).
+
+Maven projects must explicitly connect EvoOM Guard's judge-owned directory to
+Surefire because `reportsDirectory` is not a Maven CLI user property. Define a
+project property named `evoguard.surefire.reportsDirectory`, default it to
+`${project.build.directory}/surefire-reports`, and map Surefire's
+`<reportsDirectory>` configuration to that property. Without that opt-in POM
+bridge EvoOM Guard receives no structured report and fails closed; this is not a
+claim of generic Surefire support.
 
 To forbid that compatibility downgrade, run `evo-guard preflight . --strict`
 and opt the repository suite into `guard --require-structured-verdict` (or a
@@ -266,7 +274,7 @@ git clone https://github.com/EvoRiseKsa/EvoOM-Guard-m.git
 cd EvoOM-Guard-m
 git checkout <reviewed-40-hex-SHA>
 python -m pip install .
-evo-guard version  # expect 4.8.1 on this reviewed release source
+evo-guard version  # expect 4.9.0.dev0 on this development source line
 evo-guard preflight . --strict --json
 evo-guard init --ref <immutable-release-tag-or-40-hex-SHA> --preset advisory \
   --path <workflow-path> --policy-path <trusted-policy-path>
@@ -377,8 +385,9 @@ Use an immutable release tag or full commit SHA in consumer repositories; do
 not treat a moving branch as a production release channel.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
-Source version `4.8.1` is on the **maintained direct release line**. The latest
-immutable consumer release selected by the protected source tree is
+Source version `4.9.0.dev0` is **unreleased development**; it is unsupported and is not
+a consumer release. The latest immutable consumer release selected by the protected
+source tree remains
 [`v4.8.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.1) at commit
 `e63e9d806fef38c9dfd3bfb1a0bc1b2d12c58ac8`. Detached-maintainer-signed record
 `evidence/direct-releases/v4.8.1/DIRECT_RELEASE.json` binds the published asset

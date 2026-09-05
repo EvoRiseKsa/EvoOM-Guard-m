@@ -218,7 +218,9 @@ Before enabling the final check as a merge requirement:
 6. Keep the metadata job, the `evoguard-reverify-control-v1-<attempt>` artifact
    prefix, and the workflow dependency intact. Each retry gets a distinct
    immutable artifact name; changing it requires a new security review of both
-   templates.
+   templates. The reference retains the data-only control and evidence for 30
+   days; the repository or organization retention ceiling must allow that
+   duration. Actions artifacts remain temporary evidence, not a durable ledger.
 7. Treat every Guard SHA, finalizer Environment/key/reviewer, reverify workflow
    ID, policy, and verifier-pack change as a security-policy change. Re-run the
    finalizer for every open PR before merge; an old success on an unchanged

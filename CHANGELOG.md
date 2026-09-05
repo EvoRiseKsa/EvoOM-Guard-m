@@ -19,6 +19,7 @@ retained evidence say so.
 ## Release status and support
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
+- Source `4.9.0.dev0` status: unreleased development source; unsupported; not a consumer release.
 - [`v4.8.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.8.1) remains the latest stable and supported consumer release. Its
   detached-maintainer-signed direct record is a same-owner post-publication
   observation, not an A-through-H ledger or independent review.
@@ -31,6 +32,63 @@ retained evidence say so.
 - Draft candidates that were never published are labelled explicitly below
   and are not supported releases.
 <!-- END EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
+
+## [Unreleased]
+
+### Added
+
+- **Extended same-owner runner conformance lane.** Added a two-cell
+  `ubuntu-latest`/`windows-latest` configuration for 19 reviewed Jest,
+  gotestsum, RSpec, Mocha, Maven, and Shell Guard oracles. The create-only
+  extended result contract binds the exact test set, JUnit bytes, source
+  inventory, tool versions, Git commit/tree, hosted-runner identity, workflow
+  run/attempt, and retained-artifact re-verification. The checked-in lane is not
+  a claim that GitHub CI has run or passed; a future successful retained result
+  would remain same-owner operational evidence, not independent evaluation,
+  hostile-code production isolation, Core GA, Enterprise readiness, or a
+  customer deployment result.
+- **Cross-ecosystem dependency closure.** Added exact npm, Go module, RubyGem,
+  and Maven fixture inputs for the extended lane. Maven 3.9.16 is archive-
+  digest checked. A fixed-origin stdlib downloader populates the job-local
+  repository without executing Maven; all 160 JAR/POM SHA-256 values must match
+  before any downloaded Maven plugin executes, and every Maven run is offline.
+  Maven support is explicitly opt-in: the fixture POM maps the namespaced
+  `evoguard.surefire.reportsDirectory` property to Surefire's report directory;
+  a project without that bridge produces no judge-owned report and fails
+  closed.
+
+### Changed
+
+- **Reverify evidence replay window.** Increased the data-only trusted-finalizer
+  control and evidence artifact request from one day to 30 days in the active,
+  example, and packaged reference workflows. The repository or organization
+  Actions retention ceiling must also permit 30 days; this extends review time
+  but does not turn temporary Actions artifacts into a durable ledger.
+- **Mocha evidence compatibility.** Switched Mocha instrumentation to its
+  built-in xUnit reporter with POSIX exit codes and expanded fail-closed
+  rejection of caller-owned reporter options. JUnit parsing accepts only Mocha
+  12's exact aggregate `failures=0`/`errors=N` alias when `N` explicit testcase
+  failures are present; child-derived failures remain authoritative and all
+  broader, mixed, invented, or reverse aliases remain invalid.
+
+### Fixed
+
+- **Windows Ruby evidence collection.** The extended result collector now loads
+  the locked bundle through `ruby.exe` and `bundler/setup` before observing the
+  installed RSpec specifications. This avoids `cmd.exe` batch-wrapper argument
+  quoting during evidence collection while continuing to fail closed when a
+  locked gem is absent or has the wrong version.
+- **Baseline and container Go build caches.** Pristine baseline setup and suite
+  now receive separate judge-owned phase environments, including distinct Go
+  build caches, so an absent Windows profile cache cannot manufacture a
+  demonstrated repair. Repository-suite and black-box Docker/gVisor commands
+  explicitly replace any image-level `GOCACHE` with `/tmp/go-build` on their
+  per-container tmpfs.
+- **Windows Go judge environment.** Each setup, repository-suite, and verifier-
+  pack subprocess now receives an explicit judge-owned `GOCACHE`. This keeps
+  Go builds usable after the minimal Windows environment removes ambient
+  `LOCALAPPDATA`, while preserving phase separation and refusing an ambient
+  user build cache.
 
 ## [4.8.1] — 2026-09-03
 

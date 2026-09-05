@@ -560,10 +560,11 @@
           "exec",
           "mocha",
           "test/**/*.js",
+          "--posix-exit-codes",
           "--reporter",
-          "mocha-junit-reporter",
-          "--reporter-options",
-          "mochaFile=/judge/runner-report.xml"
+          "xunit",
+          "--reporter-option",
+          "output=/judge/runner-report.xml"
         ],
         "env": {}
       }
@@ -603,10 +604,11 @@
         "argv": [
           "C:\\repo\\node_modules\\.bin\\mocha.cmd",
           "test",
+          "--posix-exit-codes",
           "--reporter",
-          "mocha-junit-reporter",
-          "--reporter-options",
-          "mochaFile=/judge/runner-report.xml"
+          "xunit",
+          "--reporter-option",
+          "output=/judge/runner-report.xml"
         ],
         "env": {}
       }
@@ -622,7 +624,7 @@
         "argv": [
           "./mvnw",
           "test",
-          "-Dsurefire.reportsDirectory=/judge/runner-report.xml.d"
+          "-Devoguard.surefire.reportsDirectory=/judge/runner-report.xml.d"
         ],
         "env": {}
       }
@@ -631,11 +633,11 @@
       "id": "maven-decline-owned-directory",
       "owner": "maven",
       "category": "decline",
-      "argv": ["mvn", "test", "-Dsurefire.reportsDirectory=existing"],
+      "argv": ["mvn", "test", "-Devoguard.surefire.reportsDirectory=existing"],
       "expected": {
         "matched": true,
         "applied": false,
-        "argv": ["mvn", "test", "-Dsurefire.reportsDirectory=existing"],
+        "argv": ["mvn", "test", "-Devoguard.surefire.reportsDirectory=existing"],
         "env": {}
       }
     },
@@ -662,7 +664,7 @@
         "argv": [
           "C:\\repo\\mvnw.cmd",
           "test",
-          "-Dsurefire.reportsDirectory=/judge/runner-report.xml.d"
+          "-Devoguard.surefire.reportsDirectory=/judge/runner-report.xml.d"
         ],
         "env": {}
       }

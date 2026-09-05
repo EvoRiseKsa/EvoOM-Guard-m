@@ -96,13 +96,183 @@ jobs:
           --junit "${{ runner.temp }}/retained-live-runner/live-runner.xml"
           --verify "${{ runner.temp }}/retained-live-runner/live-runner.json"
 
+  extended:
+    name: extended (${{ matrix.os }}, py3.12.10, node22.23.2, go1.27.1, ruby3.4.10, java21.0.9)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            bash: /usr/bin/bash
+            mocha: tools/ci-live-runners/node/node_modules/.bin/mocha
+          - os: windows-latest
+            bash: C:\Program Files\Git\bin\bash.exe
+            mocha: tools/ci-live-runners/node/node_modules/.bin/mocha.cmd
+    env:
+      BUNDLE_FROZEN: "true"
+      EVOGUARD_EXTENDED_BASH: ${{ matrix.bash }}
+      EVOGUARD_EXTENDED_MOCHA: ${{ github.workspace }}/${{ matrix.mocha }}
+      EVOGUARD_EXTENDED_NODE_TOOLS: ${{ github.workspace }}/tools/ci-live-runners/node
+      EVOGUARD_LIVE_EXTENDED: "1"
+      EVOGUARD_MATRIX_OS: ${{ matrix.os }}
+      EVOGUARD_MATRIX_PYTHON: "3.12.10"
+      GOTOOLCHAIN: local
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22.23.2"
+          package-manager-cache: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12.10"
+      - name: Configure runner-local paths
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+
+          runner_temp = Path(os.environ["RUNNER_TEMP"])
+          variables = {
+              "BUNDLE_PATH": runner_temp / "bundle",
+              "EVOGUARD_EXTENDED_BUNDLE_PATH": runner_temp / "bundle",
+              "EVOGUARD_EXTENDED_MAVEN_REPO": runner_temp / "maven-repository",
+              "EVOGUARD_EXTENDED_NPM_CACHE": runner_temp / "npm-cache",
+              "GOBIN": runner_temp / "go-bin",
+              "GOCACHE": runner_temp / "go-build-cache",
+          }
+          destination = Path(os.environ["GITHUB_ENV"])
+          with destination.open("a", encoding="utf-8", newline="\n") as handle:
+              for name, value in variables.items():
+                  rendered = os.fspath(value)
+                  if "\n" in rendered or "\r" in rendered:
+                      raise SystemExit(f"invalid runner-local path for {name}")
+                  handle.write(f"{name}={rendered}\n")
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          check-latest: false
+          cache: false
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: "21.0.9+10.0.LTS"
+          check-latest: false
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: "3.4.10"
+          bundler: "4.0.20"
+          bundler-cache: false
+      - name: Install locked Python and Node dependencies
+        run: |
+          npm ci --ignore-scripts --prefix tools/ci-live-runners/node --cache "${{ runner.temp }}/npm-cache"
+          npm audit --package-lock-only --audit-level=high --prefix tools/ci-live-runners/node
+          python -m pip install --only-binary=:all: --require-hashes -r requirements/ci.lock
+          python -m pip install --no-deps --no-build-isolation -e .
+      - name: Build the locked gotestsum binary
+        working-directory: tools/ci-live-runners/go
+        run: |
+          go mod download
+          go mod verify
+          go install gotest.tools/gotestsum
+      - name: Install the locked Ruby bundle
+        working-directory: tools/ci-live-runners/ruby
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/tools/ci-live-runners/ruby/Gemfile
+        run: bundle install --jobs 4 --retry 3
+      - name: Install exact Maven (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          MAVEN_SHA512: ed41650d42485cfc243fad22158caf9cbb5dc408ce7a09ddb94dd42a019de929ca43065bfa450612cf12bf78b5cafa3884b96c090de326ff590448c933454af3
+        run: |
+          curl --proto '=https' --tlsv1.2 --fail --show-error --location --retry 3 \
+            --output "${RUNNER_TEMP}/apache-maven-3.9.16-bin.zip" \
+            https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.zip
+          echo "${MAVEN_SHA512}  ${RUNNER_TEMP}/apache-maven-3.9.16-bin.zip" | sha512sum --check --strict
+          python -m zipfile -e "${RUNNER_TEMP}/apache-maven-3.9.16-bin.zip" "${RUNNER_TEMP}"
+          echo "${RUNNER_TEMP}/apache-maven-3.9.16/bin" >> "${GITHUB_PATH}"
+          echo "${GOBIN}" >> "${GITHUB_PATH}"
+      - name: Install exact Maven (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          MAVEN_SHA512: ed41650d42485cfc243fad22158caf9cbb5dc408ce7a09ddb94dd42a019de929ca43065bfa450612cf12bf78b5cafa3884b96c090de326ff590448c933454af3
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'apache-maven-3.9.16-bin.zip'
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.zip' -OutFile $archive
+          $observed = (Get-FileHash -LiteralPath $archive -Algorithm SHA512).Hash.ToLowerInvariant()
+          if ($observed -ne $env:MAVEN_SHA512) { throw "Maven archive digest mismatch: $observed" }
+          Expand-Archive -LiteralPath $archive -DestinationPath $env:RUNNER_TEMP
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value (Join-Path $env:RUNNER_TEMP 'apache-maven-3.9.16\bin')
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $env:GOBIN
+      - name: Fetch and verify the exact Maven repository without executing Maven
+        run: |
+          python -m tools.conformance.fetch_live_runner_maven_cache --repository "${{ runner.temp }}/maven-repository"
+      - name: Exercise the exact Maven fixture offline
+        run: |
+          mvn -B -ntp -o -f tools/ci-live-runners/maven/pom.xml "-Dmaven.repo.local=${{ runner.temp }}/maven-repository" clean test
+          python -m tools.conformance.verify_live_runner_maven_cache --repository "${{ runner.temp }}/maven-repository"
+      - name: Execute every extended Guard oracle
+        run: >-
+          python -m pytest
+          tests/test_jest_live_oracle.py
+          tests/test_gotestsum_live_oracle.py
+          tests/test_rspec_live_oracle.py
+          tests/test_mocha_live_oracle.py
+          tests/test_maven_live_oracle.py
+          tests/test_shell_live_oracle.py
+          -q -p no:cacheprovider
+          --junitxml="${{ runner.temp }}/live-runner-extended.xml"
+      - name: Reverify Maven cache and create exact extended result
+        run: |
+          python -m tools.conformance.verify_live_runner_maven_cache --repository "${{ runner.temp }}/maven-repository"
+          python -m tools.conformance.run_live_runner_extended_conformance --junit "${{ runner.temp }}/live-runner-extended.xml" --output "${{ runner.temp }}/live-runner-extended.json"
+          python -m tools.conformance.run_live_runner_extended_conformance --junit "${{ runner.temp }}/live-runner-extended.xml" --verify "${{ runner.temp }}/live-runner-extended.json"
+      - name: Retain exact extended live-runner evidence
+        id: retain-extended
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: live-runner-extended-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/live-runner-extended.json
+            ${{ runner.temp }}/live-runner-extended.xml
+          if-no-files-found: error
+          retention-days: 30
+      - name: Validate the immutable extended artifact identity
+        env:
+          ARTIFACT_DIGEST: ${{ steps.retain-extended.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.retain-extended.outputs.artifact-id }}
+        run: >-
+          python -c "import os,re,sys;
+          valid_id=re.fullmatch(r'[1-9][0-9]*', os.environ.get('ARTIFACT_ID',''));
+          valid_digest=re.fullmatch(r'[0-9a-f]{64}', os.environ.get('ARTIFACT_DIGEST',''));
+          sys.exit(0 if valid_id and valid_digest else 'invalid retained-artifact identity')"
+      - name: Download immutable extended evidence by numeric ID
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ steps.retain-extended.outputs.artifact-id }}
+          digest-mismatch: error
+          path: ${{ runner.temp }}/retained-live-runner-extended
+      - name: Reverify exact retained extended JSON and JUnit bytes
+        run: >-
+          python -m tools.conformance.run_live_runner_extended_conformance
+          --junit "${{ runner.temp }}/retained-live-runner-extended/live-runner-extended.xml"
+          --verify "${{ runner.temp }}/retained-live-runner-extended/live-runner-extended.json"
+
   runner-live-conformance:
     if: always()
-    needs: [live]
+    needs: [live, extended]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every live matrix cell
         env:
+          EXTENDED_RESULT: ${{ needs.extended.result }}
           LIVE_RESULT: ${{ needs.live.result }}
-        run: test "$LIVE_RESULT" = "success"
+        run: test "$LIVE_RESULT" = "success" && test "$EXTENDED_RESULT" = "success"

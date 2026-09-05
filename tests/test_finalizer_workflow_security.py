@@ -64,6 +64,7 @@ def _assert_reverify_outputs_and_rigidity(reverify: str) -> None:
     assert "name: evoguard-reverify-control-v1-${{ github.run_attempt }}" in reverify
     assert "finalizer-control.json" in reverify
     assert "overwrite: false" in reverify
+    assert reverify.count("retention-days: 30") == 2
     assert "Create an attempt-bound pending finalizer check" in reverify
     assert "github.rest.checks.create" in reverify
     assert "check_run_id" in reverify
