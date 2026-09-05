@@ -145,6 +145,18 @@ Mocha 12.0.0. Bash is the runner-provided executable at `/usr/bin/bash` on
 Ubuntu or the Git for Windows path; its actual GNU Bash version is observed and
 bound into the cell result rather than represented as a dependency lock.
 
+Repository Actions admission is a separate prerequisite. When the repository
+uses GitHub's `allowed_actions=selected` policy, keep
+`github_owned_allowed=true`, `sha_pinning_required=true`, and
+`verified_allowed=false`; add only `ruby/setup-ruby@*` beside the existing
+`ossf/scorecard-action@*` external pattern. The workflow still invokes
+`ruby/setup-ruby` by the exact reviewed full SHA
+`95ef2b042f9d7a56d8268cba8559e2842e2ad01b`. The selected-actions pattern admits
+the action name but does not choose or attest its revision. A workflow
+`startup_failure` with no jobs must therefore trigger a policy readback before
+runner or oracle diagnosis; broad admission of all verified actions is not the
+remedy.
+
 Each extended cell writes a create-only
 `evoguard-live-runner-extended-conformance-v1` record. The verifier requires the
 exact 18 test names and zero skips, failures, or errors; exact tool versions;

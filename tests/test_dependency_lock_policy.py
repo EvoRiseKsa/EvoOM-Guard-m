@@ -376,6 +376,25 @@ def test_extended_runner_locks_and_claim_boundary_are_documented() -> None:
     assert "Maven live conformance is an explicit project opt-in" in runner_words
     assert "Without it, no judge-owned report" in runner_words
     assert "generic Maven-project support claim" in runner_words
+    for value in (
+        "allowed_actions=selected",
+        "github_owned_allowed=true",
+        "sha_pinning_required=true",
+        "verified_allowed=false",
+        "ruby/setup-ruby@*",
+        "ossf/scorecard-action@*",
+        "startup_failure",
+        "broad admission of all verified actions is not the remedy",
+    ):
+        assert value in runner_words
+    for value in (
+        "ruby/setup-ruby",
+        "v1.321.0",
+        "95ef2b042f9d7a56d8268cba8559e2842e2ad01b",
+        "MIT; Copyright Benoit Daloze",
+        "selected-actions policy must separately admit `ruby/setup-ruby@*`",
+    ):
+        assert value in third_party
     for path in (
         "tools/ci-live-runners/node/",
         "tools/ci-live-runners/go/",
