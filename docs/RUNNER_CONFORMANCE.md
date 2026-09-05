@@ -139,7 +139,8 @@ nor a result from the bridged fixture is a generic Maven-project support claim.
 
 The extended runtime is configured for exact Python 3.12.10, Node 22.23.2, Go
 1.27.1, gotestsum 1.13.0, Ruby 3.4.10, Bundler 4.0.20, RSpec 3.13.2,
-`rspec_junit_formatter` 0.6.0, Temurin 21.0.9+10 (reported Java 21.0.9), Maven
+`rspec_junit_formatter` 0.6.0, Temurin 21.0.9+10 (the setup resolver label is
+`21.0.9+10.0.LTS`, and Java reports 21.0.9), Maven
 3.9.16, Jest package 30.5.1 (reported CLI 30.5.0), `jest-junit` 17.0.0, and
 Mocha 12.0.0. Bash is the runner-provided executable at `/usr/bin/bash` on
 Ubuntu or the Git for Windows path; its actual GNU Bash version is observed and

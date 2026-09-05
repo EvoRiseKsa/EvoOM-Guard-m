@@ -83,7 +83,8 @@ mutable `python:3.12-slim` tag. Both the workflow and
 The optional extended live-runner job exercises Jest, gotestsum, RSpec, Mocha,
 Maven, and Shell on `ubuntu-latest` and `windows-latest`. Its workflow is
 configured for exact Python 3.12.10, Node 22.23.2, Go 1.27.1, Ruby 3.4.10,
-Bundler 4.0.20, Temurin 21.0.9+10, and Maven 3.9.16. The setup actions are
+Bundler 4.0.20, Temurin 21.0.9+10 (setup resolver label
+`21.0.9+10.0.LTS`), and Maven 3.9.16. The setup actions are
 pinned to full commit SHAs. GitHub-hosted image labels and the runner-provided
 Bash binary remain provider-controlled inputs; the result records the delivered
 image and GNU Bash version instead of claiming those inputs are immutable.

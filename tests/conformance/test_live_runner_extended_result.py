@@ -685,7 +685,7 @@ def test_extended_workflow_has_exact_cells_pins_and_retained_reverification() ->
         'python-version: "3.12.10"',
         'go-version: "1.27.1"',
         "distribution: temurin",
-        'java-version: "21.0.9+10"',
+        'java-version: "21.0.9+10.0.LTS"',
         'ruby-version: "3.4.10"',
         'bundler: "4.0.20"',
         "go install gotest.tools/gotestsum",
