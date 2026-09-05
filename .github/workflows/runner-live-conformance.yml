@@ -112,17 +112,12 @@ jobs:
             mocha: tools/ci-live-runners/node/node_modules/.bin/mocha.cmd
     env:
       BUNDLE_FROZEN: "true"
-      BUNDLE_PATH: ${{ runner.temp }}/bundle
       EVOGUARD_EXTENDED_BASH: ${{ matrix.bash }}
-      EVOGUARD_EXTENDED_BUNDLE_PATH: ${{ runner.temp }}/bundle
-      EVOGUARD_EXTENDED_MAVEN_REPO: ${{ runner.temp }}/maven-repository
       EVOGUARD_EXTENDED_MOCHA: ${{ github.workspace }}/${{ matrix.mocha }}
       EVOGUARD_EXTENDED_NODE_TOOLS: ${{ github.workspace }}/tools/ci-live-runners/node
-      EVOGUARD_EXTENDED_NPM_CACHE: ${{ runner.temp }}/npm-cache
       EVOGUARD_LIVE_EXTENDED: "1"
       EVOGUARD_MATRIX_OS: ${{ matrix.os }}
       EVOGUARD_MATRIX_PYTHON: "3.12.10"
-      GOBIN: ${{ runner.temp }}/go-bin
       GOTOOLCHAIN: local
       PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
     steps:
@@ -136,6 +131,27 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12.10"
+      - name: Configure runner-local paths
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+
+          runner_temp = Path(os.environ["RUNNER_TEMP"])
+          variables = {
+              "BUNDLE_PATH": runner_temp / "bundle",
+              "EVOGUARD_EXTENDED_BUNDLE_PATH": runner_temp / "bundle",
+              "EVOGUARD_EXTENDED_MAVEN_REPO": runner_temp / "maven-repository",
+              "EVOGUARD_EXTENDED_NPM_CACHE": runner_temp / "npm-cache",
+              "GOBIN": runner_temp / "go-bin",
+          }
+          destination = Path(os.environ["GITHUB_ENV"])
+          with destination.open("a", encoding="utf-8", newline="\n") as handle:
+              for name, value in variables.items():
+                  rendered = os.fspath(value)
+                  if "\n" in rendered or "\r" in rendered:
+                      raise SystemExit(f"invalid runner-local path for {name}")
+                  handle.write(f"{name}={rendered}\n")
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"

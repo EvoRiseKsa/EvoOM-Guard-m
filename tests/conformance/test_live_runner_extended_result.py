@@ -654,6 +654,18 @@ def test_extended_workflow_has_exact_cells_pins_and_retained_reverification() ->
     assert r"bash: C:\Program Files\Git\bin\bash.exe" in extended
     assert "EVOGUARD_MATRIX_PYTHON: \"3.12.10\"" in extended
     assert "EVOGUARD_LIVE_EXTENDED: \"1\"" in extended
+    job_environment = extended.split("    steps:\n", 1)[0]
+    assert "${{ runner." not in job_environment
+    assert "- name: Configure runner-local paths" in extended
+    assert "shell: python" in extended
+    for name, relative in (
+        ("BUNDLE_PATH", "bundle"),
+        ("EVOGUARD_EXTENDED_BUNDLE_PATH", "bundle"),
+        ("EVOGUARD_EXTENDED_MAVEN_REPO", "maven-repository"),
+        ("EVOGUARD_EXTENDED_NPM_CACHE", "npm-cache"),
+        ("GOBIN", "go-bin"),
+    ):
+        assert f'"{name}": runner_temp / "{relative}"' in extended
 
     pins = (
         "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
