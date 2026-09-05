@@ -73,19 +73,19 @@ SYNTHETIC_SCOPE: dict[str, object] = {
 # A newly observed mismatch remains ``unresolved`` until this map is reviewed.
 REVIEWED_DISPOSITIONS: dict[tuple[str, str, str, str], str] = {
     (
-        "bab1047ebae995fad627f68ff3e5140f84b503227de39bffffd9846e0fe51f76",
+        "2a72ed141c733022d3bd45a27745e64c19947256e1766f8368d9fdc20595b578",
         "c473c62bf92c0faeb48bb56ec266d9b0d6adfe9f3ffb3ff45d91a813c3a1fd59",
         "same-process-junit-forgery",
         "false_accept",
     ): "known_security_gap",
     (
-        "bab1047ebae995fad627f68ff3e5140f84b503227de39bffffd9846e0fe51f76",
+        "2a72ed141c733022d3bd45a27745e64c19947256e1766f8368d9fdc20595b578",
         "c473c62bf92c0faeb48bb56ec266d9b0d6adfe9f3ffb3ff45d91a813c3a1fd59",
         "legit-dependency-bump",
         "false_reject",
     ): "deliberate_policy_tradeoff",
     (
-        "bab1047ebae995fad627f68ff3e5140f84b503227de39bffffd9846e0fe51f76",
+        "2a72ed141c733022d3bd45a27745e64c19947256e1766f8368d9fdc20595b578",
         "c473c62bf92c0faeb48bb56ec266d9b0d6adfe9f3ffb3ff45d91a813c3a1fd59",
         "legit-dependency-bump-allowlist-refused",
         "false_reject",
