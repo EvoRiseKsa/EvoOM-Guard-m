@@ -100,7 +100,9 @@ resolver boundaries:
 - Go declares language/toolchain version 1.27.1 and exact gotestsum 1.13.0 in
   `go/go.mod`; `go/go.sum` binds the downloaded module graph. The workflow uses
   `GOTOOLCHAIN=local`, then runs `go mod download`, `go mod verify`, and
-  `go install gotest.tools/gotestsum` from that module.
+  `go install gotest.tools/gotestsum` from that module with a fresh
+  runner-temporary `GOCACHE`. Guard then supplies a separate phase-private
+  `GOCACHE` to each judged subprocess rather than inheriting the build cache.
 - Ruby declares exact RSpec 3.13.2 and `rspec_junit_formatter` 0.6.0 versions.
   `ruby/Gemfile.lock` pins the resolved graph, contains a SHA-256 checksum for
   every gem, and records Bundler 4.0.20. The workflow sets `BUNDLE_FROZEN=true`

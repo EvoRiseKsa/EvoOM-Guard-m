@@ -18,6 +18,7 @@ _ENVIRONMENT_KEYS = (
     "TEMP",
     "TMP",
     "XDG_CACHE_HOME",
+    "GOCACHE",
     "PYTHONDONTWRITEBYTECODE",
     "PYTHONNOUSERSITE",
 )
@@ -52,6 +53,7 @@ def test_phase_scratch_is_distinct_outside_candidate_and_not_in_runtime_identity
             "TEMP",
             "TMP",
             "XDG_CACHE_HOME",
+            "GOCACHE",
         ):
             path = Path(environment[key])
             assert path.is_dir()
@@ -72,6 +74,8 @@ def test_phase_environment_keeps_only_required_windows_runtime_plumbing(tmp_path
             "COMSPEC": r"C:\Windows\System32\cmd.exe",
             "PATHEXT": ".EXE;.CMD",
             "USERPROFILE": r"C:\Users\candidate",
+            "LOCALAPPDATA": r"C:\Users\candidate\AppData\Local",
+            "GOCACHE": r"C:\attacker-go-cache",
             "TMP": r"C:\ambient-temp",
             "PYTHONPYCACHEPREFIX": r"C:\attacker-bytecode",
         },
@@ -84,7 +88,10 @@ def test_phase_environment_keeps_only_required_windows_runtime_plumbing(tmp_path
     assert environment["COMSPEC"] == r"C:\Windows\System32\cmd.exe"
     assert environment["PATHEXT"] == ".EXE;.CMD"
     assert environment["TMP"] != r"C:\ambient-temp"
+    assert environment["GOCACHE"] != r"C:\attacker-go-cache"
+    assert Path(environment["GOCACHE"]).is_dir()
     assert "USERPROFILE" not in environment
+    assert "LOCALAPPDATA" not in environment
     assert "PYTHONPYCACHEPREFIX" not in environment
 
 
@@ -243,7 +250,7 @@ def test_repo_verifier_delivers_separate_setup_suite_and_pack_environments(
     assert set(records["verifier-pack"]["visible_scratch"]) == {
         root.name for root in roots.values()
     }
-    for key in ("HOME", "TMPDIR", "TEMP", "TMP", "XDG_CACHE_HOME"):
+    for key in ("HOME", "TMPDIR", "TEMP", "TMP", "XDG_CACHE_HOME", "GOCACHE"):
         assert len({environment[key] for environment in observed.values()}) == 3
     for environment in observed.values():
         assert environment["PYTHONDONTWRITEBYTECODE"] == "1"

@@ -665,9 +665,11 @@ candidate-runtime drift across the repo/pack phases is
 `TAMPERED candidate_tree_changed_during_run`. In host subprocess mode these are
 pre/post observations, **not** an OS sandbox or secrecy guarantee. Repo-native
 setup, suite, and pack subprocesses receive separate judge-owned home/temp/cache
-directories outside the candidate copy. This reduces incidental writes but does
-not exempt any in-tree cache, temporary file, or build output from runtime
-identity. Python `-I`/`-E` may ignore `PYTHON*` environment settings; use the
+directories outside the candidate copy. `GOCACHE` is bound explicitly beneath
+each phase cache because Go on Windows cannot derive a build cache after the
+ambient user profile is removed. This reduces incidental writes but does not
+exempt any in-tree cache, temporary file, or build output from runtime identity.
+Python `-I`/`-E` may ignore `PYTHON*` environment settings; use the
 static `preflight` command and an explicit `-B` where it reports that risk.
 Repo-native pack pytest may import candidate code and retains
 `report_integrity: same_process_candidate_writable`; only black-box mode moves

@@ -126,6 +126,12 @@ has a protected-test rewrite rejection oracle, while Shell has no JUnit parser
 case. A skip, collection failure, test failure, missing executable, version
 mismatch, or missing environment binding fails the cell.
 
+The workflow gives dependency installation its own runner-temporary `GOCACHE`.
+During Guard execution, the Core replaces that path with a fresh judge-owned Go
+build cache for each setup, suite, or pack phase. This avoids both hosted-image
+cache reuse and the Windows failure mode where the minimal environment has no
+`LOCALAPPDATA`; it does not preserve an ambient user cache across the boundary.
+
 Maven live conformance is an explicit project opt-in. Surefire does not expose
 its `reportsDirectory` parameter as a generic Maven CLI user property. A
 supported POM must define `evoguard.surefire.reportsDirectory` with its ordinary

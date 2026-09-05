@@ -49,7 +49,8 @@ def create_judge_phase_environment(
     home = os.path.join(phase_root, "home")
     temporary = os.path.join(phase_root, "tmp")
     cache = os.path.join(phase_root, "cache")
-    for directory in (home, temporary, cache):
+    go_cache = os.path.join(cache, "go-build")
+    for directory in (home, temporary, cache, go_cache):
         os.mkdir(directory, mode=0o700)
 
     source = os.environ if ambient is None else ambient
@@ -61,6 +62,11 @@ def create_judge_phase_environment(
         "TEMP": temporary,
         "TMP": temporary,
         "XDG_CACHE_HOME": cache,
+        # Go on Windows derives its default build cache from LOCALAPPDATA and
+        # does not consult XDG_CACHE_HOME.  LOCALAPPDATA is deliberately absent
+        # from this minimal environment, so bind an explicit phase-private
+        # cache rather than inheriting a user cache or disabling Go builds.
+        "GOCACHE": go_cache,
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTHONNOUSERSITE": "1",
     }

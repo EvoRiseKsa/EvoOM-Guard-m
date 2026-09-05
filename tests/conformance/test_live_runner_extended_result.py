@@ -670,6 +670,7 @@ def test_extended_workflow_has_exact_cells_pins_and_retained_reverification() ->
         ("EVOGUARD_EXTENDED_MAVEN_REPO", "maven-repository"),
         ("EVOGUARD_EXTENDED_NPM_CACHE", "npm-cache"),
         ("GOBIN", "go-bin"),
+        ("GOCACHE", "go-build-cache"),
     ):
         assert f'"{name}": runner_temp / "{relative}"' in extended
 

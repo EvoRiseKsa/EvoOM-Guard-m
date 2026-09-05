@@ -144,6 +144,7 @@ jobs:
               "EVOGUARD_EXTENDED_MAVEN_REPO": runner_temp / "maven-repository",
               "EVOGUARD_EXTENDED_NPM_CACHE": runner_temp / "npm-cache",
               "GOBIN": runner_temp / "go-bin",
+              "GOCACHE": runner_temp / "go-build-cache",
           }
           destination = Path(os.environ["GITHUB_ENV"])
           with destination.open("a", encoding="utf-8", newline="\n") as handle:

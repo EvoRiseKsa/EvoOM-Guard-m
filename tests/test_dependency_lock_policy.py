@@ -247,6 +247,7 @@ def test_extended_live_workflow_uses_the_reviewed_exact_inputs() -> None:
         "npm ci --ignore-scripts --prefix tools/ci-live-runners/node",
         "go mod verify",
         "go install gotest.tools/gotestsum",
+        '"GOCACHE": runner_temp / "go-build-cache"',
         'BUNDLE_FROZEN: "true"',
         "bundle install --jobs 4 --retry 3",
         "python -m tools.conformance.fetch_live_runner_maven_cache",

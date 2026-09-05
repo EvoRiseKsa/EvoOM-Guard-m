@@ -71,6 +71,14 @@ retained evidence say so.
   failures are present; child-derived failures remain authoritative and all
   broader, mixed, invented, or reverse aliases remain invalid.
 
+### Fixed
+
+- **Windows Go judge environment.** Each setup, repository-suite, and verifier-
+  pack subprocess now receives an explicit judge-owned `GOCACHE`. This keeps
+  Go builds usable after the minimal Windows environment removes ambient
+  `LOCALAPPDATA`, while preserving phase separation and refusing an ambient
+  user build cache.
+
 ## [4.8.1] — 2026-09-03
 
 ### Fixed
