@@ -820,8 +820,8 @@ def validate_result(value: Mapping[str, Any]) -> None:
         {*_EXPECTED_TOOLS, "bash_path", "bash_version"},
         "environment.tools",
     )
-    for name, expected in _EXPECTED_TOOLS.items():
-        if tools[name] != expected:
+    for name, expected_version in _EXPECTED_TOOLS.items():
+        if tools[name] != expected_version:
             raise LiveRunnerExtendedResultError(
                 f"environment.tools.{name} is outside the pinned contract"
             )
