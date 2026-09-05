@@ -15,6 +15,8 @@ runs live in ``test_node_oracle.py`` / ``test_vitest_oracle.py``.
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from evoom_guard.adapters import (
@@ -186,18 +188,24 @@ def test_mocha_matches():
     assert not a.matches(["jest"])
 
 
-def test_mocha_instrument_appends_junit_reporter():
+def test_mocha_instrument_appends_builtin_xunit_reporter():
     cmd = MochaAdapter().instrument(["mocha", "test/"], "/x.xml")
     assert cmd == [
         "mocha", "test/",
-        "--reporter", "mocha-junit-reporter",
-        "--reporter-options", "mochaFile=/x.xml",
+        "--posix-exit-codes",
+        "--reporter", "xunit",
+        "--reporter-option", "output=/x.xml",
     ]
 
 
 def test_mocha_declines_when_reporter_present():
     assert MochaAdapter().instrument(["mocha", "--reporter", "spec"], "/x") is None
     assert MochaAdapter().instrument(["mocha", "-R", "dot"], "/x") is None
+    assert MochaAdapter().instrument(["mocha", "-Rxunit"], "/x") is None
+    assert MochaAdapter().instrument(["mocha", "--reporter=xunit"], "/x") is None
+    assert MochaAdapter().instrument(["mocha", "--reporter-option", "output=x"], "/x") is None
+    assert MochaAdapter().instrument(["mocha", "--reporter-options=output=x"], "/x") is None
+    assert MochaAdapter().instrument(["mocha", "-Ooutput=x"], "/x") is None
 
 
 # ───────────────────────────── maven (Java) adapter ──────────────────────────
@@ -212,13 +220,24 @@ def test_maven_matches():
 
 def test_maven_instrument_redirects_reports_dir():
     cmd = MavenAdapter().instrument(["mvn", "test"], "/out/judge-result.xml")
-    assert cmd == ["mvn", "test", "-Dsurefire.reportsDirectory=/out/judge-result.xml.d"]
+    assert cmd == [
+        "mvn",
+        "test",
+        "-Devoguard.surefire.reportsDirectory=/out/judge-result.xml.d",
+    ]
 
 
-def test_maven_declines_when_reports_dir_present():
-    assert MavenAdapter().instrument(
-        ["mvn", "test", "-Dsurefire.reportsDirectory=x"], "/out/r.xml"
-    ) is None
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["-Devoguard.surefire.reportsDirectory=x"],
+        ["-Dsurefire.reportsDirectory=x"],
+        ["-DreportsDirectory=x"],
+        ["-D", "evoguard.surefire.reportsDirectory=x"],
+    ],
+)
+def test_maven_declines_when_reports_dir_present(arguments):
+    assert MavenAdapter().instrument(["mvn", "test", *arguments], "/out/r.xml") is None
 
 
 # ───────────────────────────── ShellAdapter ───────────────────────────────────
@@ -428,9 +447,13 @@ def test_instrument_command_dispatches_new_runners():
     cmd, exp, env = instrument_command(["rspec", "spec/"], "/x.xml")
     assert exp is True and "--out" in cmd and "/x.xml" in cmd and env == {}
     cmd, exp, env = instrument_command(["mocha", "test/"], "/x.xml")
-    assert exp is True and "mochaFile=/x.xml" in cmd and env == {}
+    assert exp is True and "--posix-exit-codes" in cmd and "output=/x.xml" in cmd and env == {}
     cmd, exp, env = instrument_command(["mvn", "test"], "/x.xml")
-    assert exp is True and "-Dsurefire.reportsDirectory=/x.xml.d" in cmd and env == {}
+    assert (
+        exp is True
+        and "-Devoguard.surefire.reportsDirectory=/x.xml.d" in cmd
+        and env == {}
+    )
 
 
 def test_registry_has_all_runners():

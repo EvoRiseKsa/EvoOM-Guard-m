@@ -20,7 +20,7 @@
     {
       "install_path": ".github/workflows/evoguard-reverify.yml",
       "resource": "reverify.yml",
-      "sha256": "2080ff1f4b5d0b0875328add13c2a42486aad4efd4b4efe45283d3d7d05efc4c"
+      "sha256": "135b101ab5196bfa1e237a7f38a57a236b20fb6502a7197ac318a9b139a7ec52"
     },
     {
       "install_path": ".github/workflows/evoguard-seal.yml",

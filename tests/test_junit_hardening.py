@@ -190,6 +190,44 @@ def test_rejects_aggregate_claim_that_disagrees_with_testcases():
     assert parse_junit_xml(invented_failure) is None
 
 
+def test_mocha_xunit_error_alias_retains_explicit_failures():
+    report = (
+        '<testsuite name="Mocha Tests" tests="2" failures="0" errors="1" skipped="0">'
+        '<testcase name="passed"/>'
+        '<testcase name="failed"><failure message="assertion failed"/></testcase>'
+        "</testsuite>"
+    )
+
+    counts = parse_junit_xml(report)
+
+    assert counts is not None
+    assert (counts.passed, counts.total, counts.failures, counts.errors) == (1, 2, 1, 0)
+
+
+def test_mocha_xunit_compatibility_rejects_non_equivalent_counter_claims():
+    invented_extra_error = (
+        '<testsuite tests="2" failures="0" errors="2" skipped="0">'
+        '<testcase name="passed"/>'
+        '<testcase name="failed"><failure/></testcase>'
+        "</testsuite>"
+    )
+    mixed_child_states = (
+        '<testsuite tests="2" failures="0" errors="2" skipped="0">'
+        '<testcase name="failed"><failure/></testcase>'
+        '<testcase name="errored"><error/></testcase>'
+        "</testsuite>"
+    )
+    reverse_alias = (
+        '<testsuite tests="1" failures="1" errors="0" skipped="0">'
+        '<testcase name="errored"><error/></testcase>'
+        "</testsuite>"
+    )
+
+    assert parse_junit_xml(invented_extra_error) is None
+    assert parse_junit_xml(mixed_child_states) is None
+    assert parse_junit_xml(reverse_alias) is None
+
+
 def test_canary_case_failed_detects_the_named_failing_node():
     # The canary node failed (or errored) -> True; a passing canary or an absent
     # canary -> False. This is what upgrades a neutered run from FAIL to TAMPERED.

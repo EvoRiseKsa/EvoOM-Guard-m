@@ -78,6 +78,76 @@ black-box Docker base uses a reviewed immutable OCI index digest, not the
 mutable `python:3.12-slim` tag. Both the workflow and
 `ops/ci/docker/evoguard-e2e-pytest.Dockerfile` must keep the same digest.
 
+## Extended live-runner tooling
+
+The optional extended live-runner job exercises Jest, gotestsum, RSpec, Mocha,
+Maven, and Shell on `ubuntu-latest` and `windows-latest`. Its workflow is
+configured for exact Python 3.12.10, Node 22.23.2, Go 1.27.1, Ruby 3.4.10,
+Bundler 4.0.20, Temurin 21.0.9+10, and Maven 3.9.16. The setup actions are
+pinned to full commit SHAs. GitHub-hosted image labels and the runner-provided
+Bash binary remain provider-controlled inputs; the result records the delivered
+image and GNU Bash version instead of claiming those inputs are immutable.
+
+The language-specific inputs under `tools/ci-live-runners/` close different
+resolver boundaries:
+
+- Node declares exact Jest 30.5.1, `jest-junit` 17.0.0, and Mocha 12.0.0
+  versions in `node/package.json`. Its npm v3 lock binds every resolved package
+  to an integrity value, and installation uses `npm ci --ignore-scripts`.
+  Jest's package version is 30.5.1 while its reviewed CLI reports 30.5.0; the
+  evidence contract checks both values rather than treating them as equal.
+- Go declares language/toolchain version 1.27.1 and exact gotestsum 1.13.0 in
+  `go/go.mod`; `go/go.sum` binds the downloaded module graph. The workflow uses
+  `GOTOOLCHAIN=local`, then runs `go mod download`, `go mod verify`, and
+  `go install gotest.tools/gotestsum` from that module.
+- Ruby declares exact RSpec 3.13.2 and `rspec_junit_formatter` 0.6.0 versions.
+  `ruby/Gemfile.lock` pins the resolved graph, contains a SHA-256 checksum for
+  every gem, and records Bundler 4.0.20. The workflow sets `BUNDLE_FROZEN=true`
+  before installation.
+- Maven's fixture pins JUnit 5.14.0, `maven-compiler-plugin` 3.14.1, and
+  `maven-surefire-plugin` 3.5.6. The Maven 3.9.16 binary ZIP is downloaded from
+  the Apache archive and must match this SHA-512 before extraction:
+
+  ```text
+  ed41650d42485cfc243fad22158caf9cbb5dc408ce7a09ddb94dd42a019de929ca43065bfa450612cf12bf78b5cafa3884b96c090de326ff590448c933454af3
+  ```
+
+  `fetch_live_runner_maven_cache.py` derives every artifact URL from the
+  reviewed manifest and the fixed `https://repo.maven.apache.org/maven2/`
+  origin. It uses certificate-verified stdlib HTTPS, disables proxies, refuses
+  redirects and encoded responses, bounds every response and the aggregate,
+  and places a file only after its SHA-256 matches. It then requires the exact
+  set of 160 JAR/POM files and their SHA-256 values to match
+  `maven/artifacts.sha256` before any Maven plugin or downloaded JAR executes.
+  That manifest's own reviewed SHA-256 is
+  `f37c00a195eda1587eec90849c385fe11438458fcb6a38e91dcba534e24ea18b`.
+  The fixture smoke run and every Guard Maven command use offline mode. The
+  cache is checked again after the smoke run and before the evidence result is
+  created. Maven `-o` disables resolver downloads; it is not a network sandbox
+  for code inside a plugin, and the result does not claim hostile-code
+  production isolation.
+
+  This Maven fixture is also the reviewed compatibility contract, not a generic
+  Maven default. Its POM defines
+  `evoguard.surefire.reportsDirectory` as
+  `${project.build.directory}/surefire-reports` and explicitly maps Surefire's
+  `<reportsDirectory>` to that property. The adapter supplies a namespaced
+  `-Devoguard.surefire.reportsDirectory=<judge-path>.d` override. A consumer POM
+  without this opt-in bridge does not redirect Surefire, so the required
+  judge-owned report remains absent and Guard fails closed.
+
+These are CI-only fixtures and tools, not EvoOM Guard runtime dependencies.
+Their exact locks constrain resolution and make drift detectable; they do not
+independently audit upstream publication, the package registries, the setup
+actions, or the GitHub-hosted images. A checked-in matrix definition also does
+not prove that the matrix ran or passed. Only a successful run's exact retained
+result supports the bounded, same-owner conformance claim described in
+`docs/RUNNER_CONFORMANCE.md`; it is not independent validation, hostile-code
+production isolation, Core GA, Enterprise readiness, or a customer result.
+The retained JSON binds the downloader, manifest, workflow, and observed tool
+versions; it does not embed the Maven cache bytes or independently attest Maven
+Central's operator or publication process.
+
 ## Deliberate boundary for Action consumers
 
 In the ledger-recorded `v4.6.0` release, `action.yml` builds the reviewed

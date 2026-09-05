@@ -13,5 +13,6 @@ dist/
 venv/
 .coverage
 node_modules/
+/tools/ci-live-runners/maven/target/
 work/
 .claude/settings.local.json

@@ -120,7 +120,7 @@ def _report_path(command: list[str]) -> tuple[Path | None, bool]:
     for token in command:
         if token.startswith("--junitxml="):
             return Path(token.split("=", 1)[1]), False
-        if token.startswith("-Dsurefire.reportsDirectory="):
+        if token.startswith("-Devoguard.surefire.reportsDirectory="):
             return Path(token.split("=", 1)[1]), True
     return None, False
 

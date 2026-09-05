@@ -583,6 +583,36 @@ def _path_is_within(path: Path, root: Path) -> bool:
         return False
 
 
+def _absolute_environment_temp_roots() -> tuple[Path, ...]:
+    roots: list[Path] = []
+    seen: set[str] = set()
+    for name in ("TEMP", "TMP", "TMPDIR"):
+        raw = os.environ.get(name)
+        if not raw or "\x00" in raw:
+            continue
+        try:
+            candidate = Path(raw)
+            if not candidate.is_absolute():
+                continue
+            candidate = _absolute(candidate)
+        except (OSError, TypeError, ValueError):
+            continue
+        portable = os.path.normcase(os.fspath(candidate))
+        if portable not in seen:
+            seen.add(portable)
+            roots.append(candidate)
+    return tuple(roots)
+
+
+def _blocked_host_tool_roots(root: Path) -> tuple[Path, ...]:
+    return (
+        _absolute(root),
+        _absolute(Path.cwd()),
+        _absolute(Path(tempfile.gettempdir())),
+        *_absolute_environment_temp_roots(),
+    )
+
+
 def _host_directory_chain(path: Path) -> dict[Path, tuple[int, int]]:
     chain: dict[Path, tuple[int, int]] = {}
     for current in (path, *path.parents):
@@ -685,11 +715,7 @@ def _read_host_executable(path: Path) -> tuple[bytes, _FileIdentity]:
 
 
 def _resolve_git(root: Path) -> _TrustedGit:
-    blocked = (
-        _absolute(root),
-        _absolute(Path.cwd()),
-        _absolute(Path(tempfile.gettempdir())),
-    )
+    blocked = _blocked_host_tool_roots(root)
     executable_name = "git.exe" if os.name == "nt" else "git"
     seen: set[str] = set()
     for raw in os.environ.get("PATH", "").split(os.pathsep):
@@ -728,11 +754,7 @@ def _resolve_git(root: Path) -> _TrustedGit:
 def _resolve_host_tool(root: Path, basename: str) -> _TrustedGit:
     if re.fullmatch(r"[a-z0-9-]+", basename) is None:
         raise ProjectStatusError("trusted host-tool name is invalid")
-    blocked = (
-        _absolute(root),
-        _absolute(Path.cwd()),
-        _absolute(Path(tempfile.gettempdir())),
-    )
+    blocked = _blocked_host_tool_roots(root)
     executable_name = f"{basename}.exe" if os.name == "nt" else basename
     seen: set[str] = set()
     for raw in os.environ.get("PATH", "").split(os.pathsep):
@@ -873,11 +895,7 @@ def _trusted_git_session(root: Path) -> Iterator[None]:
     with _GIT_LOCK:
         if _ACTIVE_GIT is not None:
             directory = _ACTIVE_GIT.path.parent
-            blocked = (
-                _absolute(root),
-                _absolute(Path.cwd()),
-                _absolute(Path(tempfile.gettempdir())),
-            )
+            blocked = _blocked_host_tool_roots(root)
             if any(
                 _path_is_within(directory, item)
                 or _path_is_within(item, directory)

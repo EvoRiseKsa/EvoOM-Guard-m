@@ -197,7 +197,7 @@ def test_maven_report_set_and_pack_are_both_bound_into_composite_evidence(
             (
                 arg
                 for arg in command
-                if arg.startswith("-Dsurefire.reportsDirectory=")
+                if arg.startswith("-Devoguard.surefire.reportsDirectory=")
             ),
             None,
         )

@@ -33,10 +33,24 @@ DOCKER_INPUT = ROOT / "requirements" / "docker-pytest.in"
 DOCKER_LOCK = ROOT / "requirements" / "docker-pytest.lock"
 NODE_PACKAGE = ROOT / "tools" / "ci-vitest" / "package.json"
 NODE_LOCK = ROOT / "tools" / "ci-vitest" / "package-lock.json"
+LIVE_RUNNER = ROOT / ".github" / "workflows" / "runner-live-conformance.yml"
+EXTENDED_NODE_PACKAGE = ROOT / "tools" / "ci-live-runners" / "node" / "package.json"
+EXTENDED_NODE_LOCK = ROOT / "tools" / "ci-live-runners" / "node" / "package-lock.json"
+EXTENDED_GO_MOD = ROOT / "tools" / "ci-live-runners" / "go" / "go.mod"
+EXTENDED_GO_SUM = ROOT / "tools" / "ci-live-runners" / "go" / "go.sum"
+EXTENDED_GEMFILE = ROOT / "tools" / "ci-live-runners" / "ruby" / "Gemfile"
+EXTENDED_GEM_LOCK = ROOT / "tools" / "ci-live-runners" / "ruby" / "Gemfile.lock"
+EXTENDED_MAVEN_POM = ROOT / "tools" / "ci-live-runners" / "maven" / "pom.xml"
+EXTENDED_MAVEN_ARTIFACTS = (
+    ROOT / "tools" / "ci-live-runners" / "maven" / "artifacts.sha256"
+)
 DOCKERFILE = ROOT / "ops" / "ci" / "docker" / "evoguard-e2e-pytest.Dockerfile"
 POLICY = ROOT / "docs" / "DEPENDENCY_POLICY.md"
+RUNNER_CONFORMANCE_POLICY = ROOT / "docs" / "RUNNER_CONFORMANCE.md"
+THIRD_PARTY = ROOT / "THIRD_PARTY.md"
 CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
 DEPENDABOT = ROOT / ".github" / "dependabot.yml"
+GITIGNORE = ROOT / ".gitignore"
 
 
 def _input_requirements(path: Path) -> list[str]:
@@ -107,6 +121,168 @@ def test_node_ci_lock_is_exact_and_integrity_bound() -> None:
     assert all(metadata.get("integrity", "").startswith("sha512-") for metadata in package_entries.values())
 
 
+def test_extended_node_lock_is_exact_and_integrity_bound() -> None:
+    package = json.loads(EXTENDED_NODE_PACKAGE.read_text(encoding="utf-8"))
+    lock = json.loads(EXTENDED_NODE_LOCK.read_text(encoding="utf-8"))
+    expected = {
+        "jest": "30.5.1",
+        "jest-junit": "17.0.0",
+        "mocha": "12.0.0",
+    }
+
+    assert package["private"] is True
+    assert package["devDependencies"] == expected
+    assert lock["lockfileVersion"] == 3
+    assert lock["packages"][""]["devDependencies"] == expected
+    for name, version in expected.items():
+        assert lock["packages"][f"node_modules/{name}"]["version"] == version
+
+    package_entries = {
+        path: metadata
+        for path, metadata in lock["packages"].items()
+        if path.startswith("node_modules/")
+    }
+    assert len(package_entries) >= 3
+    assert all(
+        metadata.get("integrity", "").startswith("sha512-")
+        for metadata in package_entries.values()
+    )
+
+
+def test_extended_go_and_ruby_locks_bind_exact_tool_graphs() -> None:
+    assert EXTENDED_GO_MOD.read_text(encoding="utf-8").splitlines() == [
+        "module github.com/EvoRiseKsa/EvoOM-Guard-m/tools/ci-live-runners/go",
+        "",
+        "go 1.27.1",
+        "",
+        "require gotest.tools/gotestsum v1.13.0",
+    ]
+    go_sum_lines = EXTENDED_GO_SUM.read_text(encoding="utf-8").splitlines()
+    assert go_sum_lines == sorted(set(go_sum_lines))
+    assert all(
+        re.fullmatch(r"[^\s]+ [^\s]+(?:/go\.mod)? h1:[A-Za-z0-9+/]{43}=", line)
+        for line in go_sum_lines
+    )
+    assert "gotest.tools/gotestsum v1.13.0 h1:+Lh454O9mu9AMG1APV4o0y7oDYKyik/3kBOiCqiEpRo=" in go_sum_lines
+    assert "gotest.tools/gotestsum v1.13.0/go.mod h1:7f0NS5hFb0dWr4NtcsAsF0y1kzjEFfAil0HiBQJE03Q=" in go_sum_lines
+
+    assert EXTENDED_GEMFILE.read_text(encoding="utf-8").splitlines() == [
+        'source "https://rubygems.org"',
+        "",
+        'gem "rspec", "3.13.2"',
+        'gem "rspec_junit_formatter", "0.6.0"',
+    ]
+    gem_lock = EXTENDED_GEM_LOCK.read_text(encoding="utf-8")
+    gem_section = gem_lock.split("GEM\n", 1)[1].split("\nPLATFORMS", 1)[0]
+    checksum_section = gem_lock.split("CHECKSUMS\n", 1)[1].split(
+        "\nBUNDLED WITH", 1
+    )[0]
+    specs = set(
+        re.findall(r"^    ([A-Za-z0-9_.-]+) \(([^)]+)\)$", gem_section, re.MULTILINE)
+    )
+    checksums = {
+        (name, version): digest
+        for name, version, digest in re.findall(
+            r"^  ([A-Za-z0-9_.-]+) \(([^)]+)\) sha256=([0-9a-f]{64})$",
+            checksum_section,
+            re.MULTILINE,
+        )
+    }
+    assert len(specs) == 7
+    assert set(checksums) == specs
+    assert ("rspec", "3.13.2") in specs
+    assert ("rspec_junit_formatter", "0.6.0") in specs
+    assert gem_lock.endswith("BUNDLED WITH\n   4.0.20\n")
+
+
+def test_extended_maven_archive_and_repository_inventory_are_exact() -> None:
+    pom = EXTENDED_MAVEN_POM.read_text(encoding="utf-8")
+    assert pom.count("<junit.version>5.14.0</junit.version>") == 1
+    assert pom.count("<artifactId>maven-compiler-plugin</artifactId>") == 1
+    assert pom.count("<version>3.14.1</version>") == 1
+    assert pom.count("<artifactId>maven-surefire-plugin</artifactId>") == 1
+    assert pom.count("<version>3.5.6</version>") == 1
+    assert pom.count("<maven.compiler.release>21</maven.compiler.release>") == 1
+    bridge_default = (
+        "<evoguard.surefire.reportsDirectory>"
+        "${project.build.directory}/surefire-reports"
+        "</evoguard.surefire.reportsDirectory>"
+    )
+    bridge_mapping = (
+        "<reportsDirectory>"
+        "${evoguard.surefire.reportsDirectory}"
+        "</reportsDirectory>"
+    )
+    assert pom.count(bridge_default) == 1
+    assert pom.count(bridge_mapping) == 1
+    assert "/tools/ci-live-runners/maven/target/" in GITIGNORE.read_text(
+        encoding="utf-8"
+    ).splitlines()
+
+    raw_manifest = EXTENDED_MAVEN_ARTIFACTS.read_bytes()
+    assert hashlib.sha256(raw_manifest).hexdigest() == (
+        "f37c00a195eda1587eec90849c385fe11438458fcb6a38e91dcba534e24ea18b"
+    )
+    assert raw_manifest.endswith(b"\n") and b"\r" not in raw_manifest
+    lines = raw_manifest.decode("utf-8").removesuffix("\n").split("\n")
+    assert len(lines) == 160
+    matches = [
+        re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.+/-]+\.(?:jar|pom))", line)
+        for line in lines
+    ]
+    assert all(match is not None for match in matches)
+    paths = [match.group(2) for match in matches if match is not None]
+    assert paths == sorted(set(paths))
+
+
+def test_extended_live_workflow_uses_the_reviewed_exact_inputs() -> None:
+    text = LIVE_RUNNER.read_text(encoding="utf-8")
+    expected_fragments = (
+        'python-version: "3.12.10"',
+        'node-version: "22.23.2"',
+        'go-version: "1.27.1"',
+        'java-version: "21.0.9+10"',
+        'ruby-version: "3.4.10"',
+        'bundler: "4.0.20"',
+        "npm ci --ignore-scripts --prefix tools/ci-live-runners/node",
+        "go mod verify",
+        "go install gotest.tools/gotestsum",
+        'BUNDLE_FROZEN: "true"',
+        "bundle install --jobs 4 --retry 3",
+        "python -m tools.conformance.fetch_live_runner_maven_cache",
+    )
+    for fragment in expected_fragments:
+        assert fragment in text
+
+    maven_sha512 = (
+        "ed41650d42485cfc243fad22158caf9cbb5dc408ce7a09ddb94dd42a019de929c"
+        "a43065bfa450612cf12bf78b5cafa3884b96c090de326ff590448c933454af3"
+    )
+    assert text.count(maven_sha512) == 2
+    assert text.count("apache-maven-3.9.16-bin.zip") >= 4
+    assert text.count(
+        "python -m tools.conformance.verify_live_runner_maven_cache"
+    ) == 2
+    extended = text.split("\n  extended:\n", 1)[1].split(
+        "\n  runner-live-conformance:\n", 1
+    )[0]
+    maven_commands = [
+        line.strip()
+        for line in extended.splitlines()
+        if line.strip().startswith("mvn ")
+    ]
+    assert maven_commands
+    assert all(" -o " in command for command in maven_commands)
+    assert 'GOTOOLCHAIN: local' in text
+    assert "needs: [live, extended]" in text
+    maven_oracle = (ROOT / "tests" / "test_maven_live_oracle.py").read_text(
+        encoding="utf-8"
+    )
+    assert '["mvn", "-q", "-o", f"-Dmaven.repo.local={repository}", "test"]' in (
+        maven_oracle
+    )
+
+
 def test_workflows_install_only_from_locked_inputs() -> None:
     workflows = (CI, RELEASE, WINDOWS, ACTION_SMOKE)
     text = "\n".join(path.read_text(encoding="utf-8") for path in workflows)
@@ -168,6 +344,45 @@ def test_product_and_consumer_boundaries_are_documented() -> None:
     assert "github.action_path" in policy
     assert "resolver-free **bootstrap**, not a zero-network Action" in policy
     assert "OpenSSF Scorecard" in policy
+
+
+def test_extended_runner_locks_and_claim_boundary_are_documented() -> None:
+    dependency_policy = POLICY.read_text(encoding="utf-8")
+    runner_policy = RUNNER_CONFORMANCE_POLICY.read_text(encoding="utf-8")
+    runner_words = " ".join(runner_policy.split())
+    third_party = THIRD_PARTY.read_text(encoding="utf-8")
+
+    for value in (
+        "Python 3.12.10",
+        "Node 22.23.2",
+        "Go 1.27.1",
+        "Ruby 3.4.10",
+        "Bundler 4.0.20",
+        "Temurin 21.0.9+10",
+        "Maven 3.9.16",
+        "160 JAR/POM",
+        "evoguard.surefire.reportsDirectory",
+        "f37c00a195eda1587eec90849c385fe11438458fcb6a38e91dcba534e24ea18b",
+        "before any Maven plugin or downloaded JAR executes",
+        "not a network sandbox",
+    ):
+        assert value in dependency_policy
+
+    assert "checked-in configuration is not itself evidence" in runner_words
+    assert "same-owner GitHub-hosted operational conformance evidence" in runner_words
+    assert "not an independent evaluation" in runner_words
+    assert "hostile code production isolation" in runner_words
+    assert "Core GA or Enterprise readiness" in runner_words
+    assert "Maven live conformance is an explicit project opt-in" in runner_words
+    assert "Without it, no judge-owned report" in runner_words
+    assert "generic Maven-project support claim" in runner_words
+    for path in (
+        "tools/ci-live-runners/node/",
+        "tools/ci-live-runners/go/",
+        "tools/ci-live-runners/ruby/",
+        "tools/ci-live-runners/maven/",
+    ):
+        assert path in third_party
 
 
 def test_action_smoke_exercises_only_reviewed_locked_environments() -> None:
@@ -392,11 +607,21 @@ def test_trusted_dependency_inputs_are_codeowner_protected() -> None:
     for path in (
         "/requirements/",
         "/tools/ci-vitest/",
+        "/tools/ci-live-runners/",
+        "/tools/conformance/",
         "/ops/ci/",
         "/ops/build_pyz.py",
         "/ops/generate_spdx_sbom.py",
         "/tests/test_action_security.py",
+        "/tests/test_adapters.py",
+        "/tests/test_adversarial_integrity_boundaries.py",
         "/tests/test_dependency_lock_policy.py",
+        "/tests/test_junit_hardening.py",
+        "/tests/test_repo_phase_characterization.py",
+        "/tests/conformance/",
+        "/tests/live_runner_extended_helpers.py",
+        "/tests/test_*_live_oracle.py",
+        "/tests/test_live_runner_maven_cache.py",
         "/tests/test_release_security.py",
         "/tests/test_spdx_sbom.py",
         "/tests/schema/",
@@ -404,7 +629,9 @@ def test_trusted_dependency_inputs_are_codeowner_protected() -> None:
         "/docs/DEPENDENCY_POLICY.md",
         "/docs/EVIDENCE_BUNDLES.md",
         "/docs/GUARD.md",
+        "/docs/RUNNER_CONFORMANCE.md",
         "/docs/SBOM.md",
+        "/THIRD_PARTY.md",
         "/evidence/direct-releases/",
     ):
         assert f"{path} @MANA-awam" in codeowners

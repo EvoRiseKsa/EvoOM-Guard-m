@@ -884,6 +884,76 @@ class ProjectStatusTests(unittest.TestCase):
                     )
                 verifier.assert_not_called()
 
+    def test_host_resolvers_block_each_absolute_temp_environment_root(self) -> None:
+        executable_names = (
+            "git.exe" if os.name == "nt" else "git",
+            "ssh-keygen.exe" if os.name == "nt" else "ssh-keygen",
+        )
+        with TemporaryDirectory(dir=ROOT.parent) as temporary:
+            base = Path(temporary)
+            environment_roots = {
+                name: base / name.lower() for name in ("TEMP", "TMP", "TMPDIR")
+            }
+            for environment_root in environment_roots.values():
+                tool_directory = environment_root / "tools"
+                tool_directory.mkdir(parents=True)
+                for executable_name in executable_names:
+                    fake = tool_directory / executable_name
+                    fake.write_bytes(b"malicious\n")
+                    if os.name != "nt":
+                        fake.chmod(0o755)
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        name: os.fspath(path)
+                        for name, path in environment_roots.items()
+                    },
+                ),
+                mock.patch.object(
+                    render_project_status.tempfile,
+                    "gettempdir",
+                    return_value=os.fspath(base / "effective-temp"),
+                ),
+            ):
+                for name, environment_root in environment_roots.items():
+                    tool_directory = environment_root / "tools"
+                    with (
+                        self.subTest(environment=name),
+                        mock.patch.dict(
+                            os.environ,
+                            {"PATH": os.fspath(tool_directory)},
+                        ),
+                    ):
+                        with (
+                            self.subTest(resolver="git"),
+                            self.assertRaises(render_project_status.ProjectStatusError),
+                        ):
+                            render_project_status._resolve_git(ROOT)
+                        with (
+                            self.subTest(resolver="ssh-keygen"),
+                            self.assertRaises(render_project_status.ProjectStatusError),
+                        ):
+                            render_project_status._resolve_host_tool(
+                                ROOT,
+                                "ssh-keygen",
+                            )
+
+    def test_host_resolver_temp_roots_ignore_nonabsolute_or_quoted_values(self) -> None:
+        valid = ROOT.parent / "absolute-host-tool-temp"
+        with mock.patch.dict(
+            os.environ,
+            {
+                "TEMP": "relative-temp",
+                "TMP": f'"{valid}"',
+                "TMPDIR": os.fspath(valid),
+            },
+        ):
+            self.assertEqual(
+                render_project_status._absolute_environment_temp_roots(),
+                (render_project_status._absolute(valid),),
+            )
+
     def test_direct_release_signature_uses_only_a_trusted_host_tool_environment(
         self,
     ) -> None:

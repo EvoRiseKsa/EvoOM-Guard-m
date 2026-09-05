@@ -103,26 +103,73 @@ offline v1 contract in that run. The result states
 ```
 
 The separate `Runner live conformance` workflow complements this offline kit.
-It executes real Guard PASS/FAIL oracles for pytest, Node `--test`, and Vitest,
-plus a protected-test tamper/rejection oracle for pytest, against Node 22 and
-the locked Vitest version on Ubuntu (Python 3.10/3.11/3.12) and Windows (Python
-3.12). Every cell must execute the exact 13 reviewed oracle tests with zero
-skips, failures, or errors. Pytest third-party plugin autoload is disabled. It
-writes a create-only `evoguard-live-runner-conformance-v1` JSON record bound to
-the exact JUnit bytes, reviewed source subset, complete Git commit/tree,
-installed Python package-inventory digest, tool versions, GitHub-hosted runner
-image/architecture, workflow SHA, run, and attempt and verifies it immediately.
-The workflow then uploads only that JSON/JUnit pair, validates the immutable
-numeric artifact ID and digest, downloads that exact artifact with digest
-mismatch configured as fatal, and semantically re-verifies the downloaded
-bytes. The artifact is retained for 30 days.
+Its `live` job executes real Guard PASS/FAIL oracles for pytest, Node `--test`,
+and Vitest, plus a protected-test tamper/rejection oracle for pytest, against
+Node 22 and the locked Vitest version on Ubuntu (Python 3.10/3.11/3.12) and
+Windows (Python 3.12). Every core cell must execute the exact 13 reviewed oracle
+tests with zero skips, failures, or errors. Pytest third-party plugin autoload
+is disabled. Each cell writes a create-only
+`evoguard-live-runner-conformance-v1` JSON record bound to the exact JUnit
+bytes, reviewed source subset, complete Git commit/tree, installed Python
+package-inventory digest, tool versions, GitHub-hosted runner image/architecture,
+workflow SHA, run, and attempt and verifies it immediately.
 
-The stable aggregate check is `runner-live-conformance`. It is same-owner
-GitHub-hosted operational evidence, not an independent result or a hostile-code
-production boundary. Jest, gotestsum, RSpec, Mocha, Maven, and generic shell
-owners remain **adapter-contract-only** until equivalent real-suite cells are
-added; their presence in the offline manifest is not an advertised live runner
-support claim.
+The workflow also defines an `extended` job with exactly two cells:
+
+- `ubuntu-latest`, Python 3.12.10;
+- `windows-latest`, Python 3.12.10.
+
+Each extended cell runs the same reviewed 18-oracle set for Jest, gotestsum,
+RSpec, Mocha, Maven, and Shell. The set contains explicit JUnit parsing,
+honest-fix PASS, and broken-fix FAIL checks for each structured owner; Jest also
+has a protected-test rewrite rejection oracle, while Shell has no JUnit parser
+case. A skip, collection failure, test failure, missing executable, version
+mismatch, or missing environment binding fails the cell.
+
+Maven live conformance is an explicit project opt-in. Surefire does not expose
+its `reportsDirectory` parameter as a generic Maven CLI user property. A
+supported POM must define `evoguard.surefire.reportsDirectory` with its ordinary
+default and map
+`<reportsDirectory>${evoguard.surefire.reportsDirectory}</reportsDirectory>` in
+the Surefire configuration. The adapter supplies only the namespaced
+`-Devoguard.surefire.reportsDirectory=<judge-path>.d` override. The checked-in
+Maven fixture contains that bridge. Without it, no judge-owned report appears
+at the required path and Guard fails closed; neither offline adapter matching
+nor a result from the bridged fixture is a generic Maven-project support claim.
+
+The extended runtime is configured for exact Python 3.12.10, Node 22.23.2, Go
+1.27.1, gotestsum 1.13.0, Ruby 3.4.10, Bundler 4.0.20, RSpec 3.13.2,
+`rspec_junit_formatter` 0.6.0, Temurin 21.0.9+10 (reported Java 21.0.9), Maven
+3.9.16, Jest package 30.5.1 (reported CLI 30.5.0), `jest-junit` 17.0.0, and
+Mocha 12.0.0. Bash is the runner-provided executable at `/usr/bin/bash` on
+Ubuntu or the Git for Windows path; its actual GNU Bash version is observed and
+bound into the cell result rather than represented as a dependency lock.
+
+Each extended cell writes a create-only
+`evoguard-live-runner-extended-conformance-v1` record. The verifier requires the
+exact 18 test names and zero skips, failures, or errors; exact tool versions;
+the reviewed source inventory; the JUnit digest; the complete Git commit/tree;
+the installed Python inventory; and GitHub workflow, runner-image, run, and
+attempt identity. A fixed-origin stdlib downloader fetches Maven JAR/POM bytes
+without executing Maven, rejects redirects, and verifies all 160 reviewed paths
+and SHA-256 values in `tools/ci-live-runners/maven/artifacts.sha256` before the
+offline fixture smoke run or any offline Maven oracle executes. The result binds
+the downloader, manifest, and workflow source but does not embed the cache or
+claim independent Maven Central provenance. Maven `-o` disables resolver
+downloads; it is not a network sandbox for plugin code.
+
+Both jobs upload only their JSON/JUnit pair, validate the immutable numeric
+artifact ID and digest, download that exact artifact with digest mismatch
+configured as fatal, and semantically re-verify the downloaded bytes. Artifacts
+are retained for 30 days. The stable aggregate check
+`runner-live-conformance` requires every core and extended cell.
+
+This checked-in configuration is not itself evidence that a GitHub run has
+succeeded. A live claim requires a successful run and retained records from the
+exact reviewed commit. Even then, the result is same-owner GitHub-hosted
+operational conformance evidence. It is not an independent evaluation, hostile
+code production isolation, general correctness proof, Core GA or Enterprise
+readiness, or a customer deployment result.
 
 The verifier establishes unsigned self-consistency only. It does not establish
 who ran the kit or prove independent launch. A release evidence bundle must
@@ -138,6 +185,18 @@ bytes, trusted manifest, source inventory, and CI/run identity.
   result schema.
 - `tools/conformance/live_runner_result.py`: exact JUnit/result validator.
 - `tools/conformance/run_live_runner_conformance.py`: create/verify CLI.
+- `tools/conformance/live-runner-extended-result.schema.json`: one extended
+  matrix-cell result schema.
+- `tools/conformance/live_runner_extended_result.py`: exact extended
+  JUnit/result and tool-version validator.
+- `tools/conformance/run_live_runner_extended_conformance.py`: create/verify
+  CLI for an extended matrix cell.
+- `tools/conformance/fetch_live_runner_maven_cache.py`: fixed-origin,
+  digest-before-execution Maven cache fetcher.
+- `tools/conformance/verify_live_runner_maven_cache.py`: exact Maven JAR/POM
+  cache-inventory verifier.
+- `tools/ci-live-runners/`: locked Node, Go, Ruby, and Maven fixtures used only
+  by the extended live job.
 - `tools/conformance/runner_kit.py`: offline evaluator and provenance collector.
 - `tools/conformance/run_runner_conformance.py`: create-only CLI.
 

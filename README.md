@@ -173,20 +173,28 @@ flags are required.
 | Python | pytest | `python -m pytest -q` | built-in `--junitxml` |
 | JavaScript / TypeScript | Vitest | `npx vitest run` | built-in `--reporter=junit` |
 | JavaScript / TypeScript | Jest | `npx jest` | `jest-junit` |
-| JavaScript / TypeScript | Mocha | `npx mocha` | `mocha-junit-reporter` |
+| JavaScript / TypeScript | Mocha | `npx mocha` | built-in `xunit` reporter with POSIX exit codes |
 | JavaScript / TypeScript | `node --test` | `node --test` | built-in reporter |
 | Go | gotestsum | `gotestsum ./...` | built-in `--junitfile` |
-| Java | Maven Surefire | `mvn -q test` | Surefire XML reports |
+| Java | Maven Surefire | `mvn -q test` | Surefire XML reports via the explicit POM bridge below |
 | Ruby | RSpec | `bundle exec rspec` | `rspec_junit_formatter` |
 | Any of the above | `sh -c "…"` | `sh -c "npx jest && go test ./..."` | wraps the inner runner |
 
-pytest, Vitest, `node --test`, and Maven need no extra plugin; Jest, Mocha,
-RSpec, and Go require their reporter package (`jest-junit`,
-`mocha-junit-reporter`, `rspec_junit_formatter`, `gotestsum`) to be installed in
+pytest, Vitest, Mocha, `node --test`, and Maven need no extra reporter plugin;
+Jest, RSpec, and Go require their reporter package (`jest-junit`,
+`rspec_junit_formatter`, `gotestsum`) to be installed in
 the environment where the suite runs. Any other command still runs but grades
 on the exit code alone. For the exact instrumented `argv` and report
 environment per runner, and how to add a new one, see
 [Runner adapter conformance](docs/RUNNER_CONFORMANCE.md).
+
+Maven projects must explicitly connect EvoOM Guard's judge-owned directory to
+Surefire because `reportsDirectory` is not a Maven CLI user property. Define a
+project property named `evoguard.surefire.reportsDirectory`, default it to
+`${project.build.directory}/surefire-reports`, and map Surefire's
+`<reportsDirectory>` configuration to that property. Without that opt-in POM
+bridge EvoOM Guard receives no structured report and fails closed; this is not a
+claim of generic Surefire support.
 
 To forbid that compatibility downgrade, run `evo-guard preflight . --strict`
 and opt the repository suite into `guard --require-structured-verdict` (or a

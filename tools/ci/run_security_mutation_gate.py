@@ -7576,6 +7576,41 @@ MUTATIONS = (
         test="tests/test_junit_hardening.py::test_rejects_doctype_billion_laughs_without_expanding",
     ),
     Mutation(
+        name="junit-mocha-failure-error-alias-disable",
+        path="evoom_guard/verifiers/junit_oracle.py",
+        before=(
+            "    if terminal_mismatches and not mocha_failure_error_alias:\n"
+        ),
+        after="    if terminal_mismatches:\n",
+        test=(
+            "tests/test_junit_hardening.py::"
+            "test_mocha_xunit_error_alias_retains_explicit_failures"
+        ),
+    ),
+    Mutation(
+        name="mocha-posix-exit-codes-disable",
+        path="evoom_guard/runners/mocha.py",
+        before='            "--posix-exit-codes",\n',
+        after="",
+        test=(
+            "tests/test_adapters.py::"
+            "test_mocha_instrument_appends_builtin_xunit_reporter"
+        ),
+    ),
+    Mutation(
+        name="maven-namespaced-report-property-regression",
+        path="evoom_guard/runners/maven.py",
+        before=(
+            '            f"-Devoguard.surefire.reportsDirectory='
+            '{report_path}.d",\n'
+        ),
+        after='            f"-Dsurefire.reportsDirectory={report_path}.d",\n',
+        test=(
+            "tests/test_adapters.py::"
+            "test_maven_instrument_redirects_reports_dir"
+        ),
+    ),
+    Mutation(
         name="subprocess-cleanup-requirement-validation-bypass",
         path="evoom_guard/execution/process.py",
         before=(

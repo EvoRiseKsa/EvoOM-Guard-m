@@ -417,13 +417,18 @@ no exit⟷report mismatch check).
 | **jest** | `jest` (or `.bin/jest`) | `junit+exit` | `jest-junit` resolvable (e.g. installed by `setup_command`) |
 | **gotestsum** (Go) | `gotestsum [--] go test …` | `junit+exit` | the `gotestsum` binary on PATH (bare `go test -json` is stdout-only → not trusted) |
 | **RSpec** (Ruby) | `rspec` / `bundle exec rspec` | `junit+exit` | `rspec_junit_formatter` in the bundle |
-| **mocha** | `mocha` (or `.bin/mocha`) | `junit+exit` | `mocha-junit-reporter` resolvable |
-| **Maven Surefire** (Java/Kotlin) | `mvn test` / `./mvnw test` | `junit+exit` | none beyond Maven (reports directory is redirected judge-side) |
+| **mocha** | `mocha` (or `.bin/mocha`) | `junit+exit` | built-in `xunit` reporter with judge-forced POSIX exit codes (no reporter plugin) |
+| **Maven Surefire** (Java/Kotlin) | `mvn test` / `./mvnw test` | `junit+exit` | an explicit POM bridge from Surefire `<reportsDirectory>` to the `evoguard.surefire.reportsDirectory` property |
 | `sh -c "setup && <runner>"` | the last segment is one of the above | `junit+exit` | same as the inner runner |
 | any other / `npm test` wrapper | — | `exit` (exit code only) | coarse: no counts, no `TAMPERED` check — prefer invoking the runner binary directly |
 
 The report's `Verdict source` row always states which path judged the run — a
 `junit+exit` verdict is strictly stronger evidence than an `exit` one.
+Surefire does not expose `reportsDirectory` as a command-line user property;
+the Maven adapter therefore supports only projects that opt in through the POM
+bridge documented in [Runner adapter conformance](RUNNER_CONFORMANCE.md).
+Missing or ignored bridge configuration produces no judge-owned report and a
+fail-closed `no_test_verdict`, not an exit-only pass.
 Recognizing a final runner token here is only report-adapter instrumentation; it
 does **not** discover shell scripts, sourced files, package-script bodies, or
 other harness dependencies. Declare those exact repository files with
