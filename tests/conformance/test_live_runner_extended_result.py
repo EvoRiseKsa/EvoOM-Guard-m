@@ -36,6 +36,7 @@ EXPECTED_NAMES = tuple(
             "test_extended_parse_gotestsum_junit_counts",
             "test_extended_gotestsum_honest_fix_is_pass",
             "test_extended_gotestsum_broken_fix_is_fail",
+            "test_extended_gotestsum_green_baseline_remains_green_with_private_cache",
             "test_extended_parse_rspec_junit_counts",
             "test_extended_rspec_honest_fix_is_pass",
             "test_extended_rspec_broken_fix_is_fail",
@@ -58,7 +59,8 @@ def _junit(*, mutation: str = "") -> bytes:
     )
     return (
         '<?xml version="1.0"?><testsuites>'
-        f'<testsuite tests="18" failures="0" errors="0" skipped="0">{cases}'
+        f'<testsuite tests="{len(EXPECTED_NAMES)}" failures="0" '
+        f'errors="0" skipped="0">{cases}'
         "</testsuite></testsuites>"
     ).encode()
 
@@ -161,19 +163,19 @@ def _result() -> dict[str, Any]:
             "junit_size": 1,
             "skipped": 0,
             "test_names": list(EXPECTED_NAMES),
-            "tests": 18,
+            "tests": len(EXPECTED_NAMES),
         },
     }
 
 
-def test_exact_junit_requires_all_18_oracles_without_nonpass_outcomes() -> None:
+def test_exact_junit_requires_all_19_oracles_without_nonpass_outcomes() -> None:
     parsed = parse_exact_junit(_junit())
     assert parsed == {
         "errors": 0,
         "failures": 0,
         "skipped": 0,
         "test_names": list(EXPECTED_NAMES),
-        "tests": 18,
+        "tests": len(EXPECTED_NAMES),
     }
 
     for element in ("failure", "error", "skipped"):
@@ -460,6 +462,35 @@ def test_tool_identity_requires_every_pinned_version_and_exact_maven_build(
     outputs["Java"] = 'openjdk version "21.0.9" 2025-10-21 LTS'
     with pytest.raises(LiveRunnerExtendedResultError, match="Java build"):
         live_runner_extended_result._tool_identity("Linux")
+
+
+def test_ruby_package_identity_loads_the_locked_bundle_without_a_batch_wrapper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, Any] = {}
+
+    def bounded(
+        argv: tuple[str, ...],
+        *,
+        label: str,
+        cwd: Path,
+    ) -> str:
+        observed.update(argv=argv, label=label, cwd=cwd)
+        return "3.13.2"
+
+    monkeypatch.setattr(live_runner_extended_result, "_bounded_version", bounded)
+
+    assert live_runner_extended_result._ruby_package_version("rspec") == "3.13.2"
+    assert observed == {
+        "argv": (
+            "ruby",
+            "-rbundler/setup",
+            "-e",
+            "puts Gem.loaded_specs.fetch('rspec').version.to_s",
+        ),
+        "label": "rspec package",
+        "cwd": live_runner_extended_result.RUBY_PROJECT,
+    }
 
 
 @pytest.mark.parametrize(

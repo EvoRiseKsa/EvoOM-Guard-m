@@ -38,7 +38,7 @@ retained evidence say so.
 ### Added
 
 - **Extended same-owner runner conformance lane.** Added a two-cell
-  `ubuntu-latest`/`windows-latest` configuration for 18 reviewed Jest,
+  `ubuntu-latest`/`windows-latest` configuration for 19 reviewed Jest,
   gotestsum, RSpec, Mocha, Maven, and Shell Guard oracles. The create-only
   extended result contract binds the exact test set, JUnit bytes, source
   inventory, tool versions, Git commit/tree, hosted-runner identity, workflow
@@ -73,6 +73,17 @@ retained evidence say so.
 
 ### Fixed
 
+- **Windows Ruby evidence collection.** The extended result collector now loads
+  the locked bundle through `ruby.exe` and `bundler/setup` before observing the
+  installed RSpec specifications. This avoids `cmd.exe` batch-wrapper argument
+  quoting during evidence collection while continuing to fail closed when a
+  locked gem is absent or has the wrong version.
+- **Baseline and container Go build caches.** Pristine baseline setup and suite
+  now receive separate judge-owned phase environments, including distinct Go
+  build caches, so an absent Windows profile cache cannot manufacture a
+  demonstrated repair. Repository-suite and black-box Docker/gVisor commands
+  explicitly replace any image-level `GOCACHE` with `/tmp/go-build` on their
+  per-container tmpfs.
 - **Windows Go judge environment.** Each setup, repository-suite, and verifier-
   pack subprocess now receives an explicit judge-owned `GOCACHE`. This keeps
   Go builds usable after the minimal Windows environment removes ambient

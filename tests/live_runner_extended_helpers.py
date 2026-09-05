@@ -61,6 +61,7 @@ def run_guard(
     *,
     setup_command: list[str] | None = None,
     setup_output_globs: tuple[str, ...] = (),
+    baseline_evidence: bool = False,
 ) -> object:
     return guard(
         str(repo),
@@ -69,6 +70,7 @@ def run_guard(
         setup_command=setup_command,
         trust_setup_on_host=setup_command is not None,
         setup_output_globs=setup_output_globs,
+        baseline_evidence=baseline_evidence,
         timeout=300,
         mem_limit_mb=0,
     )

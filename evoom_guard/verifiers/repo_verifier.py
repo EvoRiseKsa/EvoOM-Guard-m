@@ -133,7 +133,10 @@ from evoom_guard.execution import (
 from evoom_guard.execution import (
     ProcessOutputLimitExceeded as _SubprocessOutputLimitExceeded,
 )
-from evoom_guard.execution.judge_environment import create_judge_phase_environment
+from evoom_guard.execution.judge_environment import (
+    JudgePhase,
+    create_judge_phase_environment,
+)
 from evoom_guard.isolation import (
     DOCKER_CLEANUP_RECONCILE_ATTEMPTS as _DOCKER_CLEANUP_RECONCILE_ATTEMPTS,
 )
@@ -411,15 +414,24 @@ except ImportError:  # pragma: no cover - platform dependent
 COPY_IGNORE = _repository_workspace.COPY_IGNORE
 
 
-def judge_subprocess_env(workdir: str) -> dict[str, str]:
+def judge_subprocess_env(
+    workdir: str,
+    *,
+    phase: JudgePhase | None = None,
+) -> dict[str, str]:
     """Minimal cross-platform environment for judge-owned subprocesses.
 
     Windows runtimes depend on a small set of OS variables even when the judged
     program does not.  In particular, current Node releases abort during CSPRNG
     initialization when ``SYSTEMROOT`` is absent.  Preserve only the OS plumbing
     needed to start tools; keep scratch paths inside the judge-owned workdir and
-    continue excluding user Python startup state.
+    continue excluding user Python startup state. Baseline callers supply a
+    phase to receive the same fresh phase-private environment contract used by
+    candidate setup and suite execution. The one-argument compatibility path is
+    retained for existing in-package consumers.
     """
+    if phase is not None:
+        return create_judge_phase_environment(workdir, phase)
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin"),
         "HOME": workdir,
@@ -885,6 +897,7 @@ class RepoVerifier:
             "-e", "TEMP=/tmp",
             "-e", "TMP=/tmp",
             "-e", "XDG_CACHE_HOME=/tmp",
+            "-e", "GOCACHE=/tmp/go-build",
             "-e", "PYTHONDONTWRITEBYTECODE=1",
             "-e", "PYTHONNOUSERSITE=1",
             "-e", "LANG=C.UTF-8",

@@ -194,11 +194,12 @@
         "skipped": {"const": 0},
         "test_names": {
           "type": "array",
-          "minItems": 18,
-          "maxItems": 18,
+          "minItems": 19,
+          "maxItems": 19,
           "uniqueItems": true,
           "prefixItems": [
             {"const": "test_extended_gotestsum_broken_fix_is_fail"},
+            {"const": "test_extended_gotestsum_green_baseline_remains_green_with_private_cache"},
             {"const": "test_extended_gotestsum_honest_fix_is_pass"},
             {"const": "test_extended_jest_broken_fix_is_fail"},
             {"const": "test_extended_jest_honest_fix_is_pass"},
@@ -219,7 +220,7 @@
           ],
           "items": false
         },
-        "tests": {"const": 18}
+        "tests": {"const": 19}
       }
     }
   }

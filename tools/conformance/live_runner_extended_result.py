@@ -59,6 +59,7 @@ _EXPECTED_TESTS = frozenset(
         "test_extended_parse_gotestsum_junit_counts",
         "test_extended_gotestsum_honest_fix_is_pass",
         "test_extended_gotestsum_broken_fix_is_fail",
+        "test_extended_gotestsum_green_baseline_remains_green_with_private_cache",
         "test_extended_parse_rspec_junit_counts",
         "test_extended_rspec_honest_fix_is_pass",
         "test_extended_rspec_broken_fix_is_fail",
@@ -289,10 +290,10 @@ def _node_package_version(package: str) -> str:
 
 def _ruby_package_version(package: str) -> str:
     expression = (
-        "puts Gem::Specification.find_by_name(" + repr(package) + ").version.to_s"
+        "puts Gem.loaded_specs.fetch(" + repr(package) + ").version.to_s"
     )
     return _bounded_version(
-        ("bundle", "exec", "ruby", "-e", expression),
+        ("ruby", "-rbundler/setup", "-e", expression),
         label=f"{package} package",
         cwd=RUBY_PROJECT,
     )
@@ -427,7 +428,7 @@ def _tool_identity(runner_os: str) -> dict[str, str]:
 
 
 def parse_exact_junit(raw: bytes) -> dict[str, Any]:
-    """Require all 18 reviewed extended oracles with no non-pass outcome."""
+    """Require all 19 reviewed extended oracles with no non-pass outcome."""
 
     if b"<!DOCTYPE" in raw.upper() or b"<!ENTITY" in raw.upper():
         raise LiveRunnerExtendedResultError(

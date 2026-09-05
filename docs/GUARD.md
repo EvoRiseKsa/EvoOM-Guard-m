@@ -664,11 +664,16 @@ snapshot drift is `TAMPERED verifier_pack_snapshot_changed`; persistent prepared
 candidate-runtime drift across the repo/pack phases is
 `TAMPERED candidate_tree_changed_during_run`. In host subprocess mode these are
 pre/post observations, **not** an OS sandbox or secrecy guarantee. Repo-native
-setup, suite, and pack subprocesses receive separate judge-owned home/temp/cache
-directories outside the candidate copy. `GOCACHE` is bound explicitly beneath
-each phase cache because Go on Windows cannot derive a build cache after the
-ambient user profile is removed. This reduces incidental writes but does not
-exempt any in-tree cache, temporary file, or build output from runtime identity.
+setup, suite, pack, and pristine-baseline subprocesses receive separate
+judge-owned home/temp/cache directories outside the candidate copy. Baseline
+setup and suite use different phase roots, just like candidate setup and suite.
+`GOCACHE` is bound explicitly beneath each phase cache because Go on Windows
+cannot derive a build cache after the ambient user profile is removed. This
+reduces incidental writes but does not exempt any in-tree cache, temporary
+file, or build output from runtime identity. The baseline evidence phrase
+"same judge and environment" means the same base-owned policy and phase
+environment contract; it never means byte-identical ephemeral path names or
+shared cache contents between base and candidate.
 Python `-I`/`-E` may ignore `PYTHON*` environment settings; use the
 static `preflight` command and an explicit `-B` where it reports that risk.
 Repo-native pack pytest may import candidate code and retains
@@ -709,7 +714,9 @@ the suite inside a short-lived container with the configured network (default
 `none`), a read-only root filesystem, all capabilities dropped,
 `no-new-privileges`, and CPU/PID/memory/open-file limits. During suite execution
 the candidate tree is mounted `/work:ro`; `/tmp` is a writable tmpfs and `/out`
-is a separate writable judge-report mount. This protects the host/tree boundary,
+is a separate writable judge-report mount. Every setup/suite/pack container
+overrides an image-level `GOCACHE` with `/tmp/go-build`; each container gets a
+new tmpfs. This protects the host/tree boundary,
 but it does **not** make the repo-native report unforgeable: candidate code,
 tests, and the JUnit writer still share a process. A Docker container also shares
 the host kernel, so it is defence in depth for semi-trusted code, not a complete

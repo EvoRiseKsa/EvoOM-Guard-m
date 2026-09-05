@@ -102,7 +102,10 @@ resolver boundaries:
   `GOTOOLCHAIN=local`, then runs `go mod download`, `go mod verify`, and
   `go install gotest.tools/gotestsum` from that module with a fresh
   runner-temporary `GOCACHE`. Guard then supplies a separate phase-private
-  `GOCACHE` to each judged subprocess rather than inheriting the build cache.
+  `GOCACHE` to candidate and pristine-baseline setup/suite subprocesses rather
+  than inheriting the build cache. Docker/gVisor suite, pack, setup, and
+  black-box candidate containers override any image-level value with
+  `/tmp/go-build` on their fresh tmpfs.
 - Ruby declares exact RSpec 3.13.2 and `rspec_junit_formatter` 0.6.0 versions.
   `ruby/Gemfile.lock` pins the resolved graph, contains a SHA-256 checksum for
   every gem, and records Bundler 4.0.20. The workflow sets `BUNDLE_FROZEN=true`

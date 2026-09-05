@@ -23,6 +23,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from evoom_guard.execution.judge_environment import JudgePhase
 from evoom_guard.policy.harness import HarnessInputPolicyError
 from evoom_guard.verifiers.harness_policy import (
     HarnessInputIntegrityError,
@@ -77,7 +78,12 @@ class CopyRepository(Protocol):
 class BuildJudgeEnvironment(Protocol):
     """Build the baseline subprocess environment."""
 
-    def __call__(self, workdir: str) -> dict[str, str]: ...
+    def __call__(
+        self,
+        workdir: str,
+        *,
+        phase: JudgePhase,
+    ) -> dict[str, str]: ...
 
 
 class CaptureSetupFidelity(Protocol):
@@ -292,14 +298,17 @@ def run_repo_baseline(
         ):
             return _empty_evidence()
         harness_baseline = trusted_harness_baseline
-        environment = services.judge_environment_provider()(workdir)
+        build_judge_environment = services.judge_environment_provider()
         if request.setup_command:
             try:
+                setup_environment = build_judge_environment(
+                    workdir,
+                    phase="setup",
+                )
                 setup_before = services.setup_fidelity_snapshot(
                     candidate_copy,
                     request.setup_output_globs,
                 )
-                setup_environment = dict(environment)
                 resolve_host_command = services.resolve_host_command_provider()
                 setup_command = resolve_host_command(
                     list(request.setup_command),
@@ -365,6 +374,10 @@ def run_repo_baseline(
                     setup_fidelity_changes=setup_changes,
                 )
 
+        environment = build_judge_environment(
+            workdir,
+            phase="repo-suite",
+        )
         base_command = verifier._command(
             {"repo_path": request.repository_path}
         )

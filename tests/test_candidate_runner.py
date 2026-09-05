@@ -222,6 +222,35 @@ class ContainerPrefixTests(unittest.TestCase):
         self.assertIn(evil, cfg["prefix"])                 # preserved intact…
         self.assertEqual(cfg["prefix"].count(evil), 1)     # …as exactly one element
 
+    def test_container_overrides_image_go_cache_with_fresh_tmpfs_path(self) -> None:
+        runner = CandidateRunner(isolation="docker", docker_image="img")
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch("evoom_guard.candidate_runner.os.name", "posix"), \
+                mock.patch(
+                    "evoom_guard.candidate_runner.shutil.which",
+                    return_value="/usr/bin/docker",
+                ), \
+                mock.patch(
+                    "evoom_guard.candidate_runner._run_docker_control",
+                    return_value=types.SimpleNamespace(
+                        returncode=0,
+                        stdout="28",
+                        stderr="",
+                    ),
+                ), \
+                mock.patch.object(
+                    CandidateRunner,
+                    "_ensure_image",
+                    return_value=_IMAGE_ID,
+                ):
+            launcher, _env, _evidence = runner.prepare(tmp, tmp)
+            cfg = json.load(open(launcher + ".json", encoding="utf-8"))
+
+        cache_index = cfg["prefix"].index("GOCACHE=/tmp/go-build")
+        self.assertEqual(cfg["prefix"][cache_index - 1], "-e")
+        self.assertIn("--tmpfs", cfg["prefix"])
+        self.assertEqual(cfg["prefix"][cfg["prefix"].index("--tmpfs") + 1], "/tmp:rw,exec")
+
     def test_noncanonical_image_identity_never_reaches_a_launcher(self) -> None:
         runner = CandidateRunner(isolation="docker", docker_image="mutable:tag")
         with tempfile.TemporaryDirectory() as tmp, \

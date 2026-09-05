@@ -40,13 +40,19 @@ def _repo(root: Path) -> None:
     )
 
 
-def _run(root: Path, expression: str) -> object:
+def _run(
+    root: Path,
+    expression: str,
+    *,
+    baseline_evidence: bool = False,
+) -> object:
     require_executable("go")
     require_executable("gotestsum")
     return run_guard(
         root,
         candidate("calc.go", f"package live\n\nfunc Twice(v int) int {{ return {expression} }}\n"),
         ["gotestsum", "--", "./..."],
+        baseline_evidence=baseline_evidence,
     )
 
 
@@ -66,3 +72,21 @@ def test_extended_gotestsum_broken_fix_is_fail(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     _repo(repo)
     assert_guard_counts(_run(repo, "v*2 + 99"), FAIL, 0, 2)
+
+
+def test_extended_gotestsum_green_baseline_remains_green_with_private_cache(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    _repo(repo)
+    write_text(
+        repo / "calc.go",
+        "package live\n\nfunc Twice(v int) int { return v*2 }\n",
+    )
+
+    result = _run(repo, "2*v", baseline_evidence=True)
+
+    assert_guard_counts(result, PASS, 2, 2)
+    assert result.baseline is not None
+    assert result.baseline["verdict"] == "PASS"
+    assert result.baseline["repair_effect"] == "not_demonstrated"

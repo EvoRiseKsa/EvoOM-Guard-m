@@ -86,6 +86,7 @@ def test_docker_command_is_isolated_and_mounts_report_separately():
         "TEMP=/tmp",
         "TMP=/tmp",
         "XDG_CACHE_HOME=/tmp",
+        "GOCACHE=/tmp/go-build",
         "PYTHONDONTWRITEBYTECODE=1",
         "PYTHONNOUSERSITE=1",
     ):
